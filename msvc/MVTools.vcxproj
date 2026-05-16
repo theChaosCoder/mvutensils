@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{66f0e01a-a225-4a58-8a81-948201805219}</ProjectGuid>
+    <RootNamespace>MVTools</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <VcpkgTriplet Condition="'$(Platform)'=='x64'">x64-windows-static</VcpkgTriplet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\nasm.props" />
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>MVTOOLS_X86;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>MVTOOLS_X86;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\CommonFunctions.h" />
+    <ClInclude Include="..\src\CommonMacros.h" />
+    <ClInclude Include="..\src\CopyCode.h" />
+    <ClInclude Include="..\src\CPU.h" />
+    <ClInclude Include="..\src\DCTFFTW.h" />
+    <ClInclude Include="..\src\Fakery.h" />
+    <ClInclude Include="..\src\GroupOfPlanes.h" />
+    <ClInclude Include="..\src\Luma.h" />
+    <ClInclude Include="..\src\MaskFun.h" />
+    <ClInclude Include="..\src\MVAnalysisData.h" />
+    <ClInclude Include="..\src\MVDegrains.h" />
+    <ClInclude Include="..\src\MVFlowFPSHelper.h" />
+    <ClInclude Include="..\src\MVFrame.h" />
+    <ClInclude Include="..\src\Overlap.h" />
+    <ClInclude Include="..\src\PlaneOfBlocks.h" />
+    <ClInclude Include="..\src\SADFunctions.h" />
+    <ClInclude Include="..\src\SimpleResize.h" />
+    <ClInclude Include="..\src\sse2neon.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\CopyCode.cpp" />
+    <ClCompile Include="..\src\CPU.c" />
+    <ClCompile Include="..\src\DCTFFTW.cpp" />
+    <ClCompile Include="..\src\EntryPoint.c" />
+    <ClCompile Include="..\src\Fakery.c" />
+    <ClCompile Include="..\src\GroupOfPlanes.c" />
+    <ClCompile Include="..\src\Luma.cpp" />
+    <ClCompile Include="..\src\MaskFun.cpp" />
+    <ClCompile Include="..\src\MVAnalyse.c" />
+    <ClCompile Include="..\src\MVAnalysisData.c" />
+    <ClCompile Include="..\src\MVBlockFPS.c" />
+    <ClCompile Include="..\src\MVCompensate.c" />
+    <ClCompile Include="..\src\MVDegrains.cpp" />
+    <ClCompile Include="..\src\MVDegrains_AVX2.cpp" />
+    <ClCompile Include="..\src\MVDepan.cpp" />
+    <ClCompile Include="..\src\MVFinest.c" />
+    <ClCompile Include="..\src\MVFlow.cpp" />
+    <ClCompile Include="..\src\MVFlowBlur.c" />
+    <ClCompile Include="..\src\MVFlowFPS.c" />
+    <ClCompile Include="..\src\MVFlowFPSHelper.c" />
+    <ClCompile Include="..\src\MVFlowInter.c" />
+    <ClCompile Include="..\src\MVFrame.cpp" />
+    <ClCompile Include="..\src\MVFrame_AVX2.cpp" />
+    <ClCompile Include="..\src\MVMask.c" />
+    <ClCompile Include="..\src\MVRecalculate.c" />
+    <ClCompile Include="..\src\MVSCDetection.c" />
+    <ClCompile Include="..\src\MVSuper.c" />
+    <ClCompile Include="..\src\Overlap.cpp" />
+    <ClCompile Include="..\src\Overlap_AVX2.cpp" />
+    <ClCompile Include="..\src\PlaneOfBlocks.cpp" />
+    <ClCompile Include="..\src\SADFunctions.cpp" />
+    <ClCompile Include="..\src\SADFunctions_AVX2.cpp" />
+    <ClCompile Include="..\src\SimpleResize.cpp" />
+    <ClCompile Include="..\src\SimpleResize_AVX2.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <NASM Include="..\src\asm\const-a.asm">
+      <FileType>Document</FileType>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </NASM>
+    <NASM Include="..\src\asm\cpu-a.asm">
+      <FileType>Document</FileType>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </NASM>
+    <NASM Include="..\src\asm\pixel-a.asm">
+      <FileType>Document</FileType>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </NASM>
+    <NASM Include="..\src\asm\sad-a.asm">
+      <FileType>Document</FileType>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </NASM>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\nasm.targets" />
+  </ImportGroup>
+</Project>

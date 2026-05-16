@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="MVTools.vcxproj" Id="66f0e01a-a225-4a58-8a81-948201805219">
+    <Build Solution="Release|x86" Project="false" />
+  </Project>
+</Solution>
