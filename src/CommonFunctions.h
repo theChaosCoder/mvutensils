@@ -9,16 +9,6 @@ inline static int satz(int a) {
     return ~(a >> (sizeof(int) * 8 - 1)) & a;
 }
 
-// returns maximum(a, b)
-inline static int imax(int a, int b) {
-    return a + satz(b - a);
-}
-
-// returns minimum(a, b)
-inline static int imin(int a, int b) {
-    return a - satz(a - b);
-}
-
 /* returns the biggest integer x such as 2^x <= i */
 inline static int ilog2(int i) {
     int result = 0;

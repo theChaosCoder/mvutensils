@@ -6,8 +6,6 @@
 #include <immintrin.h>
 #include "SADFunctions.h"
 
-#define zeroes _mm256_setzero_si256()
-
 
 // This version used for width >= 32.
 template <unsigned width, unsigned height>
@@ -17,7 +15,7 @@ struct SADWrapperU8_AVX2 {
     static unsigned int sad_u8_avx2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
         (void)nSrcPitch;
 
-        __m256i sum = zeroes;
+        __m256i sum = _mm256_setzero_si256();
 
         for (unsigned y = 0; y < height; y++) {
             for (unsigned x = 0; x < width; x += 32) {
@@ -47,7 +45,7 @@ struct SADWrapperU8_AVX2<16, height> {
     static unsigned int sad_u8_avx2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
         (void)nSrcPitch;
 
-        __m256i sum = zeroes;
+        __m256i sum = _mm256_setzero_si256();
 
         for (int y = 0; (unsigned)y < height; y += 2) {
             __m256i m2 = _mm256_loadu_si256((const __m256i *)(pSrc + y * 16));

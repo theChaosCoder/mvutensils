@@ -4,8 +4,6 @@
 #include <immintrin.h>
 #include <VSHelper4.h>
 
-#define zeroes _mm256_setzero_si256()
-
 
 void VerticalBilinear_avx2(uint8_t * VS_RESTRICT pDst, const uint8_t *VS_RESTRICT pSrc, intptr_t nPitch,
                            intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {

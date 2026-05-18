@@ -10,13 +10,11 @@
 #define FORCE_INLINE inline __attribute__((always_inline))
 #endif
 
-#define zeroes _mm_setzero_si128()
-
 
 static FORCE_INLINE void simpleResize_uint8_t_vertical_4px_avx2(uint8_t *workp, const uint8_t *srcp1, const uint8_t *srcp2, int x, const __m128i &dwords_weights) {
     __m128i top = _mm_cvtsi32_si128(*(const int *)&srcp1[x]);
     __m128i bottom = _mm_cvtsi32_si128(*(const int *)&srcp2[x]);
-    __m128i pixels = _mm_unpacklo_epi8(_mm_unpacklo_epi8(bottom, top), zeroes);
+    __m128i pixels = _mm_unpacklo_epi8(_mm_unpacklo_epi8(bottom, top), _mm_setzero_si128());
 
     __m128i dst = _mm_madd_epi16(pixels, dwords_weights);
 

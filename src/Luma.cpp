@@ -34,12 +34,10 @@ unsigned int luma_c(const uint8_t *pSrc8, ptrdiff_t nSrcPitch) {
 #endif
 
 
-#define zeroes _mm_setzero_si128()
-
 
 template <unsigned width, unsigned height>
 unsigned int luma_sse2(const uint8_t *pSrc, ptrdiff_t nSrcPitch) {
-    __m128i sum = zeroes;
+    __m128i sum = _mm_setzero_si128();
 
     for (unsigned y = 0; y < height; y++) {
         for (unsigned x = 0; x < width; x += 16) {
@@ -51,7 +49,7 @@ unsigned int luma_sse2(const uint8_t *pSrc, ptrdiff_t nSrcPitch) {
             else
                 src = _mm_loadu_si128((const __m128i *)&pSrc[x]);
 
-            sum = _mm_add_epi64(sum, _mm_sad_epu8(src, zeroes));
+            sum = _mm_add_epi64(sum, _mm_sad_epu8(src, _mm_setzero_si128()));
         }
 
         pSrc += nSrcPitch;
