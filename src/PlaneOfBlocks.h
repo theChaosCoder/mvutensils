@@ -21,12 +21,11 @@
 #include <cstdlib>
 
 #include "Fakery.h"
-#include "MVFrame.h"
 #include "CopyCode.h"
 #include "SADFunctions.h"
 #include "CommonFunctions.h"
 #include "Luma.h"
-#include "DCTFFTW.h"
+#include "SuperPyramid.h"
 
 
 #define MAX_PREDICTOR 5 // right now 5 should be enough (TSchniede)
@@ -71,8 +70,8 @@ typedef struct PlaneOfBlocks {
 
     /* working fields */
 
-    MVFrame *pSrcFrame;
-    MVFrame *pRefFrame;
+    const FramePyramidLevel *pSrcFrame;
+    const FramePyramidLevel *pRefFrame;
 
     ptrdiff_t nSrcPitch[3];
     const uint8_t *pSrc[3]; // the alignment of this array is important for speed for some reason (cacheline?)
@@ -114,15 +113,12 @@ typedef struct PlaneOfBlocks {
     VECTOR globalMVPredictor;  // predictor of global motion vector
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
-    DCTFFTW *DCT;
-    uint8_t *dctSrc;
     uint8_t *dctRef;
     int dctpitch;
-    int dctmode;
+    bool useSatd;
     int srcLuma;
     int refLuma;
     int sumLumaChange;
-    int dctweight16;
     int *freqArray; // temporary array for global motion estimaton
     int freqSize;   // size of freqArray
     int64_t verybigSAD;
@@ -142,9 +138,9 @@ MVArraySizeType pobGetArraySize(const PlaneOfBlocks *pob, int divideMode);
 
 void pobInterpolatePrediction(PlaneOfBlocks *pob, const PlaneOfBlocks *pob2);
 
-void pobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, MVFrame *pSrcFrame, MVFrame *pRefFrame, SearchType st, int stp, int lambda, int pnew, uint8_t *out, int fieldShift, int64_t thSAD, DCTFFTW *DCT, int dctmode, int smooth, int meander);
+void pobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame, SearchType st, int stp, int lambda, int pnew, uint8_t *out, int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander);
 
-void pobSearchMVs(PlaneOfBlocks *pob, MVFrame *pSrcFrame, MVFrame *pRefFrame, SearchType st, int stp, int lambda, int lsad, int pnew, int plevel, uint8_t *out, VECTOR *globalMVec, int fieldShift, DCTFFTW *DCT, int dctmode, int *pmeanLumaChange, int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany);
+void pobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame, SearchType st, int stp, int lambda, int lsad, int pnew, int plevel, uint8_t *out, VECTOR *globalMVec, int fieldShift, bool useSatd, int *pmeanLumaChange, int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany, bool chroma);
 
 MVArraySizeType pobWriteDefaultToArray(const PlaneOfBlocks *pob, uint8_t *array, int divideMode);
 

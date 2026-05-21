@@ -7,10 +7,10 @@
 #include <VSHelper4.h>
 
 #include "CPU.h"
-#include "DCTFFTW.h"
 #include "GroupOfPlanes.h"
 #include "MVAnalysisData.h"
 #include "CommonMacros.h"
+#include "SuperPyramid.h"
 
 
 typedef struct MVAnalyseData {
@@ -50,9 +50,7 @@ typedef struct MVAnalyseData {
     int meander;    //meander (alternate) scan blocks (even row left to right, odd row right to left
     int tryMany;    // try refine around many predictors
 
-    int dctmode;
-
-    int nModeYUV;
+    bool useSatd;
 
     int nSuperLevels;
     int nSuperHPad;
@@ -62,7 +60,7 @@ typedef struct MVAnalyseData {
 
     int levels;
     int searchparam;
-    int chroma;
+    bool chroma;
     int truemotion;
 
     int fields;
@@ -113,11 +111,6 @@ static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void 
         gopInit(&vectorFields, d->analysisData.nBlkSizeX, d->analysisData.nBlkSizeY, d->analysisData.nLvCount, d->analysisData.nPel, d->analysisData.nMotionFlags, d->analysisData.nCPUFlags, d->analysisData.nOverlapX, d->analysisData.nOverlapY, d->analysisData.nBlkX, d->analysisData.nBlkY, d->analysisData.xRatioUV, d->analysisData.yRatioUV, d->divideExtra, d->supervi->format.bitsPerSample);
 
 
-        const uint8_t *pSrc[3] = { NULL };
-        const uint8_t *pRef[3] = { NULL };
-        ptrdiff_t nSrcPitch[3] = { 0 };
-        ptrdiff_t nRefPitch[3] = { 0 };
-
         int nref;
 
         if (d->analysisData.nDeltaFrame > 0) {
@@ -142,11 +135,6 @@ static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void 
         // if tff was passed, it overrides _Field.
         if (d->tff_exists)
             src_top_field = d->tff ^ (n % 2);
-
-        for (int plane = 0; plane < d->supervi->format.numPlanes; plane++) {
-            pSrc[plane] = vsapi->getReadPtr(src, plane);
-            nSrcPitch[plane] = vsapi->getStride(src, plane);
-        }
 
 
         MVArraySizeType vectors_size = gopGetArraySize(&vectorFields);
@@ -177,30 +165,12 @@ static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void 
                 // vertical shift of fields for fieldbased video at finest level pel2
             }
 
-            for (int plane = 0; plane < d->supervi->format.numPlanes; plane++) {
-                pRef[plane] = vsapi->getReadPtr(ref, plane);
-                nRefPitch[plane] = vsapi->getStride(ref, plane);
-            }
 
+            FramePyramid pSrcGOF(src, "MVUtensils", core, vsapi);
+            FramePyramid pRefGOF(ref, "MVUtensils", core, vsapi);
 
-            MVGroupOfFrames pSrcGOF, pRefGOF;
-
-            mvgofInit(&pSrcGOF, d->nSuperLevels, d->analysisData.nWidth, d->analysisData.nHeight, d->nSuperPel, d->nSuperHPad, d->nSuperVPad, d->nSuperModeYUV, d->opt, d->analysisData.xRatioUV, d->analysisData.yRatioUV, d->supervi->format.bitsPerSample);
-            mvgofInit(&pRefGOF, d->nSuperLevels, d->analysisData.nWidth, d->analysisData.nHeight, d->nSuperPel, d->nSuperHPad, d->nSuperVPad, d->nSuperModeYUV, d->opt, d->analysisData.xRatioUV, d->analysisData.yRatioUV, d->supervi->format.bitsPerSample);
-
-            // cast away the const, because why not.
-            mvgofUpdate(&pSrcGOF, (uint8_t **)pSrc, nSrcPitch);
-            mvgofUpdate(&pRefGOF, (uint8_t **)pRef, nRefPitch);
-
-
-            DCTFFTW *DCTc = NULL;
-            if (d->dctmode >= 1 && d->dctmode <= 4) {
-                DCTc = (DCTFFTW *)malloc(sizeof(DCTFFTW));
-                dctInit(DCTc, d->analysisData.nBlkSizeX, d->analysisData.nBlkSizeY, d->supervi->format.bitsPerSample, d->opt);
-            }
-
-
-            gopSearchMVs(&vectorFields, &pSrcGOF, &pRefGOF, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, vectors, fieldShift, DCTc, d->dctmode, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse);
+            // FIXME, chroma has a different meaning here? this one controls if chroma is used for ME
+            gopSearchMVs(&vectorFields, &pSrcGOF, &pRefGOF, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, vectors, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse, d->chroma);
 
             if (d->divideExtra) {
                 // make extra level with divided sublocks with median (not estimated) motion
@@ -208,12 +178,6 @@ static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void 
             }
 
             gopDeinit(&vectorFields);
-            if (DCTc) {
-                dctDeinit(DCTc);
-                free(DCTc);
-            }
-            mvgofDeinit(&pSrcGOF);
-            mvgofDeinit(&pRefGOF);
             vsapi->freeFrame(ref);
         } else { // too close to the beginning or end to do anything
             gopWriteDefaultToArray(&vectorFields, vectors);
@@ -266,7 +230,7 @@ static void VS_CC mvanalyseFree(void *instanceData, VSCore *core, const VSAPI *v
 static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     (void)userData;
 
-    MVAnalyseData d;
+    MVAnalyseData d = {};
     MVAnalyseData *data;
 
     int err;
@@ -299,7 +263,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d.chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
     if (err)
-        d.chroma = 1;
+        d.chroma = true;
 
     d.analysisData.nDeltaFrame = vsapi->mapGetIntSaturated(in, "delta", 0, &err);
     if (err)
@@ -341,7 +305,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     if (err)
         d.analysisData.nOverlapY = d.analysisData.nOverlapX;
 
-    d.dctmode = vsapi->mapGetIntSaturated(in, "dct", 0, &err);
+    d.useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
 
     d.divideExtra = vsapi->mapGetIntSaturated(in, "divide", 0, &err);
 
@@ -379,13 +343,8 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
         return;
     }
 
-    if (d.dctmode < 0 || d.dctmode > 10) {
-        vsapi->mapSetError(out, "Analyse: dct must be between 0 and 10 (inclusive).");
-        return;
-    }
-
-    if (d.dctmode >= 5 && d.analysisData.nBlkSizeX == 16 && d.analysisData.nBlkSizeY == 2) {
-        vsapi->mapSetError(out, "Analyse: dct 5..10 cannot work with 16x2 blocks.");
+    if (d.useSatd && d.analysisData.nBlkSizeX == 16 && d.analysisData.nBlkSizeY == 2) {
+        vsapi->mapSetError(out, "Analyse: satd cannot work with 16x2 blocks.");
         return;
     }
 
@@ -466,10 +425,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     }
 
     if (d.vi->format.colorFamily == cfGray)
-        d.chroma = 0;
-
-    d.nModeYUV = d.chroma ? YUVPLANES : YPLANE;
-
+        d.chroma = false;
 
     d.analysisData.bitsPerSample = d.vi->format.bitsPerSample;
 
@@ -526,48 +482,20 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
         vsapi->freeNode(d.node);
         return;
     }
-    const VSMap *props = vsapi->getFramePropertiesRO(evil);
-    int evil_err[6];
-    int nHeight = vsapi->mapGetIntSaturated(props, "Super_height", 0, &evil_err[0]);
-    d.nSuperHPad = vsapi->mapGetIntSaturated(props, "Super_hpad", 0, &evil_err[1]);
-    d.nSuperVPad = vsapi->mapGetIntSaturated(props, "Super_vpad", 0, &evil_err[2]);
-    d.nSuperPel = vsapi->mapGetIntSaturated(props, "Super_pel", 0, &evil_err[3]);
-    d.nSuperModeYUV = vsapi->mapGetIntSaturated(props, "Super_modeyuv", 0, &evil_err[4]);
-    d.nSuperLevels = vsapi->mapGetIntSaturated(props, "Super_levels", 0, &evil_err[5]);
-    vsapi->freeFrame(evil);
 
-    for (int i = 0; i < 6; i++)
-        if (evil_err[i]) {
-            vsapi->mapSetError(out, "Analyse: required properties not found in first frame of super clip. Maybe clip didn't come from mv.Super? Was the first frame trimmed away?");
-            vsapi->freeNode(d.node);
-            return;
-        }
+    FramePyramid FPEvil(evil, "MVUtensils", core, vsapi);
 
-    // check sanity
-    if (nHeight <= 0 || d.nSuperHPad < 0 || d.nSuperHPad >= d.vi->width / 2 ||
-        d.nSuperVPad < 0 || d.nSuperPel < 1 || d.nSuperPel > 4 ||
-        d.nSuperModeYUV < 0 || d.nSuperModeYUV > YUVPLANES || d.nSuperLevels < 1) {
-        vsapi->mapSetError(out, "Analyse: parameters from super clip appear to be wrong.");
-        vsapi->freeNode(d.node);
-        return;
-    }
-
-    if ((d.nModeYUV & d.nSuperModeYUV) != d.nModeYUV) { //x
-        vsapi->mapSetError(out, "Analyse: super clip does not contain needed colour data.");
-        vsapi->freeNode(d.node);
-        return;
-    }
 
 
     // fill in missing fields
-    d.analysisData.nWidth = d.vi->width - d.nSuperHPad * 2; //x
+    d.analysisData.nWidth = FPEvil.nWidth[0];
 
-    d.analysisData.nHeight = nHeight; //x
+    d.analysisData.nHeight = FPEvil.nHeight[0];
 
-    d.analysisData.nPel = d.nSuperPel; //x
+    d.analysisData.nPel = FPEvil.nPel;
 
-    d.analysisData.nHPadding = d.nSuperHPad; //v2.0    //x
-    d.analysisData.nVPadding = d.nSuperVPad;
+    d.analysisData.nHPadding = FPEvil.nHPad[0];
+    d.analysisData.nVPadding = FPEvil.nVPad[0];
 
 
     int nBlkX = (d.analysisData.nWidth - d.analysisData.nOverlapX) / (d.analysisData.nBlkSizeX - d.analysisData.nOverlapX); //x
@@ -664,7 +592,7 @@ void mvanalyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "fields:int:opt;"
                  "tff:int:opt;"
                  "search_coarse:int:opt;"
-                 "dct:int:opt;",
+                 "satd:int:opt;",
                  "clip:vnode;",
                  mvanalyseCreate, 0, plugin);
 }

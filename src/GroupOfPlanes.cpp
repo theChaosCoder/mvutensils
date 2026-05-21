@@ -66,13 +66,12 @@ void gopDeinit(GroupOfPlanes *gop) {
 }
 
 
-void gopSearchMVs(GroupOfPlanes *gop, MVGroupOfFrames *pSrcGOF, MVGroupOfFrames *pRefGOF,
+void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePyramid *pRefGOF,
                   SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
                   int lsad, int pnew, int plevel, int global,
-                  uint8_t *out, int fieldShift, DCTFFTW *DCT, int dctmode,
+                  uint8_t *out, int fieldShift, bool useSatd,
                   int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
-                  SearchType coarseSearchType) {
-    int i;
+                  SearchType coarseSearchType, bool chroma) {
 
     // write group's size
     MVArraySizeType size = gopGetArraySize(gop);
@@ -98,16 +97,16 @@ void gopSearchMVs(GroupOfPlanes *gop, MVGroupOfFrames *pSrcGOF, MVGroupOfFrames 
     int nSearchParamSmallest = (gop->nLevelCount == 1) ? nPelSearch : nSearchParam;
     int tryManyLevel = tryMany && gop->nLevelCount > 1;
     pobSearchMVs(gop->planes[gop->nLevelCount - 1],
-                 pSrcGOF->frames[gop->nLevelCount - 1],
-                 pRefGOF->frames[gop->nLevelCount - 1],
+                 pSrcGOF->GetLevel(gop->nLevelCount - 1),
+                 pRefGOF->GetLevel(gop->nLevelCount - 1),
                  searchTypeSmallest, nSearchParamSmallest, nLambda, lsad, pnew, plevel,
-                 out, &globalMV, fieldShiftCur, DCT, dctmode, &meanLumaChange,
-                 pzero, pglobal, badSAD, badrange, meander, tryManyLevel);
+                 out, &globalMV, fieldShiftCur, useSatd, &meanLumaChange,
+                 pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
     // Refining the search until we reach the highest detail interpolation.
 
     out += pobGetArraySize(gop->planes[gop->nLevelCount - 1], gop->divideExtra);
 
-    for (i = gop->nLevelCount - 2; i >= 0; i--) {
+    for (int i = gop->nLevelCount - 2; i >= 0; i--) {
         SearchType searchTypeLevel = (i == 0 || searchType == SearchHorizontal || searchType == SearchVertical) ? searchType : coarseSearchType; // full search for coarse planes
         int nSearchParamLevel = (i == 0) ? nPelSearch : nSearchParam;                                                            // special case for finest level
         if (global) {
@@ -116,19 +115,19 @@ void gopSearchMVs(GroupOfPlanes *gop, MVGroupOfFrames *pSrcGOF, MVGroupOfFrames 
         pobInterpolatePrediction(gop->planes[i], gop->planes[i + 1]);
         fieldShiftCur = (i == 0) ? fieldShift : 0; // may be non zero for finest level only
         tryManyLevel = tryMany && i > 0;           // not for finest level to not decrease speed
-        pobSearchMVs(gop->planes[i], pSrcGOF->frames[i], pRefGOF->frames[i],
+        pobSearchMVs(gop->planes[i], pSrcGOF->GetLevel(i), pRefGOF->GetLevel(i),
                      searchTypeLevel, nSearchParamLevel, nLambda, lsad, pnew, plevel,
-                     out, &globalMV, fieldShiftCur, DCT, dctmode, &meanLumaChange,
-                     pzero, pglobal, badSAD, badrange, meander, tryManyLevel);
+                     out, &globalMV, fieldShiftCur, useSatd, &meanLumaChange,
+                     pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
         out += pobGetArraySize(gop->planes[i], gop->divideExtra);
     }
 }
 
 
-void gopRecalculateMVs(GroupOfPlanes *gop, FakeGroupOfPlanes *fgop, MVGroupOfFrames *pSrcGOF, MVGroupOfFrames *pRefGOF,
+void gopRecalculateMVs(GroupOfPlanes *gop, FakeGroupOfPlanes *fgop, const FramePyramid *pSrcGOF, const FramePyramid *pRefGOF,
                        SearchType searchType, int nSearchParam, int nLambda,
                        int pnew,
-                       uint8_t *out, int fieldShift, int64_t thSAD, DCTFFTW *DCT, int dctmode, int smooth, int meander) {
+                       uint8_t *out, int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) {
     // write group's size
     MVArraySizeType size = gopGetArraySize(gop);
     memcpy(out, &size, sizeof(size));
@@ -141,9 +140,9 @@ void gopRecalculateMVs(GroupOfPlanes *gop, FakeGroupOfPlanes *fgop, MVGroupOfFra
 
     // Search the motion vectors, for the low details interpolations first
     // Refining the search until we reach the highest detail interpolation.
-    pobRecalculateMVs(gop->planes[0], fgop, pSrcGOF->frames[0], pRefGOF->frames[0],
+    pobRecalculateMVs(gop->planes[0], fgop, pSrcGOF->GetLevel(0), pRefGOF->GetLevel(0),
                       searchType, nSearchParam, nLambda, pnew,
-                      out, fieldShift, thSAD, DCT, dctmode, smooth, meander);
+                      out, fieldShift, thSAD, useSatd, smooth, meander);
 }
 
 

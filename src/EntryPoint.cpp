@@ -29,22 +29,22 @@ VS_EXTERNAL_API(void)
 VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     const int packageVersion = atoi(PACKAGE_VERSION);
 
-    vspapi->configPlugin("com.nodame.mvtools", "mv", "MVTools v" PACKAGE_VERSION, VS_MAKE_VERSION(packageVersion, 0), VAPOURSYNTH_API_VERSION, 0, plugin);
+    vspapi->configPlugin("com.vapoursynth.mvutensils", "mvu", "MVUtensils v" PACKAGE_VERSION, VS_MAKE_VERSION(packageVersion, 0), VAPOURSYNTH_API_VERSION, 0, plugin);
 
     mvsuperRegister(plugin, vspapi);
     mvanalyseRegister(plugin, vspapi);
-    mvdegrainsRegister(plugin, vspapi);
-    mvcompensateRegister(plugin, vspapi);
-    mvrecalculateRegister(plugin, vspapi);
-    mvmaskRegister(plugin, vspapi);
-    mvfinestRegister(plugin, vspapi);
-    mvflowRegister(plugin, vspapi);
-    mvflowblurRegister(plugin, vspapi);
-    mvflowinterRegister(plugin, vspapi);
-    mvflowfpsRegister(plugin, vspapi);
-    mvblockfpsRegister(plugin, vspapi);
-    mvscdetectionRegister(plugin, vspapi);
-    mvdepanRegister(plugin, vspapi);
+    //mvdegrainsRegister(plugin, vspapi);
+    //mvcompensateRegister(plugin, vspapi);
+    //mvrecalculateRegister(plugin, vspapi);
+    //mvmaskRegister(plugin, vspapi);
+    //mvfinestRegister(plugin, vspapi);
+    //mvflowRegister(plugin, vspapi);
+    //mvflowblurRegister(plugin, vspapi);
+    //mvflowinterRegister(plugin, vspapi);
+    //mvflowfpsRegister(plugin, vspapi);
+    //mvblockfpsRegister(plugin, vspapi);
+    //mvscdetectionRegister(plugin, vspapi);
+    //mvdepanRegister(plugin, vspapi);
 
     g_cpuinfo = cpu_detect();
 }

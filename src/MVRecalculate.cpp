@@ -7,7 +7,6 @@
 #include <VSHelper4.h>
 
 #include "CPU.h"
-#include "DCTFFTW.h"
 #include "Fakery.h"
 #include "GroupOfPlanes.h"
 #include "MVAnalysisData.h"
@@ -42,9 +41,7 @@ typedef struct MVRecalculateData {
     int divideExtra; // divide blocks on sublocks with median motion
     int meander;     //meander (alternate) scan blocks (even row left to right, odd row right to left
 
-    int dctmode;
-
-    int nModeYUV;
+    bool useSatd;
 
     int nSuperLevels;
     int nSuperHPad;
@@ -53,7 +50,7 @@ typedef struct MVRecalculateData {
     int nSuperModeYUV;
 
     int searchparam;
-    int chroma;
+    bool chroma;
     int truemotion;
     int smooth;
     int64_t thSAD;
@@ -189,13 +186,6 @@ static const VSFrame *VS_CC mvrecalculateGetFrame(int n, int activationReason, v
             // cast away the const, because why not.
             mvgofUpdate(&pSrcGOF, (uint8_t **)pSrc, nSrcPitch);
             mvgofUpdate(&pRefGOF, (uint8_t **)pRef, nRefPitch);
-
-
-            DCTFFTW *DCTc = NULL;
-            if (d->dctmode >= 1 && d->dctmode <= 4) {
-                DCTc = (DCTFFTW *)malloc(sizeof(DCTFFTW));
-                dctInit(DCTc, d->analysisData.nBlkSizeX, d->analysisData.nBlkSizeY, d->vi->format.bitsPerSample, d->opt);
-            }
 
 
             gopRecalculateMVs(&vectorFields, &fgop, &pSrcGOF, &pRefGOF, d->searchType, d->nSearchParam, d->nLambda, d->pnew, vectors, fieldShift, d->thSAD, DCTc, d->dctmode, d->smooth, d->meander);
