@@ -18,8 +18,8 @@ typedef struct MVAnalyseData {
     const VSVideoInfo *vi;
     const VSVideoInfo *supervi;
 
-    MVAnalysisData analysisData;
-    MVAnalysisData analysisDataDivided;
+    MVAnalysisData analysisData = {};
+    MVAnalysisData analysisDataDivided = {};
 
     /*! \brief optimisations enabled */
     int opt;
@@ -52,7 +52,6 @@ typedef struct MVAnalyseData {
 
     bool useSatd;
 
-    int nSuperLevels;
     int nSuperHPad;
     int nSuperVPad;
     int nSuperPel;
@@ -523,10 +522,10 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
         return;
     }
 
-    if (d.analysisData.nLvCount > d.nSuperLevels) { //x
+    if (d.analysisData.nLvCount > FPEvil.pyramidLevels.size()) { //x
 #define ERROR_SIZE 512
         char error_msg[ERROR_SIZE + 1] = { 0 };
-        snprintf(error_msg, ERROR_SIZE, "Analyse: super clip has %d levels. Analyse needs %d levels.", d.nSuperLevels, d.analysisData.nLvCount);
+        snprintf(error_msg, ERROR_SIZE, "Analyse: super clip has %d levels. Analyse needs %d levels.", (int)FPEvil.pyramidLevels.size(), d.analysisData.nLvCount);
 #undef ERROR_SIZE
         vsapi->mapSetError(out, error_msg);
         vsapi->freeNode(d.node);

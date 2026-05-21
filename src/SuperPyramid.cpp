@@ -668,6 +668,10 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int blkSizeX, in
     for (int plane = 0; plane < format->numPlanes; plane++) {
         nRealWidth[plane] = vsapi->getFrameWidth(srcFrame, plane);
         nRealHeight[plane] = vsapi->getFrameHeight(srcFrame, plane);
+
+        // FIXME, calculate padding
+        nWidth[plane] = nRealWidth[plane];
+        nHeight[plane] = nRealHeight[plane];
     }
 
     // FIXME, overlap padding
@@ -761,6 +765,7 @@ void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, co
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].GeneratePelPlanes<uint16_t>(pel, sharp, core, vsapi);
     }
+    nPel = pel;
 }
 
 void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi) {
@@ -772,6 +777,7 @@ void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int pl
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].SetExternalPelPlanes<uint16_t>(pelFrame, pel, plane, core, vsapi);
     }
+    nPel = pel;
 }
 
 void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) {
