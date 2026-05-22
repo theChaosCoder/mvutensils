@@ -10,7 +10,6 @@
 #include "SuperPyramid.h"
 #include "CopyCode.h"
 #include "SADFunctions.h"
-#include "Luma.h"
 
 // A motion block level is the motion estimation context euivalent
 // to a level of the super pyramid, it contains all the data and parameters needed to perform motion estimation on this level
@@ -37,7 +36,6 @@ public:
     int bytesPerSample;
 
     SADFunction SAD;   /* function which computes the sad */
-    LUMAFunction LUMA; /* function which computes the mean luma */
     COPYFunction BLITLUMA;
     COPYFunction BLITCHROMA;
     SADFunction SADCHROMA;
@@ -96,9 +94,6 @@ public:
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
     bool useSatd;
-    int srcLuma;
-    int refLuma;
-    int sumLumaChange;
     int *freqArray; // temporary array for global motion estimaton
     int freqSize;   // size of freqArray
     int64_t verybigSAD;

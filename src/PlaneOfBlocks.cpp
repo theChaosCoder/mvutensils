@@ -259,7 +259,6 @@ void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nB
 
     /* function pointers initialization */
     pob->SAD = selectSADFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8, opt, nCPUFlags);
-    pob->LUMA = selectLumaFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8, opt);
     pob->BLITLUMA = selectCopyFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8);
 
     pob->SADCHROMA = selectSADFunction(pob->nBlkSizeX / pob->xRatioUV, pob->nBlkSizeY / pob->yRatioUV, pob->bytesPerSample * 8, opt, nCPUFlags);
@@ -716,9 +715,6 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob) {
 
     pobFetchPredictors(pob);
 
-    if (useSatd) // most use it and it should be fast anyway //if (dctmode == 3 || dctmode == 4) // check it
-        pob->srcLuma = pob->LUMA(pob->pSrc[0], pob->nSrcPitch[0]);
-
     // We treat zero alone
     // Do we bias zero with not taking into account distorsion ?
     pob->bestMV.x = pob->zeroMVfieldShifted.x;
@@ -862,8 +858,8 @@ template <bool useSatd, int nLogPel, typename PixelType>
 void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame,
                     SearchType st, int stp, int lambda, int lsad, int pnew,
                     int plevel, uint8_t *out, VECTOR *globalMVec,
-                    int fieldShift, int *pmeanLumaChange,
-                    int pzero, int pglobal, int64_t badSAD, int badrange, int meander, bool tryMany, bool chroma) {
+                    int fieldShift,
+                    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
 
     pob->useSatd = useSatd;
     pob->badSAD = badSAD;
@@ -916,7 +912,6 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
     pob->pglobal = pglobal;
     pob->badcount = 0;
     pob->tryMany = tryMany;
-    pob->sumLumaChange = 0;
     // Functions using float must not be used here
 
     for (pob->blky = 0; pob->blky < pob->nBlkY; pob->blky++) {
@@ -990,10 +985,6 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
             /* write the results */
             pBlkData[pob->blkx] = pob->bestMV;
 
-
-            if (pob->smallestPlane)
-                pob->sumLumaChange += pob->LUMA(pobGetRefBlock<nLogPel, PixelType>(pob, 0, 0), pob->nRefPitch[0]) - pob->LUMA(pob->pSrc[0], pob->nSrcPitch[0]);
-
             /* increment indexes & pointers */
             if (iblkx < pob->nBlkX - 1) {
                 pob->x[0] += (pob->nBlkSizeX - pob->nOverlapX) * pob->blkScanDir;
@@ -1011,8 +1002,6 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
             pob->y[2] += ((pob->nBlkSizeY - pob->nOverlapY) >> pob->nLogyRatioUV);
         }
     }
-    if (pob->smallestPlane)
-        *pmeanLumaChange = pob->sumLumaChange / pob->nBlkCount; // for all finer planes
 }
 
 
@@ -1030,14 +1019,14 @@ static constexpr decltype(&doPobSearchMVs<false, 0, uint8_t>) doPobSearchMVs_Tab
 void pobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame,
                   SearchType st, int stp, int lambda, int lsad, int pnew,
                   int plevel, uint8_t *out, VECTOR *globalMVec,
-                  int fieldShift, bool useSatd, int *pmeanLumaChange,
+                  int fieldShift, bool useSatd,
                   int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
 
     int index = pob->nLogPel + (useSatd ? 3 : 0);
     if (pob->bytesPerSample == 1)
-        doPobSearchMVs_Table8[index](pob, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, out, globalMVec, fieldShift, pmeanLumaChange, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+        doPobSearchMVs_Table8[index](pob, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, out, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
     else
-        doPobSearchMVs_Table16[index](pob, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, out, globalMVec, fieldShift, pmeanLumaChange, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+        doPobSearchMVs_Table16[index](pob, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, out, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
 }
 
 
@@ -1213,9 +1202,6 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
             pob->predictor.sad = vectorOld.sad * (pob->nBlkSizeX * pob->nBlkSizeY) / (nBlkSizeXold * nBlkSizeYold); // normalized to new block size
 
             pob->bestMV = pob->predictor;
-
-            if (useSatd)
-                pob->srcLuma = pob->LUMA(pob->pSrc[0], pob->nSrcPitch[0]);
 
             const uint8_t *blocks[3] = {
                 pobGetRefBlock<nLogPel, PixelType>(pob, pob->predictor.x, pob->predictor.y),

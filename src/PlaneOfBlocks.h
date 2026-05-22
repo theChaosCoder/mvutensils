@@ -24,7 +24,6 @@
 #include "CopyCode.h"
 #include "SADFunctions.h"
 #include "CommonFunctions.h"
-#include "Luma.h"
 #include "SuperPyramid.h"
 
 
@@ -55,7 +54,6 @@ typedef struct PlaneOfBlocks {
     int bytesPerSample;
 
     SADFunction SAD;   /* function which computes the sad */
-    LUMAFunction LUMA; /* function which computes the mean luma */
     COPYFunction BLITLUMA;
     COPYFunction BLITCHROMA;
     SADFunction SADCHROMA;
@@ -114,9 +112,6 @@ typedef struct PlaneOfBlocks {
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
     bool useSatd;
-    int srcLuma;
-    int refLuma;
-    int sumLumaChange;
     int *freqArray; // temporary array for global motion estimaton
     int freqSize;   // size of freqArray
     int64_t verybigSAD;
@@ -138,7 +133,7 @@ void pobInterpolatePrediction(PlaneOfBlocks *pob, const PlaneOfBlocks *pob2);
 
 void pobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame, SearchType st, int stp, int lambda, int pnew, uint8_t *out, int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander);
 
-void pobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame, SearchType st, int stp, int lambda, int lsad, int pnew, int plevel, uint8_t *out, VECTOR *globalMVec, int fieldShift, bool useSatd, int *pmeanLumaChange, int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
+void pobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame, SearchType st, int stp, int lambda, int lsad, int pnew, int plevel, uint8_t *out, VECTOR *globalMVec, int fieldShift, bool useSatd, int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
 
 MVArraySizeType pobWriteDefaultToArray(const PlaneOfBlocks *pob, uint8_t *array, int divideMode);
 

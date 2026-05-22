@@ -100,7 +100,7 @@ void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePy
                  &pSrcGOF->GetLevel(gop->nLevelCount - 1),
                  &pRefGOF->GetLevel(gop->nLevelCount - 1),
                  searchTypeSmallest, nSearchParamSmallest, nLambda, lsad, pnew, plevel,
-                 out, &globalMV, fieldShiftCur, useSatd, &meanLumaChange,
+                 out, &globalMV, fieldShiftCur, useSatd,
                  pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
     // Refining the search until we reach the highest detail interpolation.
 
@@ -117,7 +117,7 @@ void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePy
         tryManyLevel = tryMany && i > 0;           // not for finest level to not decrease speed
         pobSearchMVs(gop->planes[i], &pSrcGOF->GetLevel(i), &pRefGOF->GetLevel(i),
                      searchTypeLevel, nSearchParamLevel, nLambda, lsad, pnew, plevel,
-                     out, &globalMV, fieldShiftCur, useSatd, &meanLumaChange,
+                     out, &globalMV, fieldShiftCur, useSatd,
                      pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
         out += pobGetArraySize(gop->planes[i], gop->divideExtra);
     }

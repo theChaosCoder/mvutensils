@@ -94,7 +94,6 @@
     <ClInclude Include="..\src\CPU.h" />
     <ClInclude Include="..\src\Fakery.h" />
     <ClInclude Include="..\src\GroupOfPlanes.h" />
-    <ClInclude Include="..\src\Luma.h" />
     <ClInclude Include="..\src\MaskFun.h" />
     <ClInclude Include="..\src\MotionBlockPyramid.h" />
     <ClInclude Include="..\src\MVAnalysisData.h" />
@@ -113,7 +112,6 @@
     <ClCompile Include="..\src\EntryPoint.cpp" />
     <ClCompile Include="..\src\Fakery.cpp" />
     <ClCompile Include="..\src\GroupOfPlanes.cpp" />
-    <ClCompile Include="..\src\Luma.cpp" />
     <ClCompile Include="..\src\MaskFun.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
