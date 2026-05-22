@@ -1,42 +1,24 @@
-// See legal notice in Copying.txt for more information
+#pragma once
 
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
-// http://www.gnu.org/copyleft/gpl.html .
-
-#ifndef PLANEOFBLOCKS_H
-#define PLANEOFBLOCKS_H
-
-#include <cstdlib>
-
-#include "Fakery.h"
+#include <vector>
+#include <cstdint>
+#include <cstddef>
+#include <string>
+#include <cassert>
+#include <VapourSynth4.h>
+#include "MVAnalysisData.h"
+#include "SuperPyramid.h"
 #include "CopyCode.h"
 #include "SADFunctions.h"
-#include "CommonFunctions.h"
 #include "Luma.h"
-#include "SuperPyramid.h"
 
+// A motion block level is the motion estimation context euivalent
+// to a level of the super pyramid, it contains all the data and parameters needed to perform motion estimation on this level
 
-#define MAX_PREDICTOR 5 // right now 5 should be enough (TSchniede)
-
-//#define    ONLY_CHECK_NONDEFAULT_MV // make the check if it is no default reference (zero, global,...)
-
-
-typedef struct PlaneOfBlocks {
-
-    /* fields set at initialization */
-
+struct MotionBlockLevel {
+private:
+    static constexpr size_t MAX_PREDICTOR = 5;
+public:
     int nBlkX;        /* width in number of blocks */
     int nBlkY;        /* height in number of blocks */
     int nBlkSizeX;    /* size of a block */
@@ -123,24 +105,25 @@ typedef struct PlaneOfBlocks {
 
     int nSrcPitch_temp[3];
     uint8_t *pSrc_temp[3]; //for easy WRITE access to temp block
-} PlaneOfBlocks;
+
+    std::vector<VECTOR> out;
+};
+
+class MotionBlockPyramid {
+public:
+    int nBlkSizeX;
+    int nBlkSizeY;
+    int nLevelCount;
+    int nOverlapX;
+    int nOverlapY;
+    int xRatioUV;
+    int yRatioUV;
+    int divideExtra;
+    std::vector<MotionBlockLevel> pyramidLevels;
+public: //? ?????
+
+    // construct from 
+    MotionBlockPyramid(const FramePyramid &src, const FramePyramid &ref);
 
 
-void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int nMotionFlags, int nCPUFlags, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample);
-
-void pobDeinit(PlaneOfBlocks *pob);
-
-void pobEstimateGlobalMVDoubled(PlaneOfBlocks *pob, VECTOR *globalMVec);
-
-MVArraySizeType pobGetArraySize(const PlaneOfBlocks *pob, int divideMode);
-
-void pobInterpolatePrediction(PlaneOfBlocks *pob, const PlaneOfBlocks *pob2);
-
-void pobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame, SearchType st, int stp, int lambda, int pnew, uint8_t *out, int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander);
-
-void pobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame, SearchType st, int stp, int lambda, int lsad, int pnew, int plevel, uint8_t *out, VECTOR *globalMVec, int fieldShift, bool useSatd, int *pmeanLumaChange, int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
-
-MVArraySizeType pobWriteDefaultToArray(const PlaneOfBlocks *pob, uint8_t *array, int divideMode);
-
-
-#endif
+};

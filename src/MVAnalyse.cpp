@@ -22,7 +22,7 @@ typedef struct MVAnalyseData {
     MVAnalysisData analysisDataDivided = {};
 
     /*! \brief optimisations enabled */
-    int opt;
+    bool opt;
 
     /*! \brief motion vecteur cost factor */
     int nLambda;
@@ -41,14 +41,14 @@ typedef struct MVAnalyseData {
     int pnew;        // penalty to cost for new canditate - added by Fizick
     int plen;        // penalty factor (similar to lambda) for vector length - added by Fizick
     int plevel;      // penalty factors (lambda, plen) level scaling - added by Fizick
-    int global;     // use global motion predictor
+    bool global;     // use global motion predictor
     int pglobal;     // penalty factor for global motion predictor
     int pzero;       // penalty factor for zero vector
     int divideExtra; // divide blocks on sublocks with median motion
     int64_t badSAD;  //  SAD threshold to make more wide search for bad vectors
     int badrange;    // range (radius) of wide search
-    int meander;    //meander (alternate) scan blocks (even row left to right, odd row right to left
-    int tryMany;    // try refine around many predictors
+    bool meander;    //meander (alternate) scan blocks (even row left to right, odd row right to left
+    bool tryMany;    // try refine around many predictors
 
     bool useSatd;
 
@@ -60,11 +60,11 @@ typedef struct MVAnalyseData {
     int levels;
     int searchparam;
     bool chroma;
-    int truemotion;
+    bool truemotion;
 
-    int fields;
+    bool fields;
     int tff;
-    int tff_exists;
+    bool tff_exists;
 } MVAnalyseData;
 
 
@@ -286,7 +286,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d.global = !!vsapi->mapGetInt(in, "global", 0, &err);
     if (err)
-        d.global = d.truemotion ? 1 : 0;
+        d.global = d.truemotion;
 
     d.pnew = vsapi->mapGetIntSaturated(in, "pnew", 0, &err);
     if (err)
@@ -318,11 +318,11 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d.opt = !!vsapi->mapGetInt(in, "opt", 0, &err);
     if (err)
-        d.opt = 1;
+        d.opt = true;
 
     d.meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
     if (err)
-        d.meander = 1;
+        d.meander = true;
 
     d.tryMany = !!vsapi->mapGetInt(in, "trymany", 0, &err);
 
