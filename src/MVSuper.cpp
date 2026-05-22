@@ -59,7 +59,7 @@ static const VSFrame *VS_CC mvsuperGetFrame(int n, int activationReason, void *i
             const VSFrame *srcPel = vsapi->getFrameFilter(n, d->pelclip, frameCtx);
             pyramid.SetExternalPelPlanes(srcPel, d->nPel, 0, core, vsapi);
             vsapi->freeFrame(srcPel);
-        } else {
+        } else if (d->nPel > 1) {
             pyramid.GeneratePelPlanes(d->nPel, d->sharp, core, vsapi);
         }
 

@@ -36,9 +36,6 @@
     <ClInclude Include="..\src\Overlap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\MVFrame.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\MVFlowFPSHelper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -57,9 +54,6 @@
     <ClInclude Include="..\src\Fakery.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\DCTFFTW.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\CopyCode.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -70,6 +64,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\CPU.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SuperPyramid.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -93,15 +90,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\MaskFun.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\MVFrame_AVX2.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\MVFrame.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\DCTFFTW.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\EntryPoint.cpp">
@@ -174,6 +162,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\MVFinest.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\SuperPyramid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

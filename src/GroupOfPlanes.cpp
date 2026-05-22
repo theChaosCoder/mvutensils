@@ -97,8 +97,8 @@ void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePy
     int nSearchParamSmallest = (gop->nLevelCount == 1) ? nPelSearch : nSearchParam;
     int tryManyLevel = tryMany && gop->nLevelCount > 1;
     pobSearchMVs(gop->planes[gop->nLevelCount - 1],
-                 pSrcGOF->GetLevel(gop->nLevelCount - 1),
-                 pRefGOF->GetLevel(gop->nLevelCount - 1),
+                 &pSrcGOF->GetLevel(gop->nLevelCount - 1),
+                 &pRefGOF->GetLevel(gop->nLevelCount - 1),
                  searchTypeSmallest, nSearchParamSmallest, nLambda, lsad, pnew, plevel,
                  out, &globalMV, fieldShiftCur, useSatd, &meanLumaChange,
                  pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
@@ -115,7 +115,7 @@ void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePy
         pobInterpolatePrediction(gop->planes[i], gop->planes[i + 1]);
         fieldShiftCur = (i == 0) ? fieldShift : 0; // may be non zero for finest level only
         tryManyLevel = tryMany && i > 0;           // not for finest level to not decrease speed
-        pobSearchMVs(gop->planes[i], pSrcGOF->GetLevel(i), pRefGOF->GetLevel(i),
+        pobSearchMVs(gop->planes[i], &pSrcGOF->GetLevel(i), &pRefGOF->GetLevel(i),
                      searchTypeLevel, nSearchParamLevel, nLambda, lsad, pnew, plevel,
                      out, &globalMV, fieldShiftCur, useSatd, &meanLumaChange,
                      pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
@@ -140,7 +140,7 @@ void gopRecalculateMVs(GroupOfPlanes *gop, FakeGroupOfPlanes *fgop, const FrameP
 
     // Search the motion vectors, for the low details interpolations first
     // Refining the search until we reach the highest detail interpolation.
-    pobRecalculateMVs(gop->planes[0], fgop, pSrcGOF->GetLevel(0), pRefGOF->GetLevel(0),
+    pobRecalculateMVs(gop->planes[0], fgop, &pSrcGOF->GetLevel(0), &pRefGOF->GetLevel(0),
                       searchType, nSearchParam, nLambda, pnew,
                       out, fieldShift, thSAD, useSatd, smooth, meander);
 }

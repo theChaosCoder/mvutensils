@@ -107,6 +107,32 @@ public:
         return pPlane[idx] + nX * sizeof(PixelType) + nY * nPitch;
     }
 
+    template<typename PixelType>
+    const uint8_t *GetAbsolutePointer(int nX, int nY) const {
+        if (nPel == 1)
+            return pPlane[0] + nX * sizeof(PixelType) + nY * nPitch;
+        else if (nPel == 2) {
+            int idx = (nX & 1) | ((nY & 1) << 1);
+
+            nX >>= 1;
+            nY >>= 1;
+
+            return pPlane[idx] + nX * sizeof(PixelType) + nY * nPitch;
+        } else { // nPel = 4
+            int idx = (nX & 3) | ((nY & 3) << 2);
+
+            nX >>= 2;
+            nY >>= 2;
+
+            return pPlane[idx] + nX * sizeof(PixelType) + nY * nPitch;
+        }
+    }
+
+    template<typename PixelType>
+    const uint8_t *GetPointer(int nX, int nY) const {
+        return GetAbsolutePointer<PixelType>(nX + nHPadding, nY + nVPadding);
+    }
+
 private:
     template<typename PixelType>
     void SetExtPel2(const VSFrame *pelFrame, int plane, VSCore *core, const VSAPI *vsapi);
@@ -156,8 +182,8 @@ public:
     void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi);
     void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi);
     void ExportFrameData(VSFrame *dst, const std::string &prefix); // Stores all levels as frame properties of the output frame, note that each used plane is stored as a separate property
-    const FramePyramidLevel *GetLevel(int level) const {
+    const FramePyramidLevel &GetLevel(int level) const {
         assert(level >= 0 && level < static_cast<int>(pyramidLevels.size()));
-        return &pyramidLevels[level];
+        return pyramidLevels[level];
     }
 };

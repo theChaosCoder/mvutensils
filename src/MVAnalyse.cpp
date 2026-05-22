@@ -484,7 +484,8 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     FramePyramid FPEvil(evil, "MVUtensils", core, vsapi);
 
-
+    // Note that this invalidates all data pointers in FPEvil
+    vsapi->freeFrame(evil);
 
     // fill in missing fields
     d.analysisData.nWidth = FPEvil.nWidth[0];

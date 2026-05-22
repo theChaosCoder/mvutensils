@@ -1036,7 +1036,7 @@ void pobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const 
                   int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany, bool chroma) {
 
     int index = pob->nLogPel + (useSatd ? 3 : 0);
-    if (pob->bytesPerSample == 8)
+    if (pob->bytesPerSample == 1)
         doPobSearchMVs_Table8[index](pob, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, out, globalMVec, fieldShift, pmeanLumaChange, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
     else
         doPobSearchMVs_Table16[index](pob, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, out, globalMVec, fieldShift, pmeanLumaChange, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
@@ -1314,8 +1314,8 @@ static const decltype(&doPobRecalculateMVs<false, 0, uint8_t>) doPobRecalculateM
 
 void pobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame,
                        SearchType st, int stp, int lambda, int pnew, uint8_t *out,
-                       int fieldShift, int64_t thSAD, bool useSad, int smooth, int meander) {
-    int index = pob->nLogPel + (useSad ? 3 : 0);
+                       int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) {
+    int index = pob->nLogPel + (useSatd ? 3 : 0);
     if (pob->bytesPerSample == 1)
         doPobRecalculateMVs_Table8[index](pob, fgop, pSrcFrame, pRefFrame, st, stp, lambda, pnew, out, fieldShift, thSAD, smooth, meander);
     else

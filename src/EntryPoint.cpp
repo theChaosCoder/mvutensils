@@ -34,7 +34,7 @@ VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     mvsuperRegister(plugin, vspapi);
     mvanalyseRegister(plugin, vspapi);
     //mvdegrainsRegister(plugin, vspapi);
-    //mvcompensateRegister(plugin, vspapi);
+    mvcompensateRegister(plugin, vspapi);
     //mvrecalculateRegister(plugin, vspapi);
     //mvmaskRegister(plugin, vspapi);
     //mvfinestRegister(plugin, vspapi);

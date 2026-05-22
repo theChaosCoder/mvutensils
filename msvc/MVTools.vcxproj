@@ -92,7 +92,6 @@
     <ClInclude Include="..\src\CommonMacros.h" />
     <ClInclude Include="..\src\CopyCode.h" />
     <ClInclude Include="..\src\CPU.h" />
-    <ClInclude Include="..\src\DCTFFTW.h" />
     <ClInclude Include="..\src\Fakery.h" />
     <ClInclude Include="..\src\GroupOfPlanes.h" />
     <ClInclude Include="..\src\Luma.h" />
@@ -100,40 +99,82 @@
     <ClInclude Include="..\src\MVAnalysisData.h" />
     <ClInclude Include="..\src\MVDegrains.h" />
     <ClInclude Include="..\src\MVFlowFPSHelper.h" />
-    <ClInclude Include="..\src\MVFrame.h" />
     <ClInclude Include="..\src\Overlap.h" />
     <ClInclude Include="..\src\PlaneOfBlocks.h" />
     <ClInclude Include="..\src\SADFunctions.h" />
     <ClInclude Include="..\src\SimpleResize.h" />
     <ClInclude Include="..\src\sse2neon.h" />
+    <ClInclude Include="..\src\SuperPyramid.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\CopyCode.cpp" />
     <ClCompile Include="..\src\CPU.cpp" />
-    <ClCompile Include="..\src\DCTFFTW.cpp" />
     <ClCompile Include="..\src\EntryPoint.cpp" />
     <ClCompile Include="..\src\Fakery.cpp" />
     <ClCompile Include="..\src\GroupOfPlanes.cpp" />
     <ClCompile Include="..\src\Luma.cpp" />
-    <ClCompile Include="..\src\MaskFun.cpp" />
+    <ClCompile Include="..\src\MaskFun.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\src\MVAnalyse.cpp" />
     <ClCompile Include="..\src\MVAnalysisData.cpp" />
-    <ClCompile Include="..\src\MVBlockFPS.cpp" />
-    <ClCompile Include="..\src\MVCompensate.cpp" />
-    <ClCompile Include="..\src\MVDegrains.cpp" />
-    <ClCompile Include="..\src\MVDegrains_AVX2.cpp" />
-    <ClCompile Include="..\src\MVDepan.cpp" />
-    <ClCompile Include="..\src\MVFinest.cpp" />
-    <ClCompile Include="..\src\MVFlow.cpp" />
-    <ClCompile Include="..\src\MVFlowBlur.cpp" />
-    <ClCompile Include="..\src\MVFlowFPS.cpp" />
-    <ClCompile Include="..\src\MVFlowFPSHelper.cpp" />
-    <ClCompile Include="..\src\MVFlowInter.cpp" />
-    <ClCompile Include="..\src\MVFrame.cpp" />
-    <ClCompile Include="..\src\MVFrame_AVX2.cpp" />
-    <ClCompile Include="..\src\MVMask.cpp" />
-    <ClCompile Include="..\src\MVRecalculate.cpp" />
-    <ClCompile Include="..\src\MVSCDetection.cpp" />
+    <ClCompile Include="..\src\MVBlockFPS.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVCompensate.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVDegrains.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVDegrains_AVX2.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVDepan.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVFinest.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVFlow.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVFlowBlur.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVFlowFPS.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVFlowFPSHelper.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVFlowInter.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVMask.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVRecalculate.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\MVSCDetection.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\src\MVSuper.cpp" />
     <ClCompile Include="..\src\Overlap.cpp" />
     <ClCompile Include="..\src\Overlap_AVX2.cpp" />
@@ -142,6 +183,7 @@
     <ClCompile Include="..\src\SADFunctions_AVX2.cpp" />
     <ClCompile Include="..\src\SimpleResize.cpp" />
     <ClCompile Include="..\src\SimpleResize_AVX2.cpp" />
+    <ClCompile Include="..\src\SuperPyramid.cpp" />
   </ItemGroup>
   <ItemGroup>
     <NASM Include="..\src\asm\const-a.asm">
