@@ -66,7 +66,7 @@ public:
     template<typename PixelType>
     void CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi);
     template<typename PixelType>
-    void ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi);
+    void ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, uint8_t *tempBuffer, VSCore *core, const VSAPI *vsapi);
     template<typename PixelType>
     void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi);
     // Only unpadded pel clips supported, this differs from original MVTools

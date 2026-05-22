@@ -32,7 +32,7 @@ void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int 
     // Copy frame data and pad sides by extending the edges
     dstP += dstPitch * vPad;
 
-    for (int h = 0; h < vPad; h++) {
+    for (int h = 0; h < nRealHeight; h++) {
         PixelType padValueLeft = srcP[0];
         for (int w = 0; w < hPad; w++)
             dstP[w] = padValueLeft;
@@ -80,12 +80,118 @@ static void RB2F_C(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
     }
 }
 
+// separable BilinearFiltered with 1/8, 3/8, 3/8, 1/8 filter for smoothing and anti-aliasing
+// interleaves vertical and horizontal downscaling row by row using tempBuffer as scratch
+// tempBuffer must point to at least nWidth * 8 * sizeof(PixelType) bytes
+template <typename PixelType>
+static void RB2BilinearFiltered(uint8_t *pDst, const uint8_t * VS_RESTRICT pSrc, ptrdiff_t nDstPitch,
+    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t * VS_RESTRICT tempBuffer) {
+
+    PixelType *dst = (PixelType *)pDst;
+    const PixelType *src = (const PixelType *)pSrc;
+    PixelType *tmp = (PixelType *)tempBuffer; // nWidth*2 entries used per row
+
+    nDstPitch /= sizeof(PixelType);
+    nSrcPitch /= sizeof(PixelType);
+
+    const int srcWidth2 = nWidth * 2;
+
+    for (int y = 0; y < nHeight; y++) {
+        const PixelType *row = src + y * 2 * nSrcPitch;
+
+        // Vertical filter: produce srcWidth2 intermediate samples into tmp
+        if (y == 0 || y == nHeight - 1) {
+            // Edge rows: simple average of the two source rows
+            for (int x = 0; x < srcWidth2; x++)
+                tmp[x] = (row[x] + row[x + nSrcPitch] + 1) / 2;
+        } else {
+            // Middle rows: 4-tap filter (1/8, 3/8, 3/8, 1/8) across rows 2y-1..2y+2
+            for (int x = 0; x < srcWidth2; x++)
+                tmp[x] = (row[x - nSrcPitch] + (row[x] + row[x + nSrcPitch]) * 3 + row[x + nSrcPitch * 2] + 4) / 8;
+        }
+
+        // Horizontal filter: reduce tmp from srcWidth2 to nWidth, write to dst row y
+        PixelType *dstRow = dst + y * nDstPitch;
+
+        dstRow[0] = (tmp[0] + tmp[1] + 1) / 2;
+
+        for (int x = 1; x < nWidth - 1; x++)
+            dstRow[x] = (tmp[x * 2 - 1] + (tmp[x * 2] + tmp[x * 2 + 1]) * 3 + tmp[x * 2 + 2] + 4) / 8;
+
+        dstRow[nWidth - 1] = (tmp[(nWidth - 1) * 2] + tmp[(nWidth - 1) * 2 + 1] + 1) / 2;
+    }
+}
+
+// separable filtered cubic with 1/32, 5/32, 10/32, 10/32, 5/32, 1/32 filter for smoothing and anti-aliasing
+// interleaves vertical and horizontal downscaling row by row using tempBuffer as scratch
+// tempBuffer must point to at least nWidth * 8 * sizeof(PixelType) bytes
+template <typename PixelType>
+static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
+    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t *VS_RESTRICT tempBuffer) {
+
+    PixelType *dst = (PixelType *)pDst;
+    const PixelType *src = (const PixelType *)pSrc;
+    PixelType *tmp = (PixelType *)tempBuffer; // nWidth*2 entries used per row
+
+    nDstPitch /= sizeof(PixelType);
+    nSrcPitch /= sizeof(PixelType);
+
+    const int srcWidth2 = nWidth * 2;
+
+    for (int y = 0; y < nHeight; y++) {
+        const PixelType *row = src + y * 2 * nSrcPitch;
+
+        // Vertical filter: produce srcWidth2 intermediate samples into tmp
+        if (y == 0 || y == nHeight - 1) {
+            // Edge rows: simple average of the two source rows
+            for (int x = 0; x < srcWidth2; x++)
+                tmp[x] = (row[x] + row[x + nSrcPitch] + 1) / 2;
+        } else {
+            // Middle rows: 6-tap filter (1/32, 5/32, 10/32, 10/32, 5/32, 1/32) across rows 2y-2..2y+3
+            for (int x = 0; x < srcWidth2; x++) {
+                int m0 = row[x - nSrcPitch * 2];
+                int m1 = row[x - nSrcPitch];
+                int m2 = row[x];
+                int m3 = row[x + nSrcPitch];
+                int m4 = row[x + nSrcPitch * 2];
+                int m5 = row[x + nSrcPitch * 3];
+
+                m2 = (m2 + m3) * 10;
+                m1 = (m1 + m4) * 5;
+                m0 += m5 + m2 + m1 + 16;
+                tmp[x] = m0 >> 5;
+            }
+        }
+
+        // Horizontal filter: reduce tmp from srcWidth2 to nWidth, write to dst row y
+        PixelType *dstRow = dst + y * nDstPitch;
+
+        dstRow[0] = (tmp[0] + tmp[1] + 1) / 2;
+
+        for (int x = 1; x < nWidth - 1; x++) {
+            int m0 = tmp[x * 2 - 2];
+            int m1 = tmp[x * 2 - 1];
+            int m2 = tmp[x * 2];
+            int m3 = tmp[x * 2 + 1];
+            int m4 = tmp[x * 2 + 2];
+            int m5 = tmp[x * 2 + 3];
+
+            m2 = (m2 + m3) * 10;
+            m1 = (m1 + m4) * 5;
+            m0 += m5 + m2 + m1 + 16;
+            dstRow[x] = m0 >> 5;
+        }
+
+        dstRow[nWidth - 1] = (tmp[(nWidth - 1) * 2] + tmp[(nWidth - 1) * 2 + 1] + 1) / 2;
+    }
+}
+
 int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) {
       return (pad >= ratioUV) ? ((numPixels / ratioUV + 1) / 2) * ratioUV : ((numPixels / ratioUV) / 2) * ratioUV;
 }
 
 template<typename PixelType>
-void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi) {
+void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, uint8_t *tempBuffer, VSCore *core, const VSAPI *vsapi) {
     nVPadding = src.nVPadding;
     nHPadding = src.nHPadding;
 
@@ -106,18 +212,20 @@ void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatio
     nOffsetPadding = nPitch * nVPadding + nHPadding * sizeof(PixelType);
 
     if (rFilter == RFilterParam::Simple) {
-            RB2F_C<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight);
+        RB2F_C<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight);
     } else if (rFilter == RFilterParam::Triangle) {
+        assert(false);
             //RB2Filtered<PixelType>();
     } else if (rFilter == RFilterParam::Bilinear) {
-            //RB2BilinearFiltered<PixelType>();
+        RB2BilinearFiltered<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight, tempBuffer);
     } else if (rFilter == RFilterParam::Quadratic) {
+        assert(false);
             //RB2Quadratic<PixelType>();
     } else if (rFilter == RFilterParam::Cubic) {
-            //RB2Cubic<PixelType>();
+        RB2Cubic<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight, tempBuffer);
     }
     // FIXME, fix other filters
-    RB2F_C<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight);
+    //RB2F_C<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight);
 
     PadPlaneData<PixelType>(0);
 }
@@ -351,13 +459,12 @@ static void HorizontalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_REST
 }
 
 
-// assume all pitches equal
 template <typename PixelType>
 static void Average2(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc18, const uint8_t *VS_RESTRICT pSrc28,
     ptrdiff_t nPitch, int nWidth, int nHeight) {
     PixelType *pDst = (PixelType *)pDst8;
-    PixelType *pSrc1 = (PixelType *)pSrc18;
-    PixelType *pSrc2 = (PixelType *)pSrc28;
+    const PixelType *pSrc1 = (const PixelType *)pSrc18;
+    const PixelType *pSrc2 = (const PixelType *)pSrc28;
 
     nPitch /= sizeof(PixelType);
 
@@ -562,11 +669,11 @@ void PyramidPlane::PadPlaneData(int plane) {
     // Pad sides by extending the edges
     dstP += nUsedPich * nVPadding;
 
-    for (int h = 0; h < nVPadding; h++) {
-        PixelType padValueLeft = dstP[0];
+    for (int h = 0; h < nRealHeight; h++) {
+        PixelType padValueLeft = dstP[nHPadding];
         for (int w = 0; w < nHPadding; w++)
             dstP[w] = padValueLeft;
-        PixelType padValueRight = dstP[nRealWidth - 1];
+        PixelType padValueRight = dstP[nHPadding + nRealWidth - 1];
         for (int w = nRealWidth + nHPadding; w < nPaddedWidth; w++)
             dstP[w] = padValueRight;
         dstP += nUsedPich;
@@ -592,10 +699,9 @@ void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vP
     storage[0] = planeFrame;
     pPlane[0] = vsapi->getReadPtr(planeFrame, 0);
     nPitch = vsapi->getStride(planeFrame, 0);
-    nOffsetPadding = nPitch * nVPadding + nHPadding * format->bytesPerSample;
-
     nHPadding = hPad;
     nVPadding = vPad;
+    nOffsetPadding = nPitch * nVPadding + nHPadding * format->bytesPerSample;
 
     nPaddedWidth = vsapi->getFrameWidth(planeFrame, 0);
     nPaddedHeight = vsapi->getFrameHeight(planeFrame, 0);
@@ -609,15 +715,14 @@ void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int 
     nPel = pel;
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(planeFrames[0]);
     nPitch = vsapi->getStride(planeFrames[0], 0);
+    nHPadding = hPad;
+    nVPadding = vPad;
     nOffsetPadding = nPitch * nVPadding + nHPadding * format->bytesPerSample;
 
     for (int i = 0; i < pel * pel; i++) {
         storage[i] = planeFrames[i];
         pPlane[i] = vsapi->getReadPtr(planeFrames[i], 0);
     }
-
-    nHPadding = hPad;
-    nVPadding = vPad;
 
     nPaddedWidth = vsapi->getFrameWidth(planeFrames[0], 0);
     nPaddedHeight = vsapi->getFrameHeight(planeFrames[0], 0);
@@ -674,20 +779,27 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int blkSizeX, in
         nHeight[plane] = nRealHeight[plane];
     }
 
+
+    size_t tempBufferSize = (nWidth[0] * format->bytesPerSample * 8); // FIXME, roud up nicer?
+
+    uint8_t *tempBuffer = vsh::vsh_aligned_malloc<uint8_t>(tempBufferSize, 32);
+
     // FIXME, overlap padding
     if (format->bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
             pyramidLevels[0].planes[plane].CopyAndPadPlane<uint8_t>(srcFrame, plane, nHPad[plane], nVPad[plane], blkSizeX - overlapX, blkSizeY - overlapY, core, vsapi);
             for (int i = 1; i < levels; i++)
-                pyramidLevels[i].planes[plane].ReducePlane<uint8_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, core, vsapi);
+                pyramidLevels[i].planes[plane].ReducePlane<uint8_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer, core, vsapi);
         }
     } else {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
             pyramidLevels[0].planes[plane].CopyAndPadPlane<uint16_t>(srcFrame, plane, nHPad[plane], nVPad[plane], blkSizeX - overlapX, blkSizeY - overlapY, core, vsapi);
             for (int i = 1; i < levels; i++)
-                pyramidLevels[i].planes[plane].ReducePlane<uint16_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, core, vsapi);
+                pyramidLevels[i].planes[plane].ReducePlane<uint16_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer, core, vsapi);
         }
     }
+
+    vsh::vsh_aligned_free(tempBuffer);
 }
 
 
