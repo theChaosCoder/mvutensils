@@ -246,11 +246,11 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d.searchType = (SearchType)(vsapi->mapGetIntSaturated(in, "search", 0, &err));
     if (err)
-        d.searchType = SearchHex2;
+        d.searchType = SearchType::Hex2;
 
     d.searchTypeCoarse = (SearchType)(vsapi->mapGetIntSaturated(in, "search_coarse", 0, &err));
     if (err)
-        d.searchTypeCoarse = SearchExhaustive;
+        d.searchTypeCoarse = SearchType::Exhaustive;
 
     d.searchparam = vsapi->mapGetIntSaturated(in, "searchparam", 0, &err);
     if (err)
@@ -331,7 +331,8 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     d.tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
     d.tff_exists = !err;
 
-
+    // FIXME, restore check
+    /*
     if (d.searchType < 0 || d.searchType > 7) {
         vsapi->mapSetError(out, "Analyse: search must be between 0 and 7 (inclusive).");
         return;
@@ -341,6 +342,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
         vsapi->mapSetError(out, "Analyse: search_coarse must be between 0 and 7 (inclusive).");
         return;
     }
+    */
 
     if (d.useSatd && d.analysisData.nBlkSizeX == 16 && d.analysisData.nBlkSizeY == 2) {
         vsapi->mapSetError(out, "Analyse: satd cannot work with 16x2 blocks.");
@@ -407,7 +409,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     }
 
 
-    if (d.searchType == SearchNstep)
+    if (d.searchType == SearchType::Nstep)
         d.nSearchParam = (d.searchparam < 0) ? 0 : d.searchparam;
     else
         d.nSearchParam = (d.searchparam < 1) ? 1 : d.searchparam;

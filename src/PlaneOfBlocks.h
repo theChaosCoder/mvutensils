@@ -65,8 +65,8 @@ typedef struct PlaneOfBlocks {
     /* before the search, contains the hierachal predictor */
     /* after the search, contains the best motion vector */
 
-    int smallestPlane; /* say whether vectors can used predictors from a smaller plane */
-    int chroma;        /* do we do chroma me */
+    bool smallestPlane; /* say whether vectors can used predictors from a smaller plane */
+    bool chroma;        /* do we do chroma me */
 
     /* working fields */
 

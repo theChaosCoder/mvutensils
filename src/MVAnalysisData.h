@@ -34,37 +34,37 @@ static const char prop_MVTools_MVAnalysisData[] = "MVTools_MVAnalysisData";
 static const char prop_MVTools_vectors[] = "MVTools_vectors";
 
 
-typedef struct VECTOR {
+struct VECTOR {
     int x;
     int y;
     int64_t sad;
-} VECTOR;
+};
 
 
 // Type of the size fields in the arrays of VECTOR.
+// FIXME, change to size_t later
 typedef int MVArraySizeType;
 
 
 /*! \brief Search type : defines the algorithm used for minimizing the SAD */
-typedef enum SearchType {
-    SearchOnetime,
-    SearchNstep,
-    SearchLogarithmic,
-    SearchExhaustive,
-    SearchHex2,
-    SearchUnevenMultiHexagon,
-    SearchHorizontal,
-    SearchVertical
-} SearchType;
+enum class SearchType {
+    Onetime = 0,
+    Nstep = 1,
+    Logarithmic = 2,
+    Exhaustive = 3,
+    Hex2 = 4,
+    UnevenMultiHexagon = 5,
+    Horizontal = 6,
+    Vertical = 7
+};
 
 
 #define MOTION_USE_SIMD             0x00000001
+// FIXME, BACKWARFD FLAG UNUSED?
 #define MOTION_IS_BACKWARD          0x00000002
 #define MOTION_SMALLEST_PLANE       0x00000004
 #define MOTION_USE_CHROMA_MOTION    0x00000008
-//force MVAnalyse to use a different function for SAD / SADCHROMA (debug)
-#define MOTION_USE_SSD              0x00000010
-#define MOTION_USE_SATD             0x00000020
+
 
 
 #define MV_DEFAULT_SCD1 400 // increased in v1.4.1
@@ -72,7 +72,7 @@ typedef enum SearchType {
 
 //#define MV_BUFFER_FRAMES 10
 
-static const VECTOR zeroMV = { 0, 0, -1 };
+static constexpr const VECTOR zeroMV = { 0, 0, -1 };
 
 
 #define MVANALYSIS_DATA_VERSION 5

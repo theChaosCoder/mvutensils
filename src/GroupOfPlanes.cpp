@@ -93,7 +93,7 @@ void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePy
     int meanLumaChange = 0;
 
     // Search the motion vectors, for the low details interpolations first
-    SearchType searchTypeSmallest = (gop->nLevelCount == 1 || searchType == SearchHorizontal || searchType == SearchVertical) ? searchType : coarseSearchType; // full search for smallest coarse plane
+    SearchType searchTypeSmallest = (gop->nLevelCount == 1 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for smallest coarse plane
     int nSearchParamSmallest = (gop->nLevelCount == 1) ? nPelSearch : nSearchParam;
     int tryManyLevel = tryMany && gop->nLevelCount > 1;
     pobSearchMVs(gop->planes[gop->nLevelCount - 1],
@@ -107,7 +107,7 @@ void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePy
     out += pobGetArraySize(gop->planes[gop->nLevelCount - 1], gop->divideExtra);
 
     for (int i = gop->nLevelCount - 2; i >= 0; i--) {
-        SearchType searchTypeLevel = (i == 0 || searchType == SearchHorizontal || searchType == SearchVertical) ? searchType : coarseSearchType; // full search for coarse planes
+        SearchType searchTypeLevel = (i == 0 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for coarse planes
         int nSearchParamLevel = (i == 0) ? nPelSearch : nSearchParam;                                                            // special case for finest level
         if (global) {
             pobEstimateGlobalMVDoubled(gop->planes[i + 1], &globalMV); // get updated global MV (doubled)
