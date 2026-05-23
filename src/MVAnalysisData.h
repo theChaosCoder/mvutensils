@@ -59,9 +59,7 @@ enum class SearchType {
 };
 
 
-#define MOTION_USE_SIMD             0x00000001
 // FIXME, BACKWARFD FLAG UNUSED?
-#define MOTION_IS_BACKWARD          0x00000002
 #define MOTION_SMALLEST_PLANE       0x00000004
 #define MOTION_USE_CHROMA_MOTION    0x00000008
 
@@ -99,8 +97,6 @@ typedef struct MVAnalysisData {
 
     /*! \brief direction of the search ( forward / backward ) */
     int isBackward;
-
-    int nCPUFlags;
 
     /*! \brief diverse flags to set up the search */
     int nMotionFlags;

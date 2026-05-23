@@ -214,7 +214,7 @@ static int Median(int a, int b, int c) {
 }
 
 
-void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int nMotionFlags, int nCPUFlags, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) {
+void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int nMotionFlags, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) {
 
     /* constant fields */
 
@@ -241,7 +241,6 @@ void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nB
     pob->bytesPerSample = (bitsPerSample + 7) / 8;
 
     pob->smallestPlane = !!(nMotionFlags & MOTION_SMALLEST_PLANE);
-    int opt = !!(nMotionFlags & MOTION_USE_SIMD);
     pob->chroma = !!(nMotionFlags & MOTION_USE_CHROMA_MOTION);
 
     pob->globalMVPredictor = zeroMV;
@@ -252,16 +251,16 @@ void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nB
     memset(pob->vectors, 0, pob->nBlkCount * sizeof(VECTOR));
 
     /* function pointers initialization */
-    pob->SAD = selectSADFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8, opt, nCPUFlags);
+    pob->SAD = selectSADFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8);
     pob->BLITLUMA = selectCopyFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8);
 
-    pob->SADCHROMA = selectSADFunction(pob->nBlkSizeX / pob->xRatioUV, pob->nBlkSizeY / pob->yRatioUV, pob->bytesPerSample * 8, opt, nCPUFlags);
+    pob->SADCHROMA = selectSADFunction(pob->nBlkSizeX / pob->xRatioUV, pob->nBlkSizeY / pob->yRatioUV, pob->bytesPerSample * 8);
     pob->BLITCHROMA = selectCopyFunction(pob->nBlkSizeX / pob->xRatioUV, pob->nBlkSizeY / pob->yRatioUV, pob->bytesPerSample * 8);
 
     if (pob->nBlkSizeX == 16 && pob->nBlkSizeY == 2)
         pob->SATD = NULL;
     else
-        pob->SATD = selectSATDFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8, opt, nCPUFlags);
+        pob->SATD = selectSATDFunction(pob->nBlkSizeX, pob->nBlkSizeY, pob->bytesPerSample * 8);
 
     if (!pob->chroma)
         pob->SADCHROMA = NULL;

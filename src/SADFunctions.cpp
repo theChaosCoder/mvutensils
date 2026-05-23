@@ -30,6 +30,8 @@ enum InstructionSets {
 
 #if defined(MVTOOLS_X86)
 
+extern uint32_t g_cpuinfo;
+
 #include <emmintrin.h>
 
 #define zeroes _mm_setzero_si128()
@@ -466,42 +468,42 @@ static const std::unordered_map<uint32_t, SADFunction> sad_functions = {
 #endif
 };
 
-SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits, int opt, unsigned cpu) {
+SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits) {
     SADFunction sad = sad_functions.at(KEY(width, height, bits, Scalar));
 
 #if defined(MVTOOLS_X86)
-    if (opt) {
+    int cpu = g_cpuinfo;
+
+    try {
+        sad = sad_functions.at(KEY(width, height, bits, MMX));
+    } catch (std::out_of_range &) { }
+
+    if (cpu & X264_CPU_CACHELINE_64) {
         try {
-            sad = sad_functions.at(KEY(width, height, bits, MMX));
+            sad = sad_functions.at(KEY(width, height, bits, MMX_CACHE64));
         } catch (std::out_of_range &) { }
+    }
 
-        if (cpu & X264_CPU_CACHELINE_64) {
-            try {
-                sad = sad_functions.at(KEY(width, height, bits, MMX_CACHE64));
-            } catch (std::out_of_range &) { }
-        }
+    try {
+        sad = sad_functions.at(KEY(width, height, bits, SSE2));
+    } catch (std::out_of_range &) { }
 
+    if (cpu & X264_CPU_SSE3) {
         try {
-            sad = sad_functions.at(KEY(width, height, bits, SSE2));
+            sad = sad_functions.at(KEY(width, height, bits, SSE3));
         } catch (std::out_of_range &) { }
+    }
 
-        if (cpu & X264_CPU_SSE3) {
-            try {
-                sad = sad_functions.at(KEY(width, height, bits, SSE3));
-            } catch (std::out_of_range &) { }
-        }
+    if ((cpu & X264_CPU_SSSE3) && (cpu & X264_CPU_CACHELINE_64)) {
+        try {
+            sad = sad_functions.at(KEY(width, height, bits, SSSE3_CACHE64));
+        } catch (std::out_of_range &) { }
+    }
 
-        if ((cpu & X264_CPU_SSSE3) && (cpu & X264_CPU_CACHELINE_64)) {
-            try {
-                sad = sad_functions.at(KEY(width, height, bits, SSSE3_CACHE64));
-            } catch (std::out_of_range &) { }
-        }
-
-        if (cpu & X264_CPU_AVX2) {
-            SADFunction tmp = selectSADFunctionAVX2(width, height, bits);
-            if (tmp)
-                sad = tmp;
-        }
+    if (cpu & X264_CPU_AVX2) {
+        SADFunction tmp = selectSADFunctionAVX2(width, height, bits);
+        if (tmp)
+            sad = tmp;
     }
 #endif
 
@@ -764,48 +766,48 @@ static const std::unordered_map<uint32_t, SADFunction> satd_functions = {
 #endif
 };
 
-SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits, int opt, unsigned cpu) {
+SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits) {
     SADFunction satd = satd_functions.at(KEY(width, height, bits, Scalar));
 
-#if defined(MVTOOLS_X86) 
-    if (opt) {
+#if defined(MVTOOLS_X86)
+    int cpu = g_cpuinfo;
+
+    try {
+        satd = satd_functions.at(KEY(width, height, bits, MMX));
+    } catch (std::out_of_range &) { }
+
+    try {
+        satd = satd_functions.at(KEY(width, height, bits, SSE2));
+    } catch (std::out_of_range &) { }
+
+    if (cpu & X264_CPU_SSSE3) {
         try {
-            satd = satd_functions.at(KEY(width, height, bits, MMX));
+            satd = satd_functions.at(KEY(width, height, bits, SSSE3));
         } catch (std::out_of_range &) { }
+    }
 
+    if (cpu & X264_CPU_SSE4) {
         try {
-            satd = satd_functions.at(KEY(width, height, bits, SSE2));
+            satd = satd_functions.at(KEY(width, height, bits, SSE4));
         } catch (std::out_of_range &) { }
+    }
 
-        if (cpu & X264_CPU_SSSE3) {
-            try {
-                satd = satd_functions.at(KEY(width, height, bits, SSSE3));
-            } catch (std::out_of_range &) { }
-        }
+    if (cpu & X264_CPU_AVX) {
+        try {
+            satd = satd_functions.at(KEY(width, height, bits, AVX));
+        } catch (std::out_of_range &) { }
+    }
 
-        if (cpu & X264_CPU_SSE4) {
-            try {
-                satd = satd_functions.at(KEY(width, height, bits, SSE4));
-            } catch (std::out_of_range &) { }
-        }
+    if (cpu & X264_CPU_XOP) {
+        try {
+            satd = satd_functions.at(KEY(width, height, bits, XOP));
+        } catch (std::out_of_range &) { }
+    }
 
-        if (cpu & X264_CPU_AVX) {
-            try {
-                satd = satd_functions.at(KEY(width, height, bits, AVX));
-            } catch (std::out_of_range &) { }
-        }
-
-        if (cpu & X264_CPU_XOP) {
-            try {
-                satd = satd_functions.at(KEY(width, height, bits, XOP));
-            } catch (std::out_of_range &) { }
-        }
-
-        if (cpu & X264_CPU_AVX2) {
-            try {
-                satd = satd_functions.at(KEY(width, height, bits, AVX2));
-            } catch (std::out_of_range &) { }
-        }
+    if (cpu & X264_CPU_AVX2) {
+        try {
+            satd = satd_functions.at(KEY(width, height, bits, AVX2));
+        } catch (std::out_of_range &) { }
     }
 #endif
 

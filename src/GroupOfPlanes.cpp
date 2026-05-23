@@ -22,7 +22,7 @@
 #include "GroupOfPlanes.h"
 
 
-void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, int nPel, int nMotionFlags, int nCPUFlags, int nOverlapX, int nOverlapY, int nBlkX, int nBlkY, int xRatioUV, int yRatioUV, int divideExtra, int bitsPerSample) {
+void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, int nPel, int nMotionFlags, int nOverlapX, int nOverlapY, int nBlkX, int nBlkY, int xRatioUV, int yRatioUV, int divideExtra, int bitsPerSample) {
     gop->nBlkSizeX = nBlkSizeX;
     gop->nBlkSizeY = nBlkSizeY;
     gop->nLevelCount = nLevelCount;
@@ -50,7 +50,7 @@ void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, 
         nBlkYCurrent = ((nHeight_B >> i) - gop->nOverlapY) / (gop->nBlkSizeY - gop->nOverlapY);
 
         gop->planes[i] = (PlaneOfBlocks *)malloc(sizeof(PlaneOfBlocks));
-        pobInit(gop->planes[i], nBlkXCurrent, nBlkYCurrent, gop->nBlkSizeX, gop->nBlkSizeY, nPelCurrent, i, nMotionFlagsCurrent, nCPUFlags, gop->nOverlapX, gop->nOverlapY, gop->xRatioUV, gop->yRatioUV, bitsPerSample);
+        pobInit(gop->planes[i], nBlkXCurrent, nBlkYCurrent, gop->nBlkSizeX, gop->nBlkSizeY, nPelCurrent, i, nMotionFlagsCurrent, gop->nOverlapX, gop->nOverlapY, gop->xRatioUV, gop->yRatioUV, bitsPerSample);
         nPelCurrent = 1;
     }
 }

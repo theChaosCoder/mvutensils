@@ -93,7 +93,7 @@ static const VSFrame *VS_CC mvrecalculateGetFrame(int n, int activationReason, v
 
         GroupOfPlanes vectorFields;
 
-        gopInit(&vectorFields, d->analysisData.nBlkSizeX, d->analysisData.nBlkSizeY, d->analysisData.nLvCount, d->analysisData.nPel, d->analysisData.nMotionFlags, d->analysisData.nCPUFlags, d->analysisData.nOverlapX, d->analysisData.nOverlapY, d->analysisData.nBlkX, d->analysisData.nBlkY, d->analysisData.xRatioUV, d->analysisData.yRatioUV, d->divideExtra, d->vi->format.bitsPerSample);
+        gopInit(&vectorFields, d->analysisData.nBlkSizeX, d->analysisData.nBlkSizeY, d->analysisData.nLvCount, d->analysisData.nPel, d->analysisData.nMotionFlags, d->analysisData.nOverlapX, d->analysisData.nOverlapY, d->analysisData.nBlkX, d->analysisData.nBlkY, d->analysisData.xRatioUV, d->analysisData.yRatioUV, d->divideExtra, d->vi->format.bitsPerSample);
 
 
         const uint8_t *pSrc[3] = { NULL };
@@ -486,14 +486,7 @@ static void VS_CC mvrecalculateCreate(const VSMap *in, VSMap *out, void *userDat
 
 
     d.analysisData.nMotionFlags = 0;
-    d.analysisData.nMotionFlags |= d.opt ? MOTION_USE_SIMD : 0;
-    d.analysisData.nMotionFlags |= d.analysisData.isBackward ? MOTION_IS_BACKWARD : 0;
     d.analysisData.nMotionFlags |= d.chroma ? MOTION_USE_CHROMA_MOTION : 0;
-
-
-    if (d.opt) {
-        d.analysisData.nCPUFlags = g_cpuinfo;
-    }
 
     d.analysisData.nPel = d.nSuperPel; //x
 

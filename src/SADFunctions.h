@@ -28,9 +28,9 @@ typedef unsigned int (*SADFunction)(const uint8_t *pSrc, intptr_t nSrcPitch,
                                     const uint8_t *pRef, intptr_t nRefPitch);
 
 
-SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits, int opt, unsigned cpu);
+SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits);
 
-SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits, int opt, unsigned cpu);
+SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits);
 
 
 #if defined(MVTOOLS_X86)
