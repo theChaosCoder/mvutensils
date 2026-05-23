@@ -47,7 +47,7 @@ void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, 
         nBlkXCurrent = ((nWidth_B >> i) - gop->nOverlapX) / (gop->nBlkSizeX - gop->nOverlapX);
         nBlkYCurrent = ((nHeight_B >> i) - gop->nOverlapY) / (gop->nBlkSizeY - gop->nOverlapY);
 
-        gop->planes[i] = (PlaneOfBlocks *)malloc(sizeof(PlaneOfBlocks));
+        gop->planes[i] = new PlaneOfBlocks();
         pobInit(gop->planes[i], nBlkXCurrent, nBlkYCurrent, gop->nBlkSizeX, gop->nBlkSizeY, nPelCurrent, i, smallestPlane, chroma, gop->nOverlapX, gop->nOverlapY, gop->xRatioUV, gop->yRatioUV, bitsPerSample);
         nPelCurrent = 1;
     }
@@ -57,7 +57,7 @@ void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, 
 void gopDeinit(GroupOfPlanes *gop) {
     for (int i = 0; i < gop->nLevelCount; i++) {
         pobDeinit(gop->planes[i]);
-        free(gop->planes[i]);
+        delete gop->planes[i];
     }
 
     free(gop->planes);

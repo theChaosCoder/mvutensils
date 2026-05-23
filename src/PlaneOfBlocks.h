@@ -63,13 +63,13 @@ typedef struct PlaneOfBlocks {
 
     /* working fields */
     // the frame to compare to, may be possible to pass prefframe instead of whole pob to some functions
+    // constant the whole time
     const FramePyramidLevel *pRefFrame;
     ptrdiff_t nRefPitch[3];
 
+    // These are all used deep in motion estimation
     VECTOR bestMV;    /* best vector found so far during the search */
     int64_t nMinCost; /* minimum cost ( sad + mv cost ) found so far */
-
-    // These are all used deep in motion estimation
     VECTOR predictor; /* best predictor for the current vector */
 
     // Maximum vector bounds possible
@@ -94,13 +94,11 @@ typedef struct PlaneOfBlocks {
     int badrange;     // wide search radius
     int64_t verybigSAD;
 
-
     // unknown
     VECTOR globalMVPredictor;  // predictor of global motion vector
 
     // always constant? constant for the whole frame?
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
-
 
     // only used as temporary space in pobEstimateGlobalMVDoubled, should be a temp space pointer provided by the pyramid object instead
     std::vector<int> freqArray;
