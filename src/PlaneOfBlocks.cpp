@@ -868,21 +868,20 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
 
     VECTOR *pBlkData = (VECTOR *)(out + sizeof(MVArraySizeType));
 
-    pob->pSrcFrame = pSrcFrame;
     pob->pRefFrame = pRefFrame;
 
 
-    pob->y[0] = pob->pSrcFrame->planes[0].nVPadding;
+    pob->y[0] = pSrcFrame->planes[0].nVPadding;
 
     if (chroma) {
-        pob->y[1] = pob->pSrcFrame->planes[1].nVPadding;
-        pob->y[2] = pob->pSrcFrame->planes[2].nVPadding;
+        pob->y[1] = pSrcFrame->planes[1].nVPadding;
+        pob->y[2] = pSrcFrame->planes[2].nVPadding;
     }
 
-    pob->nSrcPitch[0] = pob->pSrcFrame->planes[0].nPitch;
+    pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
     if (chroma) {
-        pob->nSrcPitch[1] = pob->pSrcFrame->planes[1].nPitch;
-        pob->nSrcPitch[2] = pob->pSrcFrame->planes[2].nPitch;
+        pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
+        pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
     }
 
     pob->nRefPitch[0] = pob->pRefFrame->planes[0].nPitch;
@@ -911,37 +910,37 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
         // meander (alternate) scan blocks (even row left to right, odd row right to left)
         int blkxStart = (pob->blky % 2 == 0 || meander == 0) ? 0 : pob->nBlkX - 1;
         if (pob->blkScanDir == 1) { // start with leftmost block
-            pob->x[0] = pob->pSrcFrame->planes[0].nHPadding;
+            pob->x[0] = pSrcFrame->planes[0].nHPadding;
             if (pob->chroma) {
-                pob->x[1] = pob->pSrcFrame->planes[1].nHPadding;
-                pob->x[2] = pob->pSrcFrame->planes[2].nHPadding;
+                pob->x[1] = pSrcFrame->planes[1].nHPadding;
+                pob->x[2] = pSrcFrame->planes[2].nHPadding;
             }
         } else { // start with rightmost block, but it is already set at prev row
-            pob->x[0] = pob->pSrcFrame->planes[0].nHPadding + (pob->nBlkSizeX - pob->nOverlapX) * (pob->nBlkX - 1);
+            pob->x[0] = pSrcFrame->planes[0].nHPadding + (pob->nBlkSizeX - pob->nOverlapX) * (pob->nBlkX - 1);
             if (pob->chroma) {
-                pob->x[1] = pob->pSrcFrame->planes[1].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
-                pob->x[2] = pob->pSrcFrame->planes[2].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
+                pob->x[1] = pSrcFrame->planes[1].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
+                pob->x[2] = pSrcFrame->planes[2].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
             }
         }
         for (int iblkx = 0; iblkx < pob->nBlkX; iblkx++) {
             pob->blkx = blkxStart + iblkx * pob->blkScanDir;
             pob->blkIdx = pob->blky * pob->nBlkX + pob->blkx;
 
-            pob->pSrc[0] = pob->pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
+            pob->pSrc[0] = pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
             if (pob->chroma) {
-                pob->pSrc[1] = pob->pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
-                pob->pSrc[2] = pob->pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
+                pob->pSrc[1] = pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
+                pob->pSrc[2] = pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
             }
 
-            pob->nSrcPitch[0] = pob->pSrcFrame->planes[0].nPitch;
+            pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
             //create aligned copy
             pob->BLITLUMA(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pob->pSrc[0], pob->nSrcPitch[0]);
             //set the to the aligned copy
             pob->pSrc[0] = pob->pSrc_temp[0];
             pob->nSrcPitch[0] = pob->nSrcPitch_temp[0];
             if (pob->chroma) {
-                pob->nSrcPitch[1] = pob->pSrcFrame->planes[1].nPitch;
-                pob->nSrcPitch[2] = pob->pSrcFrame->planes[2].nPitch;
+                pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
+                pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
                 pob->BLITCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], pob->pSrc[1], pob->nSrcPitch[1]);
                 pob->BLITCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], pob->pSrc[2], pob->nSrcPitch[2]);
                 pob->pSrc[1] = pob->pSrc_temp[1];
@@ -960,13 +959,13 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
             // may be they must be scaled by nPel ?
 
             // decreased padding of coarse levels
-            int nHPaddingScaled = pob->pSrcFrame->planes[0].nHPadding >> pob->nLogScale;
-            int nVPaddingScaled = pob->pSrcFrame->planes[0].nVPadding >> pob->nLogScale;
+            int nHPaddingScaled = pSrcFrame->planes[0].nHPadding >> pob->nLogScale;
+            int nVPaddingScaled = pSrcFrame->planes[0].nVPadding >> pob->nLogScale;
             /* computes search boundaries */
-            pob->nDxMax = (pob->pSrcFrame->planes[0].nPaddedWidth - pob->x[0] - pob->nBlkSizeX - pob->pSrcFrame->planes[0].nHPadding + nHPaddingScaled) << nLogPel;
-            pob->nDyMax = (pob->pSrcFrame->planes[0].nPaddedHeight - pob->y[0] - pob->nBlkSizeY - pob->pSrcFrame->planes[0].nVPadding + nVPaddingScaled) << nLogPel;
-            pob->nDxMin = -((pob->x[0] - pob->pSrcFrame->planes[0].nHPadding + nHPaddingScaled) << nLogPel);
-            pob->nDyMin = -((pob->y[0] - pob->pSrcFrame->planes[0].nVPadding + nVPaddingScaled) << nLogPel);
+            pob->nDxMax = (pSrcFrame->planes[0].nPaddedWidth - pob->x[0] - pob->nBlkSizeX - pSrcFrame->planes[0].nHPadding + nHPaddingScaled) << nLogPel;
+            pob->nDyMax = (pSrcFrame->planes[0].nPaddedHeight - pob->y[0] - pob->nBlkSizeY - pSrcFrame->planes[0].nVPadding + nVPaddingScaled) << nLogPel;
+            pob->nDxMin = -((pob->x[0] - pSrcFrame->planes[0].nHPadding + nHPaddingScaled) << nLogPel);
+            pob->nDyMin = -((pob->y[0] - pSrcFrame->planes[0].nVPadding + nVPaddingScaled) << nLogPel);
 
             /* search the mv */
             pob->predictor = pobClipMV(pob, pob->vectors[pob->blkIdx]);
@@ -1038,22 +1037,21 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
 
     VECTOR *pBlkData = (VECTOR *)(out + sizeof(MVArraySizeType));
 
-    pob->pSrcFrame = pSrcFrame;
     pob->pRefFrame = pRefFrame;
 
-    pob->x[0] = pob->pSrcFrame->planes[0].nHPadding;
-    pob->y[0] = pob->pSrcFrame->planes[0].nVPadding;
+    pob->x[0] = pSrcFrame->planes[0].nHPadding;
+    pob->y[0] = pSrcFrame->planes[0].nVPadding;
     if (pob->chroma) {
-        pob->x[1] = pob->pSrcFrame->planes[1].nHPadding;
-        pob->x[2] = pob->pSrcFrame->planes[2].nHPadding;
-        pob->y[1] = pob->pSrcFrame->planes[1].nVPadding;
-        pob->y[2] = pob->pSrcFrame->planes[2].nVPadding;
+        pob->x[1] = pSrcFrame->planes[1].nHPadding;
+        pob->x[2] = pSrcFrame->planes[2].nHPadding;
+        pob->y[1] = pSrcFrame->planes[1].nVPadding;
+        pob->y[2] = pSrcFrame->planes[2].nVPadding;
     }
 
-    pob->nSrcPitch[0] = pob->pSrcFrame->planes[0].nPitch;
+    pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
     if (pob->chroma) {
-        pob->nSrcPitch[1] = pob->pSrcFrame->planes[1].nPitch;
-        pob->nSrcPitch[2] = pob->pSrcFrame->planes[2].nPitch;
+        pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
+        pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
     }
 
     pob->nRefPitch[0] = pob->pRefFrame->planes[0].nPitch;
@@ -1085,37 +1083,37 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
         // meander (alternate) scan blocks (even row left to right, odd row right to left)
         int blkxStart = (pob->blky % 2 == 0 || meander == 0) ? 0 : pob->nBlkX - 1;
         if (pob->blkScanDir == 1) { // start with leftmost block
-            pob->x[0] = pob->pSrcFrame->planes[0].nHPadding;
+            pob->x[0] = pSrcFrame->planes[0].nHPadding;
             if (pob->chroma) {
-                pob->x[1] = pob->pSrcFrame->planes[1].nHPadding;
-                pob->x[2] = pob->pSrcFrame->planes[2].nHPadding;
+                pob->x[1] = pSrcFrame->planes[1].nHPadding;
+                pob->x[2] = pSrcFrame->planes[2].nHPadding;
             }
         } else { // start with rightmost block, but it is already set at prev row
-            pob->x[0] = pob->pSrcFrame->planes[0].nHPadding + (pob->nBlkSizeX - pob->nOverlapX) * (pob->nBlkX - 1);
+            pob->x[0] = pSrcFrame->planes[0].nHPadding + (pob->nBlkSizeX - pob->nOverlapX) * (pob->nBlkX - 1);
             if (pob->chroma) {
-                pob->x[1] = pob->pSrcFrame->planes[1].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
-                pob->x[2] = pob->pSrcFrame->planes[2].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
+                pob->x[1] = pSrcFrame->planes[1].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
+                pob->x[2] = pSrcFrame->planes[2].nHPadding + ((pob->nBlkSizeX - pob->nOverlapX) / pob->xRatioUV) * (pob->nBlkX - 1);
             }
         }
         for (int iblkx = 0; iblkx < pob->nBlkX; iblkx++) {
             pob->blkx = blkxStart + iblkx * pob->blkScanDir;
             pob->blkIdx = pob->blky * pob->nBlkX + pob->blkx;
 
-            pob->pSrc[0] = pob->pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
+            pob->pSrc[0] = pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
             if (pob->chroma) {
-                pob->pSrc[1] = pob->pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
-                pob->pSrc[2] = pob->pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
+                pob->pSrc[1] = pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
+                pob->pSrc[2] = pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
             }
 
-            pob->nSrcPitch[0] = pob->pSrcFrame->planes[0].nPitch;
+            pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
             //create aligned copy
             pob->BLITLUMA(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pob->pSrc[0], pob->nSrcPitch[0]);
             //set the to the aligned copy
             pob->pSrc[0] = pob->pSrc_temp[0];
             pob->nSrcPitch[0] = pob->nSrcPitch_temp[0];
             if (pob->chroma) {
-                pob->nSrcPitch[1] = pob->pSrcFrame->planes[1].nPitch;
-                pob->nSrcPitch[2] = pob->pSrcFrame->planes[2].nPitch;
+                pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
+                pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
                 pob->BLITCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], pob->pSrc[1], pob->nSrcPitch[1]);
                 pob->BLITCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], pob->pSrc[2], pob->nSrcPitch[2]);
                 pob->pSrc[1] = pob->pSrc_temp[1];
@@ -1133,8 +1131,8 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
             // may be they must be scaled by nPel ?
 
             /* computes search boundaries */
-            pob->nDxMax = (pob->pSrcFrame->planes[0].nPaddedWidth - pob->x[0] - pob->nBlkSizeX) << nLogPel;
-            pob->nDyMax = (pob->pSrcFrame->planes[0].nPaddedHeight - pob->y[0] - pob->nBlkSizeY) << nLogPel;
+            pob->nDxMax = (pSrcFrame->planes[0].nPaddedWidth - pob->x[0] - pob->nBlkSizeX) << nLogPel;
+            pob->nDyMax = (pSrcFrame->planes[0].nPaddedHeight - pob->y[0] - pob->nBlkSizeY) << nLogPel;
             pob->nDxMin = -(pob->x[0] << nLogPel);
             pob->nDyMin = -(pob->y[0] << nLogPel);
 

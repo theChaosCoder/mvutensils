@@ -66,7 +66,6 @@ typedef struct PlaneOfBlocks {
 
     /* working fields */
 
-    const FramePyramidLevel *pSrcFrame;
     const FramePyramidLevel *pRefFrame;
 
     ptrdiff_t nSrcPitch[3];
