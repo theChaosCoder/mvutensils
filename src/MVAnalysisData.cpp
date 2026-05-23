@@ -20,7 +20,7 @@ void scaleThSCD(int64_t *thscd1, int *thscd2, const MVAnalysisData *ad, const ch
     // SCD thresholds
     int referenceBlockSize = 8 * 8;
     *thscd1 = *thscd1 * (ad->nBlkSizeX * ad->nBlkSizeY) / referenceBlockSize;
-    if (ad->nMotionFlags & MOTION_USE_CHROMA_MOTION)
+    if (ad->chroma)
         *thscd1 += *thscd1 / (ad->xRatioUV * ad->yRatioUV) * 2;
 
     int pixelMax = (1 << ad->bitsPerSample) - 1;

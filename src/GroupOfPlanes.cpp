@@ -22,7 +22,7 @@
 #include "GroupOfPlanes.h"
 
 
-void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, int nPel, int nMotionFlags, int nOverlapX, int nOverlapY, int nBlkX, int nBlkY, int xRatioUV, int yRatioUV, int divideExtra, int bitsPerSample) {
+void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, int nPel, bool chroma, int nOverlapX, int nOverlapY, int nBlkX, int nBlkY, int xRatioUV, int yRatioUV, int divideExtra, int bitsPerSample) {
     gop->nBlkSizeX = nBlkSizeX;
     gop->nBlkSizeY = nBlkSizeY;
     gop->nLevelCount = nLevelCount;
@@ -38,19 +38,17 @@ void gopInit(GroupOfPlanes *gop, int nBlkSizeX, int nBlkSizeY, int nLevelCount, 
     int nBlkYCurrent = nBlkY;
 
     int nPelCurrent = nPel;
-    int nMotionFlagsCurrent = nMotionFlags;
 
     int nWidth_B = (gop->nBlkSizeX - gop->nOverlapX) * nBlkX + gop->nOverlapX;
     int nHeight_B = (gop->nBlkSizeY - gop->nOverlapY) * nBlkY + gop->nOverlapY;
 
     for (int i = 0; i < gop->nLevelCount; i++) {
-        if (i == gop->nLevelCount - 1)
-            nMotionFlagsCurrent |= MOTION_SMALLEST_PLANE;
+        const bool smallestPlane = (i == gop->nLevelCount - 1);
         nBlkXCurrent = ((nWidth_B >> i) - gop->nOverlapX) / (gop->nBlkSizeX - gop->nOverlapX);
         nBlkYCurrent = ((nHeight_B >> i) - gop->nOverlapY) / (gop->nBlkSizeY - gop->nOverlapY);
 
         gop->planes[i] = (PlaneOfBlocks *)malloc(sizeof(PlaneOfBlocks));
-        pobInit(gop->planes[i], nBlkXCurrent, nBlkYCurrent, gop->nBlkSizeX, gop->nBlkSizeY, nPelCurrent, i, nMotionFlagsCurrent, gop->nOverlapX, gop->nOverlapY, gop->xRatioUV, gop->yRatioUV, bitsPerSample);
+        pobInit(gop->planes[i], nBlkXCurrent, nBlkYCurrent, gop->nBlkSizeX, gop->nBlkSizeY, nPelCurrent, i, smallestPlane, chroma, gop->nOverlapX, gop->nOverlapY, gop->xRatioUV, gop->yRatioUV, bitsPerSample);
         nPelCurrent = 1;
     }
 }

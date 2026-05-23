@@ -21,8 +21,6 @@ typedef struct MVAnalyseData {
     MVAnalysisData analysisData = {};
     MVAnalysisData analysisDataDivided = {};
 
-    /*! \brief optimisations enabled */
-    bool opt;
 
     /*! \brief motion vecteur cost factor */
     int nLambda;
@@ -106,7 +104,7 @@ static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void 
 
         GroupOfPlanes vectorFields;
 
-        gopInit(&vectorFields, d->analysisData.nBlkSizeX, d->analysisData.nBlkSizeY, d->analysisData.nLvCount, d->analysisData.nPel, d->analysisData.nMotionFlags, d->analysisData.nOverlapX, d->analysisData.nOverlapY, d->analysisData.nBlkX, d->analysisData.nBlkY, d->analysisData.xRatioUV, d->analysisData.yRatioUV, d->divideExtra, d->supervi->format.bitsPerSample);
+        gopInit(&vectorFields, d->analysisData.nBlkSizeX, d->analysisData.nBlkSizeY, d->analysisData.nLvCount, d->analysisData.nPel, d->analysisData.chroma, d->analysisData.nOverlapX, d->analysisData.nOverlapY, d->analysisData.nBlkX, d->analysisData.nBlkY, d->analysisData.xRatioUV, d->analysisData.yRatioUV, d->divideExtra, d->supervi->format.bitsPerSample);
 
 
         int nref;
@@ -315,10 +313,6 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     if (err)
         d.badrange = 24;
 
-    d.opt = !!vsapi->mapGetInt(in, "opt", 0, &err);
-    if (err)
-        d.opt = true;
-
     d.meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
     if (err)
         d.meander = true;
@@ -438,8 +432,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     d.badSAD = d.badSAD * (d.analysisData.nBlkSizeX * d.analysisData.nBlkSizeY) / 64;
 
 
-    d.analysisData.nMotionFlags = 0;
-    d.analysisData.nMotionFlags |= d.chroma ? MOTION_USE_CHROMA_MOTION : 0;
+    d.analysisData.chroma = d.chroma;
 
     if (d.analysisData.nOverlapX % (1 << d.vi->format.subSamplingW) ||
         d.analysisData.nOverlapY % (1 << d.vi->format.subSamplingH)) {

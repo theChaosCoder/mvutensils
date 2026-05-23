@@ -59,12 +59,6 @@ enum class SearchType {
 };
 
 
-// FIXME, BACKWARFD FLAG UNUSED?
-#define MOTION_SMALLEST_PLANE       0x00000004
-#define MOTION_USE_CHROMA_MOTION    0x00000008
-
-
-
 #define MV_DEFAULT_SCD1 400 // increased in v1.4.1
 #define MV_DEFAULT_SCD2 130
 
@@ -96,10 +90,10 @@ typedef struct MVAnalysisData {
     int nDeltaFrame;
 
     /*! \brief direction of the search ( forward / backward ) */
-    int isBackward;
+    bool isBackward;
 
     /*! \brief diverse flags to set up the search */
-    int nMotionFlags;
+    bool chroma;
 
     /*! \brief Width of the frame */
     int nWidth;

@@ -214,7 +214,7 @@ static int Median(int a, int b, int c) {
 }
 
 
-void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int nMotionFlags, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) {
+void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) {
 
     /* constant fields */
 
@@ -240,8 +240,8 @@ void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nB
 
     pob->bytesPerSample = (bitsPerSample + 7) / 8;
 
-    pob->smallestPlane = !!(nMotionFlags & MOTION_SMALLEST_PLANE);
-    pob->chroma = !!(nMotionFlags & MOTION_USE_CHROMA_MOTION);
+    pob->smallestPlane = smallestPlane;
+    pob->chroma = chroma;
 
     pob->globalMVPredictor = zeroMV;
 
