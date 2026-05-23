@@ -1071,7 +1071,7 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
     int nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
 
     // get old vectors plane
-    const FakePlaneOfBlocks *plane = fgopGetPlane(fgop, 0);
+    const FakePlaneOfBlocks *plane = fgopGetPlane0(fgop);
     int nBlkXold = plane->nBlkX;
     int nBlkYold = plane->nBlkY;
     int nBlkSizeXold = plane->nBlkSizeX;

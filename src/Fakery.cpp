@@ -6,13 +6,6 @@
 #include "Fakery.h"
 
 
-// FakeBlockData
-
-void fbdUpdate(FakeBlockData *fbd, const VECTOR *array) {
-    fbd->vector = *array;
-}
-
-
 // FakePlaneOfBlocks
 
 void fpobInit(FakePlaneOfBlocks *fpob, int sizeX, int sizeY, int pel, int nOverlapX, int nOverlapY, int nBlkX, int nBlkY) {
@@ -41,27 +34,21 @@ void fpobDeinit(FakePlaneOfBlocks *fpob) {
 }
 
 
-void fpobUpdate(FakePlaneOfBlocks *fpob, const uint8_t *array) {
+static void fpobUpdate(FakePlaneOfBlocks *fpob, const uint8_t *array) {
     const VECTOR *blocks = (const VECTOR *)array;
 
     for (int i = 0; i < fpob->nBlkCount; i++)
-        fbdUpdate(&fpob->blocks[i], &blocks[i]);
+        fpob->blocks[i].vector = blocks[i];
 }
 
 
-int fpobIsSceneChange(const FakePlaneOfBlocks *fpob, int64_t nTh1, int nTh2) {
+static bool fpobIsSceneChange(const FakePlaneOfBlocks *fpob, int64_t nTh1, int nTh2) {
     int sum = 0;
     for (int i = 0; i < fpob->nBlkCount; i++)
         sum += (fpob->blocks[i].vector.sad > nTh1) ? 1 : 0;
 
     return (sum > nTh2);
 }
-
-
-const FakeBlockData *fpobGetBlock(const FakePlaneOfBlocks *fpob, int i) {
-    return &fpob->blocks[i];
-}
-
 
 // FakeGroupOfPlanes
 
@@ -121,26 +108,22 @@ void fgopUpdate(FakeGroupOfPlanes *fgop, const uint8_t *array) {
 }
 
 
-int fgopIsSceneChange(const FakeGroupOfPlanes *fgop, int64_t nThSCD1, int nThSCD2) {
-    return fpobIsSceneChange(fgop->planes[0], nThSCD1, nThSCD2);
-}
-
-
 int fgopIsValid(const FakeGroupOfPlanes *fgop) {
     return fgop->validity;
 }
 
 
-const FakePlaneOfBlocks *fgopGetPlane(const FakeGroupOfPlanes *fgop, int i) {
-    return fgop->planes[i];
+const FakePlaneOfBlocks *fgopGetPlane0(const FakeGroupOfPlanes *fgop) {
+    return fgop->planes[0];
 }
 
 
+// nLevel is always 0
 const FakeBlockData *fgopGetBlock(const FakeGroupOfPlanes *fgop, int nLevel, int nBlk) {
-    return fpobGetBlock(fgopGetPlane(fgop, nLevel), nBlk);
+    return &fgop->planes[nLevel]->blocks[nBlk];
 }
 
 
 int fgopIsUsable(const FakeGroupOfPlanes *fgop, int64_t thscd1, int thscd2) {
-    return !fgopIsSceneChange(fgop, thscd1, thscd2) && fgopIsValid(fgop);
+    return !fpobIsSceneChange(fgop->planes[0], thscd1, thscd2) && fgopIsValid(fgop);
 }
