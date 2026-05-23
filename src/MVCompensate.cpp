@@ -47,7 +47,6 @@ typedef struct MVCompensateData {
     int nSCD2;
     int tff;
     int tff_exists;
-    int opt;
 
     MVAnalysisData vectors_data;
 
@@ -137,7 +136,6 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
         const int nBlkSizeY[3] = { d->vectors_data.nBlkSizeY, nBlkSizeY[0] >> ySubUV, nBlkSizeY[1] };
         const int nBlkX = d->vectors_data.nBlkX;
         const int nBlkY = d->vectors_data.nBlkY;
-        const int opt = d->opt;
         const int64_t thSAD = d->thSAD;
         const int dstTempPitch[3] = { d->dstTempPitch, d->dstTempPitchUV, d->dstTempPitchUV };
         const bool chroma = d->chroma;
@@ -400,10 +398,10 @@ static void selectFunctions(MVCompensateData *d) {
         d->ToPixels = ToPixels<uint32_t, uint16_t>;
     }
 
-    d->OVERS[0] = selectOverlapsFunction(nBlkSizeX, nBlkSizeY, bits, d->opt);
+    d->OVERS[0] = selectOverlapsFunction(nBlkSizeX, nBlkSizeY, bits);
     d->BLIT[0] = selectCopyFunction(nBlkSizeX, nBlkSizeY, bits);
 
-    d->OVERS[1] = d->OVERS[2] = selectOverlapsFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits, d->opt);
+    d->OVERS[1] = d->OVERS[2] = selectOverlapsFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits);
     d->BLIT[1] = d->BLIT[2] = selectCopyFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits);
 }
 
@@ -437,10 +435,6 @@ static void VS_CC mvcompensateCreate(const VSMap *in, VSMap *out, void *userData
     d.nSCD2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
     if (err)
         d.nSCD2 = MV_DEFAULT_SCD2;
-
-    d.opt = !!vsapi->mapGetInt(in, "opt", 0, &err);
-    //if (err)
-    //    d.opt = 1;
 
     d.tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
     d.tff_exists = !err;
@@ -573,7 +567,6 @@ void mvcompensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "time:float:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"
-                 "opt:int:opt;"
                  "tff:int:opt;",
                  "clip:vnode;",
                  mvcompensateCreate, 0, plugin);

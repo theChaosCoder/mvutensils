@@ -70,7 +70,7 @@ void ToPixels(uint8_t *VS_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t *VS
     }
 }   
 
-OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigned bits, int opt);
+OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigned bits);
 
 #if defined(MVTOOLS_X86)
 OverlapsFunction selectOverlapsFunctionAVX2(unsigned width, unsigned height, unsigned bits);

@@ -580,7 +580,6 @@ void mvanalyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "divide:int:opt;"
                  "badsad:int:opt;"
                  "badrange:int:opt;"
-                 "opt:int:opt;"
                  "meander:int:opt;"
                  "trymany:int:opt;"
                  "fields:int:opt;"

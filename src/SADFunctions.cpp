@@ -27,10 +27,9 @@ enum InstructionSets {
 #define FORCE_INLINE inline __attribute__((always_inline))
 #endif
 
+extern uint32_t g_cpuinfo;
 
 #if defined(MVTOOLS_X86)
-
-extern uint32_t g_cpuinfo;
 
 #include <emmintrin.h>
 

@@ -29,6 +29,7 @@
 #define M_PI       3.14159265358979323846f
 #endif
 
+extern uint32_t g_cpuinfo;
 
 void overInit(OverlapWindows *over, int nx, int ny, int ox, int oy) {
     over->nx = nx;
@@ -290,19 +291,19 @@ static const std::unordered_map<uint32_t, OverlapsFunction> overlaps_functions =
     OVERS_SSE2(128, 128)
 };
 
-OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigned bits, int opt) {
+OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigned bits) {
     OverlapsFunction overs = overlaps_functions.at(KEY(width, height, bits, MVOPT_SCALAR));
 
 #if defined(MVTOOLS_X86)
-    if (opt) {
-        try {
-            overs = overlaps_functions.at(KEY(width, height, bits, MVOPT_SSE2));
-        } catch (std::out_of_range &) { }
-        if (g_cpuinfo & X264_CPU_AVX2) {
-            OverlapsFunction tmp = selectOverlapsFunctionAVX2(width, height, bits);
-            if (tmp)
-                overs = tmp;
-        }
+    int cpu = g_cpuinfo;
+
+    try {
+        overs = overlaps_functions.at(KEY(width, height, bits, MVOPT_SSE2));
+    } catch (std::out_of_range &) { }
+    if (g_cpuinfo & X264_CPU_AVX2) {
+        OverlapsFunction tmp = selectOverlapsFunctionAVX2(width, height, bits);
+        if (tmp)
+            overs = tmp;
     }
 #endif
 
