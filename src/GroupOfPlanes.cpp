@@ -90,8 +90,6 @@ void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePy
     if (!global)
         pglobal = pzero;
 
-    int meanLumaChange = 0;
-
     // Search the motion vectors, for the low details interpolations first
     SearchType searchTypeSmallest = (gop->nLevelCount == 1 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for smallest coarse plane
     int nSearchParamSmallest = (gop->nLevelCount == 1) ? nPelSearch : nSearchParam;

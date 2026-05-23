@@ -39,7 +39,6 @@ typedef struct MVAnalyseData {
 
     int lsad;        // SAD limit for lambda using - added by Fizick
     int pnew;        // penalty to cost for new canditate - added by Fizick
-    int plen;        // penalty factor (similar to lambda) for vector length - added by Fizick
     int plevel;      // penalty factors (lambda, plen) level scaling - added by Fizick
     bool global;     // use global motion predictor
     int pglobal;     // penalty factor for global motion predictor
@@ -270,7 +269,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d.truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
     if (err)
-        d.truemotion = 1;
+        d.truemotion = true;
 
     d.nLambda = vsapi->mapGetIntSaturated(in, "lambda", 0, &err);
     if (err)

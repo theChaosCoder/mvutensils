@@ -37,7 +37,6 @@ typedef struct MVRecalculateData {
 
 
     int pnew;        // penalty to cost for new canditate - added by Fizick
-    int plen;        // penalty factor (similar to lambda) for vector length - added by Fizick
     int divideExtra; // divide blocks on sublocks with median motion
     int meander;     //meander (alternate) scan blocks (even row left to right, odd row right to left
 
@@ -51,7 +50,7 @@ typedef struct MVRecalculateData {
 
     int searchparam;
     bool chroma;
-    int truemotion;
+    bool truemotion;
     int smooth;
     int64_t thSAD;
     VSNode *vectors;
