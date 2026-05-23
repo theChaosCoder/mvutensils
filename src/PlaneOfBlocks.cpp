@@ -862,6 +862,9 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
     pob->globalMVPredictor.x = (1 << nLogPel) * globalMVec->x; // v1.8.2
     pob->globalMVPredictor.y = (1 << nLogPel) * globalMVec->y + fieldShift;
     pob->globalMVPredictor.sad = globalMVec->sad;
+    pob->penaltyNew = pnew; // penalty for new vector
+    pob->LSAD = lsad;       // SAD limit for lambda using
+    // may be they must be scaled by nPel ?
 
     // write the plane's header
     pobWriteHeaderToArray(pob, out);
@@ -954,9 +957,8 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
             else
                 pob->nLambda = nLambdaLevel;
 
-            pob->penaltyNew = pnew; // penalty for new vector
-            pob->LSAD = lsad;       // SAD limit for lambda using
-            // may be they must be scaled by nPel ?
+
+
 
             // decreased padding of coarse levels
             int nHPaddingScaled = pSrcFrame->planes[0].nHPadding >> pob->nLogScale;
@@ -1031,6 +1033,7 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
     pob->globalMVPredictor.x = 0;          //nPel*globalMVec->x;// there is no global
     pob->globalMVPredictor.y = fieldShift; //nPel*globalMVec->y + fieldShift;
     pob->globalMVPredictor.sad = 9999999;  //globalMVec->sad;
+    pob->penaltyNew = pnew; // penalty for new vector
 
     // write the plane's header
     pobWriteHeaderToArray(pob, out);
@@ -1127,7 +1130,7 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
             else
                 pob->nLambda = nLambdaLevel;
 
-            pob->penaltyNew = pnew; // penalty for new vector
+
             // may be they must be scaled by nPel ?
 
             /* computes search boundaries */
