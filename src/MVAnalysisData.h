@@ -33,6 +33,11 @@
 static const char prop_MVTools_MVAnalysisData[] = "MVTools_MVAnalysisData";
 static const char prop_MVTools_vectors[] = "MVTools_vectors";
 
+struct PUREVECTOR {
+    int x;
+    int y;
+};
+
 
 struct VECTOR {
     int x;

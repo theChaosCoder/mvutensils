@@ -107,7 +107,7 @@ static inline FORCE_INLINE int64_t pobLumaSAD(PlaneOfBlocks *pob, const uint8_t 
 
 
 /* check if a vector is inside search boundaries */
-static int pobIsVectorOK(PlaneOfBlocks *pob, int vx, int vy) {
+static bool pobIsVectorOK(PlaneOfBlocks *pob, int vx, int vy) {
     return ((vx >= pob->nDxMin) &&
             (vy >= pob->nDyMin) &&
             (vx < pob->nDxMax) &&
@@ -186,23 +186,11 @@ static inline FORCE_INLINE void pobCheckMVdir(PlaneOfBlocks *pob, int vx, int vy
 }
 
 
-/* clip a vector to the horizontal boundaries */
-static int pobClipMVx(PlaneOfBlocks *pob, int vx) {
-    return VSMIN(VSMAX(vx, pob->nDxMin), pob->nDxMax - 1);
-}
-
-
-/* clip a vector to the vertical boundaries */
-static int pobClipMVy(PlaneOfBlocks *pob, int vy) {
-    return VSMIN(VSMAX(vy, pob->nDyMin), pob->nDyMax - 1);
-}
-
-
 /* clip a vector to the search boundaries */
 static VECTOR pobClipMV(PlaneOfBlocks *pob, VECTOR v) {
     VECTOR v2;
-    v2.x = pobClipMVx(pob, v.x);
-    v2.y = pobClipMVy(pob, v.y);
+    v2.x = VSMIN(VSMAX(v.x, pob->nDxMin), pob->nDxMax - 1);
+    v2.y = VSMIN(VSMAX(v.y, pob->nDyMin), pob->nDyMax - 1);
     v2.sad = v.sad;
     return v2;
 }
@@ -846,7 +834,7 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
 
 
 template <bool useSatd, int nLogPel, typename PixelType>
-void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame,
+static void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame,
                     SearchType st, int stp, int lambda, int lsad, int pnew,
                     int plevel, uint8_t *out, VECTOR *globalMVec,
                     int fieldShift,
@@ -1005,7 +993,7 @@ void pobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, const 
 
 
 template <bool useSatd, int nLogPel, typename PixelType>
-void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame,
+static void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, const FramePyramidLevel *pSrcFrame, const FramePyramidLevel *pRefFrame,
                          SearchType st, int stp, int lambda, int pnew, uint8_t *out,
                          int fieldShift, int64_t thSAD, int smooth, bool meander) {
 
