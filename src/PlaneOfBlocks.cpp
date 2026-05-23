@@ -280,8 +280,7 @@ void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nB
 
 #undef ALIGN_PLANES
 
-    pob->freqSize = 8192 * pob->nPel * 2; // half must be more than max vector length, which is (framewidth + Padding) * nPel
-    pob->freqArray = (int *)malloc(pob->freqSize * sizeof(int));
+    pob->freqArray.resize(8192 * pob->nPel * 2);
 
     pob->verybigSAD = pob->nBlkSizeX * pob->nBlkSizeY * (1 << bitsPerSample);
 }
@@ -289,7 +288,6 @@ void pobInit(PlaneOfBlocks *pob, int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nB
 
 void pobDeinit(PlaneOfBlocks *pob) {
     free(pob->vectors);
-    free(pob->freqArray);
 
     VSH_ALIGNED_FREE(pob->pSrc_temp[0]);
     VSH_ALIGNED_FREE(pob->pSrc_temp[1]);
@@ -762,8 +760,8 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
     }
     const uint8_t *predBlocks[3] = {
         pobGetRefBlock<nLogPel, PixelType>(pob, pob->predictor.x, pob->predictor.y),
-        pob->chroma ? pobGetRefBlockU<nLogPel, PixelType>(pob, pob->predictor.x, pob->predictor.y) : 0,
-        pob->chroma ? pobGetRefBlockV<nLogPel, PixelType>(pob, pob->predictor.x, pob->predictor.y) : 0,
+        pob->chroma ? pobGetRefBlockU<nLogPel, PixelType>(pob, pob->predictor.x, pob->predictor.y) : nullptr,
+        pob->chroma ? pobGetRefBlockV<nLogPel, PixelType>(pob, pob->predictor.x, pob->predictor.y) : nullptr,
     };
     sad = pobLumaSAD<useSatd>(pob, predBlocks[0]);
     if (pob->chroma) {
@@ -1387,12 +1385,12 @@ void pobEstimateGlobalMVDoubled(PlaneOfBlocks *pob, VECTOR *globalMVec) {
     // more advanced method (like MVDepan) can be implemented later
 
     // find most frequent x
-    memset(&pob->freqArray[0], 0, pob->freqSize * sizeof(int)); // reset
-    int indmin = pob->freqSize - 1;
-    int indmax = 0;
+    std::fill(pob->freqArray.begin(), pob->freqArray.end(), 0);
+    size_t indmin = pob->freqArray.size() - 1;
+    size_t indmax = 0;
     for (int i = 0; i < pob->nBlkCount; i++) {
-        int ind = (pob->freqSize >> 1) + pob->vectors[i].x;
-        if (ind >= 0 && ind < pob->freqSize) {
+        size_t ind = (pob->freqArray.size() >> 1) + pob->vectors[i].x;
+        if (ind >= 0 && ind < pob->freqArray.size()) {
             pob->freqArray[ind] += 1;
             if (ind > indmax)
                 indmax = ind;
@@ -1401,22 +1399,22 @@ void pobEstimateGlobalMVDoubled(PlaneOfBlocks *pob, VECTOR *globalMVec) {
         }
     }
     int count = pob->freqArray[indmin];
-    int index = indmin;
-    for (int i = indmin + 1; i <= indmax; i++) {
+    size_t index = indmin;
+    for (size_t i = indmin + 1; i <= indmax; i++) {
         if (pob->freqArray[i] > count) {
             count = pob->freqArray[i];
             index = i;
         }
     }
-    int medianx = (index - (pob->freqSize >> 1)); // most frequent value
+    int medianx = (index - (pob->freqArray.size() >> 1)); // most frequent value
 
     // find most frequent y
-    memset(&pob->freqArray[0], 0, pob->freqSize * sizeof(int)); // reset
-    indmin = pob->freqSize - 1;
+    std::fill(pob->freqArray.begin(), pob->freqArray.end(), 0);
+    indmin = pob->freqArray.size() - 1;
     indmax = 0;
-    for (int i = 0; i < pob->nBlkCount; i++) {
-        int ind = (pob->freqSize >> 1) + pob->vectors[i].y;
-        if (ind >= 0 && ind < pob->freqSize) {
+    for (size_t i = 0; i < pob->nBlkCount; i++) {
+        size_t ind = (pob->freqArray.size() >> 1) + pob->vectors[i].y;
+        if (ind >= 0 && ind < pob->freqArray.size()) {
             pob->freqArray[ind] += 1;
             if (ind > indmax)
                 indmax = ind;
@@ -1426,13 +1424,13 @@ void pobEstimateGlobalMVDoubled(PlaneOfBlocks *pob, VECTOR *globalMVec) {
     }
     count = pob->freqArray[indmin];
     index = indmin;
-    for (int i = indmin + 1; i <= indmax; i++) {
+    for (size_t i = indmin + 1; i <= indmax; i++) {
         if (pob->freqArray[i] > count) {
             count = pob->freqArray[i];
             index = i;
         }
     }
-    int mediany = (index - (pob->freqSize >> 1)); // most frequent value
+    int mediany = (index - (pob->freqArray.size() >> 1)); // most frequent value
 
 
     // iteration to increase precision

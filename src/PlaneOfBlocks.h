@@ -86,26 +86,36 @@ typedef struct PlaneOfBlocks {
 
     /* search parameters */
 
+    // static parameters during the whole search process
     SearchType searchType; /* search type used */
     int nSearchParam;      /* additionnal parameter for this search */
-    int64_t nLambda;       /* vector cost factor */
+
     int64_t LSAD;          // SAD limit for lambda using - Fizick
     int penaltyNew;        // cost penalty factor for new candidates
     int penaltyZero;       // cost penalty factor for zero vector
     int pglobal;           // cost penalty factor for global predictor
-    //   int nLambdaLen; //  penalty factor (lambda) for vector length
     int64_t badSAD;   // SAD threshold for more wide search
     int badrange;     // wide search radius
-    int badcount;     // number of bad blocks refined
+
+    // maybe propagate as argument everywhere instead
     bool tryMany;     // try refine around many predictors
 
+    // investigate
+    int badcount;     // number of bad blocks refined
+    int64_t nLambda;       /* vector cost factor */
+
+    // unknown
     VECTOR globalMVPredictor;  // predictor of global motion vector
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
-    int *freqArray; // temporary array for global motion estimaton
-    int freqSize;   // size of freqArray
+
+    // only used as temporary space in pobEstimateGlobalMVDoubled, should be temp space provided by the pyramid object instead
+    std::vector<int> freqArray;
+
+    // unknown
     int64_t verybigSAD;
 
+    // Set for each block
     int nSrcPitch_temp[3];
     uint8_t *pSrc_temp[3]; //for easy WRITE access to temp block
 } PlaneOfBlocks;
