@@ -1013,6 +1013,7 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
 
     pob->zeroMVfieldShifted.x = 0;
     pob->zeroMVfieldShifted.y = fieldShift;
+    pob->zeroMVfieldShifted.sad = 0;
     pob->globalMVPredictor.x = 0;          //nPel*globalMVec->x;// there is no global
     pob->globalMVPredictor.y = fieldShift; //nPel*globalMVec->y + fieldShift;
     pob->globalMVPredictor.sad = 9999999;  //globalMVec->sad;
