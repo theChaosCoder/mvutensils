@@ -94,10 +94,10 @@ public:
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
     bool useSatd;
-    int *freqArray; // temporary array for global motion estimaton
-    int freqSize;   // size of freqArray
+    std::vector<int> freqArray; // set to freqSize
     int64_t verybigSAD;
 
+    // This is a scratch space allocation that can probably be shared between all levels and not allocated for each one
     int nSrcPitch_temp[3];
     uint8_t *pSrc_temp[3]; //for easy WRITE access to temp block
 
