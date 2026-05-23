@@ -68,8 +68,6 @@ typedef struct PlaneOfBlocks {
 
     const FramePyramidLevel *pRefFrame;
 
-    ptrdiff_t nSrcPitch[3];
-    const uint8_t *pSrc[3]; // the alignment of this array is important for speed for some reason (cacheline?)
     ptrdiff_t nRefPitch[3];
 
     VECTOR bestMV;    /* best vector found so far during the search */

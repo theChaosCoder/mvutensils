@@ -100,9 +100,9 @@ static int pobMotionDistorsion(PlaneOfBlocks *pob, int vx, int vy) {
 template <bool useSatd>
 static inline FORCE_INLINE int64_t pobLumaSAD(PlaneOfBlocks *pob, const uint8_t *pRef0) {
     if constexpr (!useSatd)
-        return pob->SAD(pob->pSrc[0], pob->nSrcPitch[0], pRef0, pob->nRefPitch[0]);
+        return pob->SAD(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pRef0, pob->nRefPitch[0]);
     else
-        return pob->SATD(pob->pSrc[0], pob->nSrcPitch[0], pRef0, pob->nRefPitch[0]);
+        return pob->SATD(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pRef0, pob->nRefPitch[0]);
 }
 
 
@@ -138,8 +138,8 @@ static inline FORCE_INLINE void pobCheckMV_Template(PlaneOfBlocks *pob, int vx, 
 
         int64_t saduv = 0;
         if (pob->chroma) {
-            saduv += pob->SADCHROMA(pob->pSrc[1], pob->nSrcPitch[1], blocks[1], pob->nRefPitch[1]);
-            saduv += pob->SADCHROMA(pob->pSrc[2], pob->nSrcPitch[2], blocks[2], pob->nRefPitch[2]);
+            saduv += pob->SADCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], blocks[1], pob->nRefPitch[1]);
+            saduv += pob->SADCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], blocks[2], pob->nRefPitch[2]);
 
             cost += saduv + ((flags & CHECKMV_PENALTYNEW) ? ((pob->penaltyNew * saduv) >> 8) : 0);
             if (cost >= pob->nMinCost)
@@ -718,8 +718,8 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob) {
         pob->chroma ? pobGetRefBlockV<nLogPel, PixelType>(pob, 0, 0) : nullptr, };
     int64_t sad = pobLumaSAD<useSatd>(pob, zeroMVBlocks[0]);
     if (pob->chroma) {
-        sad += pob->SADCHROMA(pob->pSrc[1], pob->nSrcPitch[1], zeroMVBlocks[1], pob->nRefPitch[1]);
-        sad += pob->SADCHROMA(pob->pSrc[2], pob->nSrcPitch[2], zeroMVBlocks[2], pob->nRefPitch[2]);
+        sad += pob->SADCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], zeroMVBlocks[1], pob->nRefPitch[1]);
+        sad += pob->SADCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], zeroMVBlocks[2], pob->nRefPitch[2]);
     }
     pob->bestMV.sad = sad;
     pob->nMinCost = sad + ((pob->penaltyZero * sad) >> 8); // v.1.11.0.2
@@ -743,8 +743,8 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob) {
     };
     sad = pobLumaSAD<useSatd>(pob, globalPredBlocks[0]);
     if (pob->chroma) {
-        sad += pob->SADCHROMA(pob->pSrc[1], pob->nSrcPitch[1], globalPredBlocks[1], pob->nRefPitch[1]);
-        sad += pob->SADCHROMA(pob->pSrc[2], pob->nSrcPitch[2], globalPredBlocks[2], pob->nRefPitch[2]);
+        sad += pob->SADCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], globalPredBlocks[1], pob->nRefPitch[1]);
+        sad += pob->SADCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], globalPredBlocks[2], pob->nRefPitch[2]);
     }
     int64_t cost = sad + ((pob->pglobal * sad) >> 8);
 
@@ -767,8 +767,8 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob) {
     };
     sad = pobLumaSAD<useSatd>(pob, predBlocks[0]);
     if (pob->chroma) {
-        sad += pob->SADCHROMA(pob->pSrc[1], pob->nSrcPitch[1], predBlocks[1], pob->nRefPitch[1]);
-        sad += pob->SADCHROMA(pob->pSrc[2], pob->nSrcPitch[2], predBlocks[2], pob->nRefPitch[2]);
+        sad += pob->SADCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], predBlocks[1], pob->nRefPitch[1]);
+        sad += pob->SADCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], predBlocks[2], pob->nRefPitch[2]);
     }
     cost = sad;
 
@@ -881,12 +881,6 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
         pob->y[2] = pSrcFrame->planes[2].nVPadding;
     }
 
-    pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
-    if (chroma) {
-        pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
-        pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
-    }
-
     pob->nRefPitch[0] = pob->pRefFrame->planes[0].nPitch;
     if (chroma) {
         pob->nRefPitch[1] = pob->pRefFrame->planes[1].nPitch;
@@ -929,36 +923,25 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
             pob->blkx = blkxStart + iblkx * pob->blkScanDir;
             pob->blkIdx = pob->blky * pob->nBlkX + pob->blkx;
 
-            pob->pSrc[0] = pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
+            const uint8_t *pRealSrc[3] = {};
+            pRealSrc[0] = pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
             if (pob->chroma) {
-                pob->pSrc[1] = pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
-                pob->pSrc[2] = pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
+                pRealSrc[1] = pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
+                pRealSrc[2] = pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
             }
 
-            pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
             //create aligned copy
-            pob->BLITLUMA(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pob->pSrc[0], pob->nSrcPitch[0]);
+            pob->BLITLUMA(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pRealSrc[0], pSrcFrame->planes[0].nPitch);
             //set the to the aligned copy
-            pob->pSrc[0] = pob->pSrc_temp[0];
-            pob->nSrcPitch[0] = pob->nSrcPitch_temp[0];
             if (pob->chroma) {
-                pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
-                pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
-                pob->BLITCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], pob->pSrc[1], pob->nSrcPitch[1]);
-                pob->BLITCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], pob->pSrc[2], pob->nSrcPitch[2]);
-                pob->pSrc[1] = pob->pSrc_temp[1];
-                pob->pSrc[2] = pob->pSrc_temp[2];
-                pob->nSrcPitch[1] = pob->nSrcPitch_temp[1];
-                pob->nSrcPitch[2] = pob->nSrcPitch_temp[2];
+                pob->BLITCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], pRealSrc[1], pSrcFrame->planes[1].nPitch);
+                pob->BLITCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], pRealSrc[2], pSrcFrame->planes[2].nPitch);
             }
 
             if (pob->blky == 0)
                 pob->nLambda = 0;
             else
                 pob->nLambda = nLambdaLevel;
-
-
-
 
             // decreased padding of coarse levels
             int nHPaddingScaled = pSrcFrame->planes[0].nHPadding >> pob->nLogScale;
@@ -1051,12 +1034,6 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
         pob->y[2] = pSrcFrame->planes[2].nVPadding;
     }
 
-    pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
-    if (pob->chroma) {
-        pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
-        pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
-    }
-
     pob->nRefPitch[0] = pob->pRefFrame->planes[0].nPitch;
     if (pob->chroma) {
         pob->nRefPitch[1] = pob->pRefFrame->planes[1].nPitch;
@@ -1102,27 +1079,19 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
             pob->blkx = blkxStart + iblkx * pob->blkScanDir;
             pob->blkIdx = pob->blky * pob->nBlkX + pob->blkx;
 
-            pob->pSrc[0] = pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
+            const uint8_t *pRealSrc[3];
+            pRealSrc[0] = pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
             if (pob->chroma) {
-                pob->pSrc[1] = pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
-                pob->pSrc[2] = pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
+                pRealSrc[1] = pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
+                pRealSrc[2] = pSrcFrame->planes[2].GetAbsolutePelPointer<PixelType>(pob->x[2], pob->y[2]);
             }
 
-            pob->nSrcPitch[0] = pSrcFrame->planes[0].nPitch;
             //create aligned copy
-            pob->BLITLUMA(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pob->pSrc[0], pob->nSrcPitch[0]);
+            pob->BLITLUMA(pob->pSrc_temp[0], pob->nSrcPitch_temp[0], pRealSrc[0], pSrcFrame->planes[0].nPitch);
             //set the to the aligned copy
-            pob->pSrc[0] = pob->pSrc_temp[0];
-            pob->nSrcPitch[0] = pob->nSrcPitch_temp[0];
             if (pob->chroma) {
-                pob->nSrcPitch[1] = pSrcFrame->planes[1].nPitch;
-                pob->nSrcPitch[2] = pSrcFrame->planes[2].nPitch;
-                pob->BLITCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], pob->pSrc[1], pob->nSrcPitch[1]);
-                pob->BLITCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], pob->pSrc[2], pob->nSrcPitch[2]);
-                pob->pSrc[1] = pob->pSrc_temp[1];
-                pob->pSrc[2] = pob->pSrc_temp[2];
-                pob->nSrcPitch[1] = pob->nSrcPitch_temp[1];
-                pob->nSrcPitch[2] = pob->nSrcPitch_temp[2];
+                pob->BLITCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], pRealSrc[1], pSrcFrame->planes[1].nPitch);
+                pob->BLITCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], pRealSrc[2], pSrcFrame->planes[2].nPitch);
             }
 
             if (pob->blky == 0)
@@ -1200,8 +1169,8 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
                 pob->chroma ? pobGetRefBlockV<nLogPel, PixelType>(pob, pob->predictor.x, pob->predictor.y) : nullptr, };
             int64_t sad = pobLumaSAD<useSatd>(pob, blocks[0]);
             if (pob->chroma) {
-                sad += pob->SADCHROMA(pob->pSrc[1], pob->nSrcPitch[1], blocks[1], pob->nRefPitch[1]);
-                sad += pob->SADCHROMA(pob->pSrc[2], pob->nSrcPitch[2], blocks[2], pob->nRefPitch[2]);
+                sad += pob->SADCHROMA(pob->pSrc_temp[1], pob->nSrcPitch_temp[1], blocks[1], pob->nRefPitch[1]);
+                sad += pob->SADCHROMA(pob->pSrc_temp[2], pob->nSrcPitch_temp[2], blocks[2], pob->nRefPitch[2]);
             }
             pob->bestMV.sad = sad;
             pob->nMinCost = sad;
