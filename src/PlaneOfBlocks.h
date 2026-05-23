@@ -109,7 +109,6 @@ typedef struct PlaneOfBlocks {
     VECTOR globalMVPredictor;  // predictor of global motion vector
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
-    bool useSatd;
     int *freqArray; // temporary array for global motion estimaton
     int freqSize;   // size of freqArray
     int64_t verybigSAD;

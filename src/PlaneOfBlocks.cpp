@@ -854,7 +854,6 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
                     int fieldShift,
                     int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
 
-    pob->useSatd = useSatd;
     pob->badSAD = badSAD;
     pob->badrange = badrange;
     pob->zeroMVfieldShifted.x = 0;
@@ -1028,7 +1027,6 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
                          SearchType st, int stp, int lambda, int pnew, uint8_t *out,
                          int fieldShift, int64_t thSAD, int smooth, bool meander) {
 
-    pob->useSatd = useSatd;
     pob->zeroMVfieldShifted.x = 0;
     pob->zeroMVfieldShifted.y = fieldShift;
     pob->globalMVPredictor.x = 0;          //nPel*globalMVec->x;// there is no global
