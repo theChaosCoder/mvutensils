@@ -29,8 +29,6 @@
 
 #define MAX_PREDICTOR 5 // right now 5 should be enough (TSchniede)
 
-//#define    ONLY_CHECK_NONDEFAULT_MV // make the check if it is no default reference (zero, global,...)
-
 
 typedef struct PlaneOfBlocks {
 

@@ -121,13 +121,7 @@ static int pobIsVectorOK(PlaneOfBlocks *pob, int vx, int vy) {
 
 template <bool useSatd, int nLogPel, int flags, typename PixelType>
 static inline FORCE_INLINE void pobCheckMV_Template(PlaneOfBlocks *pob, int vx, int vy, int *dir, int val) {
-    if (
-        #ifdef ONLY_CHECK_NONDEFAULT_MV
-            ((vx != 0) || (vy != zeroMVfieldShifted.y)) &&
-            ((vx != predictor.x) || (vy != predictor.y)) &&
-            ((vx != globalMVPredictor.x) || (vy != globalMVPredictor.y)) &&
-        #endif
-            pobIsVectorOK(pob, vx, vy)) {
+    if (pobIsVectorOK(pob, vx, vy)) {
         int64_t cost = pobMotionDistorsion(pob, vx, vy);
         if (cost >= pob->nMinCost)
             return;
@@ -1086,8 +1080,7 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
     int nOverlapYold = plane->nOverlapY;
     int nStepXold = nBlkSizeXold - nOverlapXold;
     int nStepYold = nBlkSizeYold - nOverlapYold;
-    int nPelold = plane->nPel;
-    int nLogPelold = ilog2(nPelold);
+    int nLogPelold = ilog2(plane->nPel);
 
     // Functions using float must not be used here
     for (pob->blky = 0; pob->blky < pob->nBlkY; pob->blky++) {
@@ -1365,9 +1358,7 @@ void pobInterpolatePrediction(PlaneOfBlocks *pob, const PlaneOfBlocks *pob2) {
                 temp_sad = (a11 * v1.sad + a21 * v2.sad + a12 * v3.sad + a22 * v4.sad) * scaleov;
             } else { // large overlap. Weights are not quite correct but let it be
                 // Dead branch. The overlap is no longer allowed to be more than half the block size.
-                pob->vectors[index].x = (v1.x + v2.x + v3.x + v4.x) << 2;
-                pob->vectors[index].y = (v1.y + v2.y + v3.y + v4.y) << 2;
-                temp_sad = (v1.sad + v2.sad + v3.sad + v4.sad + 2) << 2;
+                assert(false);
             }
             pob->vectors[index].x = (pob->vectors[index].x >> normFactor) * (1 << mulFactor);
             pob->vectors[index].y = (pob->vectors[index].y >> normFactor) * (1 << mulFactor);
