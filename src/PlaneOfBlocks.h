@@ -27,9 +27,6 @@
 #include "SuperPyramid.h"
 
 
-#define MAX_PREDICTOR 5 // right now 5 should be enough (TSchniede)
-
-
 typedef struct PlaneOfBlocks {
 
     /* fields set at initialization */
@@ -71,19 +68,18 @@ typedef struct PlaneOfBlocks {
 
     VECTOR bestMV;    /* best vector found so far during the search */
     int64_t nMinCost; /* minimum cost ( sad + mv cost ) found so far */
+
+    // These are all used deep in motion estimation
     VECTOR predictor; /* best predictor for the current vector */
 
-    VECTOR predictors[MAX_PREDICTOR]; /* set of predictors for the current block */
-
-    // Maximum vector bounds possible, used to reject vectors, recalculated each block
+    // Maximum vector bounds possible
     int nDxMin; /* minimum x coordinate for the vector */
     int nDyMin; /* minimum y coordinate for the vector */
     int nDxMax; /* maximum x corrdinate for the vector */
     int nDyMax; /* maximum y coordinate for the vector */
-
-    // loop variables used deep in motion estimation
     int x[3];       /* absolute x coordinate of the origin of the block in the reference frame */
     int y[3];       /* absolute y coordinate of the origin of the block in the reference frame */
+    int64_t nLambda;       /* vector cost factor */
 
     /* search parameters */
 
@@ -98,11 +94,11 @@ typedef struct PlaneOfBlocks {
     int badrange;     // wide search radius
     int64_t verybigSAD;
 
-    // passed deep into motion estimation code, hard to detangle
-    int64_t nLambda;       /* vector cost factor */
 
     // unknown
     VECTOR globalMVPredictor;  // predictor of global motion vector
+
+    // always constant? constant for the whole frame?
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
 

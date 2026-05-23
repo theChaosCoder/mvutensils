@@ -289,50 +289,52 @@ static void pobWriteHeaderToArray(PlaneOfBlocks *pob, uint8_t *array) {
 }
 
 
-static void pobFetchPredictors(PlaneOfBlocks *pob, int blkidx, int blkx, int blky, int blkScanDir) {
+static void pobFetchPredictors(PlaneOfBlocks *pob, int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) {
     // Left (or right) predictor
     if ((blkScanDir == 1 && blkx > 0) || (blkScanDir == -1 && blkx < pob->nBlkX - 1))
-        pob->predictors[1] = pobClipMV(pob, pob->vectors[blkidx - blkScanDir]);
+        predictors[1] = pobClipMV(pob, pob->vectors[blkidx - blkScanDir]);
     else
-        pob->predictors[1] = pobClipMV(pob, pob->zeroMVfieldShifted); // v1.11.1 - values instead of pointer
+        predictors[1] = pobClipMV(pob, pob->zeroMVfieldShifted); // v1.11.1 - values instead of pointer
 
     // Up predictor
     if (blky > 0)
-        pob->predictors[2] = pobClipMV(pob, pob->vectors[blkidx - pob->nBlkX]);
+        predictors[2] = pobClipMV(pob, pob->vectors[blkidx - pob->nBlkX]);
     else
-        pob->predictors[2] = pobClipMV(pob, pob->zeroMVfieldShifted);
+        predictors[2] = pobClipMV(pob, pob->zeroMVfieldShifted);
 
     // bottom-right pridictor (from coarse level)
     if ((blky < pob->nBlkY - 1) && ((blkScanDir == 1 && blkx < pob->nBlkX - 1) || (blkScanDir == -1 && blkx > 0)))
-        pob->predictors[3] = pobClipMV(pob, pob->vectors[blkidx + pob->nBlkX + blkScanDir]);
+        predictors[3] = pobClipMV(pob, pob->vectors[blkidx + pob->nBlkX + blkScanDir]);
     else
         // Up-right predictor
         if ((blky > 0) && ((blkScanDir == 1 && blkx < pob->nBlkX - 1) || (blkScanDir == -1 && blkx > 0)))
-            pob->predictors[3] = pobClipMV(pob, pob->vectors[blkidx - pob->nBlkX + blkScanDir]);
+            predictors[3] = pobClipMV(pob, pob->vectors[blkidx - pob->nBlkX + blkScanDir]);
         else
-            pob->predictors[3] = pobClipMV(pob, pob->zeroMVfieldShifted);
+            predictors[3] = pobClipMV(pob, pob->zeroMVfieldShifted);
 
     // Median predictor
     if (blky > 0) { // replaced 1 by 0 - Fizick
-        pob->predictors[0].x = Median(pob->predictors[1].x, pob->predictors[2].x, pob->predictors[3].x);
-        pob->predictors[0].y = Median(pob->predictors[1].y, pob->predictors[2].y, pob->predictors[3].y);
+        predictors[0].x = Median(predictors[1].x, predictors[2].x, predictors[3].x);
+        predictors[0].y = Median(predictors[1].y, predictors[2].y, predictors[3].y);
         //      predictors[0].sad = Median(predictors[1].sad, predictors[2].sad, predictors[3].sad);
         // but it is not true median vector (x and y may be mixed) and not its sad ?!
         // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
-        pob->predictors[0].sad = VSMAX(pob->predictors[1].sad, VSMAX(pob->predictors[2].sad, pob->predictors[3].sad));
+        predictors[0].sad = VSMAX(predictors[1].sad, VSMAX(predictors[2].sad, predictors[3].sad));
     } else {
         //        predictors[0].x = (predictors[1].x + predictors[2].x + predictors[3].x);
         //        predictors[0].y = (predictors[1].y + predictors[2].y + predictors[3].y);
         //      predictors[0].sad = (predictors[1].sad + predictors[2].sad + predictors[3].sad);
         // but for top line we have only left predictor[1] - v1.6.0
-        pob->predictors[0] = pob->predictors[1];
+        predictors[0] = predictors[1];
     }
 
     // if there are no other planes, predictor is the median
     if (pob->smallestPlane)
-        pob->predictor = pob->predictors[0];
+        pob->predictor = predictors[0];
     double scale = pob->LSAD / (double)(pob->LSAD + (pob->predictor.sad >> 1));
     pob->nLambda = pob->nLambda * scale * scale;
+
+    predictors[4] = pobClipMV(pob, zeroMV);
 }
 
 
@@ -692,7 +694,8 @@ static void pobRefine(PlaneOfBlocks *pob) {
 template <bool useSatd, int nLogPel, typename PixelType>
 static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany, int &badcount) {
 
-    pobFetchPredictors(pob, blkIdx, blkx, blky, blkScanDir);
+    VECTOR predictors[5]; /* set of predictors for the current block */
+    pobFetchPredictors(pob, blkIdx, blkx, blky, blkScanDir, predictors);
 
     // We treat zero alone
     // Do we bias zero with not taking into account distorsion ?
@@ -777,7 +780,7 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
     for (int i = 0; i < npred; i++) {
         if (tryMany)
             pob->nMinCost = pob->verybigSAD + 1;
-        pobCheckMV0<useSatd, nLogPel, PixelType>(pob, pob->predictors[i].x, pob->predictors[i].y);
+        pobCheckMV0<useSatd, nLogPel, PixelType>(pob, predictors[i].x, predictors[i].y);
         if (tryMany) {
             // refine around predictor
             pobRefine<useSatd, nLogPel, PixelType>(pob);                   // reset bestMV
@@ -939,8 +942,6 @@ static void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFram
 
             /* search the mv */
             pob->predictor = pobClipMV(pob, pob->vectors[blkIdx]);
-            pob->predictors[4] = pobClipMV(pob, zeroMV);
-
             pobPseudoEPZSearch<useSatd, nLogPel, PixelType>(pob, blkIdx, blkx, blky, blkScanDir, tryMany, badcount);
 
             /* write the results */
