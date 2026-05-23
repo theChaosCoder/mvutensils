@@ -690,7 +690,7 @@ static void pobRefine(PlaneOfBlocks *pob) {
 
 
 template <bool useSatd, int nLogPel, typename PixelType>
-static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blky, int blkScanDir) {
+static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany) {
 
     pobFetchPredictors(pob, blkIdx, blkx, blky, blkScanDir);
 
@@ -713,7 +713,7 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
     VECTOR bestMVMany[8];
     int64_t nMinCostMany[8] = { 0 };
 
-    if (pob->tryMany) {
+    if (tryMany) {
         //  refine around zero
         pobRefine<useSatd, nLogPel, PixelType>(pob);
         bestMVMany[0] = pob->bestMV; // save bestMV
@@ -734,13 +734,13 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
     }
     int64_t cost = sad + ((pob->pglobal * sad) >> 8);
 
-    if (cost < pob->nMinCost || pob->tryMany) {
+    if (cost < pob->nMinCost || tryMany) {
         pob->bestMV.x = pob->globalMVPredictor.x;
         pob->bestMV.y = pob->globalMVPredictor.y;
         pob->bestMV.sad = sad;
         pob->nMinCost = cost;
     }
-    if (pob->tryMany) {
+    if (tryMany) {
         // refine around global
         pobRefine<useSatd, nLogPel, PixelType>(pob);               // reset bestMV
         bestMVMany[1] = pob->bestMV; // save bestMV
@@ -758,13 +758,13 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
     }
     cost = sad;
 
-    if (cost < pob->nMinCost || pob->tryMany) {
+    if (cost < pob->nMinCost || tryMany) {
         pob->bestMV.x = pob->predictor.x;
         pob->bestMV.y = pob->predictor.y;
         pob->bestMV.sad = sad;
         pob->nMinCost = cost;
     }
-    if (pob->tryMany) {
+    if (tryMany) {
         // refine around predictor
         pobRefine<useSatd, nLogPel, PixelType>(pob);               // reset bestMV
         bestMVMany[2] = pob->bestMV; // save bestMV
@@ -775,10 +775,10 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
     int npred = 4;
 
     for (int i = 0; i < npred; i++) {
-        if (pob->tryMany)
+        if (tryMany)
             pob->nMinCost = pob->verybigSAD + 1;
         pobCheckMV0<useSatd, nLogPel, PixelType>(pob, pob->predictors[i].x, pob->predictors[i].y);
-        if (pob->tryMany) {
+        if (tryMany) {
             // refine around predictor
             pobRefine<useSatd, nLogPel, PixelType>(pob);                   // reset bestMV
             bestMVMany[i + 3] = pob->bestMV; // save bestMV
@@ -787,7 +787,7 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
     }
 
 
-    if (pob->tryMany) { // select best of multi best
+    if (tryMany) { // select best of multi best
         pob->nMinCost = pob->verybigSAD + 1;
         for (int i = 0; i < npred + 3; i++) {
             if (nMinCostMany[i] < pob->nMinCost) {
@@ -885,7 +885,6 @@ static void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFram
     pob->penaltyZero = pzero;
     pob->pglobal = pglobal;
     pob->badcount = 0;
-    pob->tryMany = tryMany;
     // Functions using float must not be used here
 
     for (int blky = 0; blky < pob->nBlkY; blky++) {
@@ -942,7 +941,7 @@ static void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFram
             pob->predictor = pobClipMV(pob, pob->vectors[blkIdx]);
             pob->predictors[4] = pobClipMV(pob, zeroMV);
 
-            pobPseudoEPZSearch<useSatd, nLogPel, PixelType>(pob, blkIdx, blkx, blky, blkScanDir);
+            pobPseudoEPZSearch<useSatd, nLogPel, PixelType>(pob, blkIdx, blkx, blky, blkScanDir, tryMany);
 
             /* write the results */
             pBlkData[blkx] = pob->bestMV;

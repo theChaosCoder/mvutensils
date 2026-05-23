@@ -98,9 +98,6 @@ typedef struct PlaneOfBlocks {
     int badrange;     // wide search radius
     int64_t verybigSAD;
 
-    // maybe propagate as argument everywhere instead
-    bool tryMany;     // try refine around many predictors
-
     // maybe propagate as argument reference(?) instead
     int badcount;     // number of bad blocks refined
 
