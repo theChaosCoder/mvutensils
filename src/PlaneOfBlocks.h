@@ -83,7 +83,6 @@ typedef struct PlaneOfBlocks {
 
     int x[3];       /* absolute x coordinate of the origin of the block in the reference frame */
     int y[3];       /* absolute y coordinate of the origin of the block in the reference frame */
-    int blkScanDir; // direction of scan (1 is left to rught, -1 is right to left)
 
     /* search parameters */
 

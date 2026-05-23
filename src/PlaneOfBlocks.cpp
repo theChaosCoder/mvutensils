@@ -303,10 +303,10 @@ static void pobWriteHeaderToArray(PlaneOfBlocks *pob, uint8_t *array) {
 }
 
 
-static void pobFetchPredictors(PlaneOfBlocks *pob, int blkidx, int blkx, int blky) {
+static void pobFetchPredictors(PlaneOfBlocks *pob, int blkidx, int blkx, int blky, int blkScanDir) {
     // Left (or right) predictor
-    if ((pob->blkScanDir == 1 && blkx > 0) || (pob->blkScanDir == -1 && blkx < pob->nBlkX - 1))
-        pob->predictors[1] = pobClipMV(pob, pob->vectors[blkidx - pob->blkScanDir]);
+    if ((blkScanDir == 1 && blkx > 0) || (blkScanDir == -1 && blkx < pob->nBlkX - 1))
+        pob->predictors[1] = pobClipMV(pob, pob->vectors[blkidx - blkScanDir]);
     else
         pob->predictors[1] = pobClipMV(pob, pob->zeroMVfieldShifted); // v1.11.1 - values instead of pointer
 
@@ -317,12 +317,12 @@ static void pobFetchPredictors(PlaneOfBlocks *pob, int blkidx, int blkx, int blk
         pob->predictors[2] = pobClipMV(pob, pob->zeroMVfieldShifted);
 
     // bottom-right pridictor (from coarse level)
-    if ((blky < pob->nBlkY - 1) && ((pob->blkScanDir == 1 && blkx < pob->nBlkX - 1) || (pob->blkScanDir == -1 && blkx > 0)))
-        pob->predictors[3] = pobClipMV(pob, pob->vectors[blkidx + pob->nBlkX + pob->blkScanDir]);
+    if ((blky < pob->nBlkY - 1) && ((blkScanDir == 1 && blkx < pob->nBlkX - 1) || (blkScanDir == -1 && blkx > 0)))
+        pob->predictors[3] = pobClipMV(pob, pob->vectors[blkidx + pob->nBlkX + blkScanDir]);
     else
         // Up-right predictor
-        if ((blky > 0) && ((pob->blkScanDir == 1 && blkx < pob->nBlkX - 1) || (pob->blkScanDir == -1 && blkx > 0)))
-            pob->predictors[3] = pobClipMV(pob, pob->vectors[blkidx - pob->nBlkX + pob->blkScanDir]);
+        if ((blky > 0) && ((blkScanDir == 1 && blkx < pob->nBlkX - 1) || (blkScanDir == -1 && blkx > 0)))
+            pob->predictors[3] = pobClipMV(pob, pob->vectors[blkidx - pob->nBlkX + blkScanDir]);
         else
             pob->predictors[3] = pobClipMV(pob, pob->zeroMVfieldShifted);
 
@@ -704,9 +704,9 @@ static void pobRefine(PlaneOfBlocks *pob) {
 
 
 template <bool useSatd, int nLogPel, typename PixelType>
-static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blky) {
+static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blky, int blkScanDir) {
 
-    pobFetchPredictors(pob, blkIdx, blkx, blky);
+    pobFetchPredictors(pob, blkIdx, blkx, blky, blkScanDir);
 
     // We treat zero alone
     // Do we bias zero with not taking into account distorsion ?
@@ -903,10 +903,10 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
     // Functions using float must not be used here
 
     for (int blky = 0; blky < pob->nBlkY; blky++) {
-        pob->blkScanDir = (blky % 2 == 0 || !meander) ? 1 : -1;
+        int blkScanDir = (blky % 2 == 0 || !meander) ? 1 : -1;
         // meander (alternate) scan blocks (even row left to right, odd row right to left)
         int blkxStart = (blky % 2 == 0 || !meander) ? 0 : pob->nBlkX - 1;
-        if (pob->blkScanDir == 1) { // start with leftmost block
+        if (blkScanDir == 1) { // start with leftmost block
             pob->x[0] = pSrcFrame->planes[0].nHPadding;
             if (pob->chroma) {
                 pob->x[1] = pSrcFrame->planes[1].nHPadding;
@@ -920,7 +920,7 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
             }
         }
         for (int iblkx = 0; iblkx < pob->nBlkX; iblkx++) {
-            int blkx = blkxStart + iblkx * pob->blkScanDir;
+            int blkx = blkxStart + iblkx * blkScanDir;
             int blkIdx = blky * pob->nBlkX + blkx;
 
             const uint8_t *pRealSrc[3] = {};
@@ -956,17 +956,17 @@ void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFrame, cons
             pob->predictor = pobClipMV(pob, pob->vectors[blkIdx]);
             pob->predictors[4] = pobClipMV(pob, zeroMV);
 
-            pobPseudoEPZSearch<useSatd, nLogPel, PixelType>(pob, blkIdx, blkx, blky);
+            pobPseudoEPZSearch<useSatd, nLogPel, PixelType>(pob, blkIdx, blkx, blky, blkScanDir);
 
             /* write the results */
             pBlkData[blkx] = pob->bestMV;
 
             /* increment indexes & pointers */
             if (iblkx < pob->nBlkX - 1) {
-                pob->x[0] += (pob->nBlkSizeX - pob->nOverlapX) * pob->blkScanDir;
+                pob->x[0] += (pob->nBlkSizeX - pob->nOverlapX) * blkScanDir;
                 if (chroma) {
-                    pob->x[1] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * pob->blkScanDir;
-                    pob->x[2] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * pob->blkScanDir;
+                    pob->x[1] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * blkScanDir;
+                    pob->x[2] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * blkScanDir;
                 }
             }
         }
@@ -1060,10 +1060,10 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
 
     // Functions using float must not be used here
     for (int blky = 0; blky < pob->nBlkY; blky++) {
-        pob->blkScanDir = (blky % 2 == 0 || !meander) ? 1 : -1;
+        int blkScanDir = (blky % 2 == 0 || !meander) ? 1 : -1;
         // meander (alternate) scan blocks (even row left to right, odd row right to left)
         int blkxStart = (blky % 2 == 0 || !meander) ? 0 : pob->nBlkX - 1;
-        if (pob->blkScanDir == 1) { // start with leftmost block
+        if (blkScanDir == 1) { // start with leftmost block
             pob->x[0] = pSrcFrame->planes[0].nHPadding;
             if (pob->chroma) {
                 pob->x[1] = pSrcFrame->planes[1].nHPadding;
@@ -1077,10 +1077,10 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
             }
         }
         for (int iblkx = 0; iblkx < pob->nBlkX; iblkx++) {
-            int blkx = blkxStart + iblkx * pob->blkScanDir;
+            int blkx = blkxStart + iblkx * blkScanDir;
             int blkIdx = blky * pob->nBlkX + blkx;
 
-            const uint8_t *pRealSrc[3];
+            const uint8_t *pRealSrc[3] = {};
             pRealSrc[0] = pSrcFrame->planes[0].GetAbsolutePelPointer<PixelType>(pob->x[0], pob->y[0]);
             if (pob->chroma) {
                 pRealSrc[1] = pSrcFrame->planes[1].GetAbsolutePelPointer<PixelType>(pob->x[1], pob->y[1]);
@@ -1230,10 +1230,10 @@ void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgop, cons
 
 
             if (iblkx < pob->nBlkX - 1) {
-                pob->x[0] += (pob->nBlkSizeX - pob->nOverlapX) * pob->blkScanDir;
+                pob->x[0] += (pob->nBlkSizeX - pob->nOverlapX) * blkScanDir;
                 if (pob->chroma) {
-                    pob->x[1] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * pob->blkScanDir;
-                    pob->x[2] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * pob->blkScanDir;
+                    pob->x[1] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * blkScanDir;
+                    pob->x[2] += ((pob->nBlkSizeX - pob->nOverlapX) >> pob->nLogxRatioUV) * blkScanDir;
                 }
             }
         }
