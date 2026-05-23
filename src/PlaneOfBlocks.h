@@ -65,9 +65,8 @@ typedef struct PlaneOfBlocks {
     bool chroma;        /* do we do chroma me */
 
     /* working fields */
-
+    // the frame to compare to, may be possible to pass prefframe instead of whole pob to some functions
     const FramePyramidLevel *pRefFrame;
-
     ptrdiff_t nRefPitch[3];
 
     VECTOR bestMV;    /* best vector found so far during the search */
@@ -76,11 +75,13 @@ typedef struct PlaneOfBlocks {
 
     VECTOR predictors[MAX_PREDICTOR]; /* set of predictors for the current block */
 
+    // Maximum vector bounds possible, used to reject vectors, recalculated each block
     int nDxMin; /* minimum x coordinate for the vector */
     int nDyMin; /* minimum y coordinate for the vector */
     int nDxMax; /* maximum x corrdinate for the vector */
     int nDyMax; /* maximum y coordinate for the vector */
 
+    // loop variables used deep in motion estimation
     int x[3];       /* absolute x coordinate of the origin of the block in the reference frame */
     int y[3];       /* absolute y coordinate of the origin of the block in the reference frame */
 
@@ -89,19 +90,21 @@ typedef struct PlaneOfBlocks {
     // static parameters during the whole search process
     SearchType searchType; /* search type used */
     int nSearchParam;      /* additionnal parameter for this search */
-
     int64_t LSAD;          // SAD limit for lambda using - Fizick
     int penaltyNew;        // cost penalty factor for new candidates
     int penaltyZero;       // cost penalty factor for zero vector
     int pglobal;           // cost penalty factor for global predictor
     int64_t badSAD;   // SAD threshold for more wide search
     int badrange;     // wide search radius
+    int64_t verybigSAD;
 
     // maybe propagate as argument everywhere instead
     bool tryMany;     // try refine around many predictors
 
-    // investigate
+    // maybe propagate as argument reference(?) instead
     int badcount;     // number of bad blocks refined
+
+    // passed deep into motion estimation code, hard to detangle
     int64_t nLambda;       /* vector cost factor */
 
     // unknown
@@ -109,11 +112,8 @@ typedef struct PlaneOfBlocks {
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
 
-    // only used as temporary space in pobEstimateGlobalMVDoubled, should be temp space provided by the pyramid object instead
+    // only used as temporary space in pobEstimateGlobalMVDoubled, should be a temp space pointer provided by the pyramid object instead
     std::vector<int> freqArray;
-
-    // unknown
-    int64_t verybigSAD;
 
     // Set for each block
     int nSrcPitch_temp[3];
