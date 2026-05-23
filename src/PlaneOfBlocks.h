@@ -98,9 +98,6 @@ typedef struct PlaneOfBlocks {
     int badrange;     // wide search radius
     int64_t verybigSAD;
 
-    // maybe propagate as argument reference(?) instead
-    int badcount;     // number of bad blocks refined
-
     // passed deep into motion estimation code, hard to detangle
     int64_t nLambda;       /* vector cost factor */
 

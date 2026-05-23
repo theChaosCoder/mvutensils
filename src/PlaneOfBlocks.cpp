@@ -690,7 +690,7 @@ static void pobRefine(PlaneOfBlocks *pob) {
 
 
 template <bool useSatd, int nLogPel, typename PixelType>
-static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany) {
+static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany, int &badcount) {
 
     pobFetchPredictors(pob, blkIdx, blkx, blky, blkScanDir);
 
@@ -804,10 +804,10 @@ static void pobPseudoEPZSearch(PlaneOfBlocks *pob, int blkIdx, int blkx, int blk
 
 #define BADCOUNT_LIMIT 16
 
-    if (blkIdx > 1 && foundSAD > (pob->badSAD + pob->badSAD * pob->badcount / BADCOUNT_LIMIT)) {
+    if (blkIdx > 1 && foundSAD > (pob->badSAD + pob->badSAD * badcount / BADCOUNT_LIMIT)) {
         // bad vector, try wide search
         // with some soft limit (BADCOUNT_LIMIT) of bad cured vectors (time consumed)
-        pob->badcount++;
+        badcount++;
 
         if (pob->badrange > 0) { // UMH
             // rathe good is not found, lets try around zero
@@ -884,7 +884,7 @@ static void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFram
 
     pob->penaltyZero = pzero;
     pob->pglobal = pglobal;
-    pob->badcount = 0;
+    int badcount = 0;
     // Functions using float must not be used here
 
     for (int blky = 0; blky < pob->nBlkY; blky++) {
@@ -941,7 +941,7 @@ static void doPobSearchMVs(PlaneOfBlocks *pob, const FramePyramidLevel *pSrcFram
             pob->predictor = pobClipMV(pob, pob->vectors[blkIdx]);
             pob->predictors[4] = pobClipMV(pob, zeroMV);
 
-            pobPseudoEPZSearch<useSatd, nLogPel, PixelType>(pob, blkIdx, blkx, blky, blkScanDir, tryMany);
+            pobPseudoEPZSearch<useSatd, nLogPel, PixelType>(pob, blkIdx, blkx, blky, blkScanDir, tryMany, badcount);
 
             /* write the results */
             pBlkData[blkx] = pob->bestMV;
