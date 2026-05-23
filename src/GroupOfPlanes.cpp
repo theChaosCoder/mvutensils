@@ -66,7 +66,7 @@ void gopDeinit(GroupOfPlanes *gop) {
 
 void gopSearchMVs(GroupOfPlanes *gop, const FramePyramid *pSrcGOF, const FramePyramid *pRefGOF,
                   SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
-                  int lsad, int pnew, int plevel, int global,
+                  int lsad, int pnew, int plevel, bool global,
                   uint8_t *out, int fieldShift, bool useSatd,
                   int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
                   SearchType coarseSearchType, bool chroma) {
