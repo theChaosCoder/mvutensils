@@ -402,10 +402,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     }
 
 
-    if (d.searchType == SearchType::Nstep)
-        d.nSearchParam = (d.searchparam < 0) ? 0 : d.searchparam;
-    else
-        d.nSearchParam = (d.searchparam < 1) ? 1 : d.searchparam;
+    d.nSearchParam = std::max(d.searchparam, 1);
 
 
     d.node = vsapi->mapGetNode(in, "super", 0, 0);

@@ -53,8 +53,6 @@ typedef int MVArraySizeType;
 
 /*! \brief Search type : defines the algorithm used for minimizing the SAD */
 enum class SearchType {
-    Onetime = 0,
-    Nstep = 1,
     Logarithmic = 2,
     Exhaustive = 3,
     Hex2 = 4,

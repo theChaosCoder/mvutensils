@@ -339,70 +339,6 @@ static void pobFetchPredictors(PlaneOfBlocks *pob, int blkidx, int blkx, int blk
 
 
 template <bool useSatd, int nLogPel, typename PixelType>
-static void pobNStepSearch(PlaneOfBlocks *pob, int stp) {
-    int dx, dy;
-    int length = stp;
-    while (length > 0) {
-        dx = pob->bestMV.x;
-        dy = pob->bestMV.y;
-
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx + length, dy + length);
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx + length, dy);
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx + length, dy - length);
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx, dy - length);
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx, dy + length);
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx - length, dy + length);
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx - length, dy);
-        pobCheckMV<useSatd, nLogPel, PixelType>(pob, dx - length, dy - length);
-
-        length--;
-    }
-}
-
-
-template <bool useSatd, int nLogPel, typename PixelType>
-static void pobOneTimeSearch(PlaneOfBlocks *pob, int length) {
-    int direction = 0;
-    int dx = pob->bestMV.x;
-    int dy = pob->bestMV.y;
-
-    pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx - length, dy, &direction, 2);
-    pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx + length, dy, &direction, 1);
-
-    if (direction == 1) {
-        while (direction) {
-            direction = 0;
-            dx += length;
-            pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx + length, dy, &direction, 1);
-        }
-    } else if (direction == 2) {
-        while (direction) {
-            direction = 0;
-            dx -= length;
-            pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx - length, dy, &direction, 1);
-        }
-    }
-
-    pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx, dy - length, &direction, 2);
-    pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx, dy + length, &direction, 1);
-
-    if (direction == 1) {
-        while (direction) {
-            direction = 0;
-            dy += length;
-            pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx, dy + length, &direction, 1);
-        }
-    } else if (direction == 2) {
-        while (direction) {
-            direction = 0;
-            dy -= length;
-            pobCheckMV2<useSatd, nLogPel, PixelType>(pob, dx, dy - length, &direction, 1);
-        }
-    }
-}
-
-
-template <bool useSatd, int nLogPel, typename PixelType>
 static void pobDiamondSearch(PlaneOfBlocks *pob, int length) {
     enum Direction {
         Right = 1,
@@ -647,13 +583,6 @@ static void pobUMHSearch(PlaneOfBlocks *pob, int i_me_range, int omx, int omy) {
 template <bool useSatd, int nLogPel, typename PixelType>
 static void pobRefine(PlaneOfBlocks *pob) {
     // then, we refine, according to the search type
-    if (pob->searchType == SearchType::Onetime)
-        for (int i = pob->nSearchParam; i > 0; i /= 2)
-            pobOneTimeSearch<useSatd, nLogPel, PixelType>(pob, i);
-
-    if (pob->searchType == SearchType::Nstep)
-        pobNStepSearch<useSatd, nLogPel, PixelType>(pob, pob->nSearchParam);
-
     if (pob->searchType == SearchType::Logarithmic)
         for (int i = pob->nSearchParam; i > 0; i /= 2)
             pobDiamondSearch<useSatd, nLogPel, PixelType>(pob, i);
@@ -1164,12 +1093,6 @@ static void doPobRecalculateMVs(PlaneOfBlocks *pob, const FakeGroupOfPlanes *fgo
 
             if (pob->bestMV.sad > thSAD) { // if old interpolated vector is bad
                 // then, we refine, according to the search type
-                if (pob->searchType == SearchType::Onetime)
-                    for (int i = pob->nSearchParam; i > 0; i /= 2)
-                        pobOneTimeSearch<useSatd, nLogPel, PixelType>(pob, i);
-
-                if (pob->searchType == SearchType::Nstep)
-                    pobNStepSearch<useSatd, nLogPel, PixelType>(pob, pob->nSearchParam);
 
                 if (pob->searchType == SearchType::Logarithmic)
                     for (int i = pob->nSearchParam; i > 0; i /= 2)
