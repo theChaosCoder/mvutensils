@@ -83,6 +83,7 @@ void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) {
     // more advanced method (like MVDepan) can be implemented later
 
     // find most frequent x
+    std::vector<int> freqArray;
     freqArray.resize(8192 * nPel * 2);
 
     size_t indmin = freqArray.size() - 1;
@@ -474,8 +475,8 @@ void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _n
 
     bytesPerSample = (bitsPerSample + 7) / 8;
 
-    smallestPlane = smallestPlane;
-    chroma = chroma;
+    this->smallestPlane = smallestPlane;
+    this->chroma = chroma;
 
     globalMVPredictor = zeroMV;
 
@@ -1414,6 +1415,8 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
     nHeight = src.nHeight[0];
     nRealWidth = src.nRealWidth[0];
     nRealHeight = src.nRealHeight[0];
+    nHPadding = src.nHPad[0];
+    nVPadding = src.nVPad[0];
     nPel = src.nPel;
     nBlkX = (nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
     nBlkY = (nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);

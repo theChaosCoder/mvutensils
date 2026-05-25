@@ -112,9 +112,6 @@ private:
     // always constant? constant for the whole frame?
     VECTOR zeroMVfieldShifted; // zero motion vector for fieldbased video at finest level pel2
 
-    // only used as temporary space in pobEstimateGlobalMVDoubled, should be a temp space pointer provided by the pyramid object instead
-    std::vector<int> freqArray;
-
     // Set for each block
     int nSrcPitch_temp[3];
     uint8_t *pSrc_temp[3] = {}; //for easy WRITE access to temp block
