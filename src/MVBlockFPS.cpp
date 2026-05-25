@@ -28,7 +28,6 @@
 #include "CopyCode.h"
 #include "CommonFunctions.h"
 #include "MaskFun.h"
-#include "MVAnalysisData.h"
 #include "Overlap.h"
 #include "SimpleResize.h"
 #include "CommonMacros.h"

@@ -31,80 +31,79 @@
 
 extern uint32_t g_cpuinfo;
 
-void overInit(OverlapWindows *over, int nx, int ny, int ox, int oy) {
-    over->nx = nx;
-    over->ny = ny;
-    over->ox = ox;
-    over->oy = oy;
-    over->size = nx * ny;
+void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
+    this->nx = nx;
+    this->ny = ny;
+    this->ox = ox;
+    this->oy = oy;
+    this->size = nx * ny;
 
     //  windows
-    over->fWin1UVx = (float *)malloc(nx * sizeof(float));
-    over->fWin1UVxfirst = (float *)malloc(nx * sizeof(float));
-    over->fWin1UVxlast = (float *)malloc(nx * sizeof(float));
+    fWin1UVx = (float *)malloc(nx * sizeof(float));
+    fWin1UVxfirst = (float *)malloc(nx * sizeof(float));
+    fWin1UVxlast = (float *)malloc(nx * sizeof(float));
     for (int i = 0; i < ox; i++) {
-        over->fWin1UVx[i] = cosf(M_PI * (i - ox + 0.5f) / (ox * 2));
-        over->fWin1UVx[i] = over->fWin1UVx[i] * over->fWin1UVx[i];  // left window (rised cosine)
-        over->fWin1UVxfirst[i] = 1;                                 // very first window
-        over->fWin1UVxlast[i] = over->fWin1UVx[i];                  // very last
+        fWin1UVx[i] = cosf(M_PI * (i - ox + 0.5f) / (ox * 2));
+        fWin1UVx[i] = fWin1UVx[i] * fWin1UVx[i];  // left window (rised cosine)
+        fWin1UVxfirst[i] = 1;                                 // very first window
+        fWin1UVxlast[i] = fWin1UVx[i];                  // very last
     }
     for (int i = ox; i < nx - ox; i++) {
-        over->fWin1UVx[i] = 1;
-        over->fWin1UVxfirst[i] = 1; // very first window
-        over->fWin1UVxlast[i] = 1;  // very last
+        fWin1UVx[i] = 1;
+        fWin1UVxfirst[i] = 1; // very first window
+        fWin1UVxlast[i] = 1;  // very last
     }
     for (int i = nx - ox; i < nx; i++) {
-        over->fWin1UVx[i] = cosf(M_PI * (i - nx + ox + 0.5f) / (ox * 2));
-        over->fWin1UVx[i] = over->fWin1UVx[i] * over->fWin1UVx[i];  // right window (falled cosine)
-        over->fWin1UVxfirst[i] = over->fWin1UVx[i];                 // very first window
-        over->fWin1UVxlast[i] = 1;                                  // very last
+        fWin1UVx[i] = cosf(M_PI * (i - nx + ox + 0.5f) / (ox * 2));
+        fWin1UVx[i] = fWin1UVx[i] * fWin1UVx[i];  // right window (falled cosine)
+        fWin1UVxfirst[i] = fWin1UVx[i];                 // very first window
+        fWin1UVxlast[i] = 1;                                  // very last
     }
 
-    over->fWin1UVy = (float *)malloc(ny * sizeof(float));
-    over->fWin1UVyfirst = (float *)malloc(ny * sizeof(float));
-    over->fWin1UVylast = (float *)malloc(ny * sizeof(float));
+    fWin1UVy = (float *)malloc(ny * sizeof(float));
+    fWin1UVyfirst = (float *)malloc(ny * sizeof(float));
+    fWin1UVylast = (float *)malloc(ny * sizeof(float));
     for (int i = 0; i < oy; i++) {
-        over->fWin1UVy[i] = cosf(M_PI * (i - oy + 0.5f) / (oy * 2));
-        over->fWin1UVy[i] = over->fWin1UVy[i] * over->fWin1UVy[i];  // left window (rised cosine)
-        over->fWin1UVyfirst[i] = 1;                                 // very first window
-        over->fWin1UVylast[i] = over->fWin1UVy[i];                  // very last
+        fWin1UVy[i] = cosf(M_PI * (i - oy + 0.5f) / (oy * 2));
+        fWin1UVy[i] = fWin1UVy[i] * fWin1UVy[i];  // left window (rised cosine)
+        fWin1UVyfirst[i] = 1;                                 // very first window
+        fWin1UVylast[i] = fWin1UVy[i];                  // very last
     }
     for (int i = oy; i < ny - oy; i++) {
-        over->fWin1UVy[i] = 1;
-        over->fWin1UVyfirst[i] = 1; // very first window
-        over->fWin1UVylast[i] = 1;  // very last
+        fWin1UVy[i] = 1;
+        fWin1UVyfirst[i] = 1; // very first window
+        fWin1UVylast[i] = 1;  // very last
     }
     for (int i = ny - oy; i < ny; i++) {
-        over->fWin1UVy[i] = cosf(M_PI * (i - ny + oy + 0.5f) / (oy * 2));
-        over->fWin1UVy[i] = over->fWin1UVy[i] * over->fWin1UVy[i];  // right window (falled cosine)
-        over->fWin1UVyfirst[i] = over->fWin1UVy[i];                 // very first window
-        over->fWin1UVylast[i] = 1;                                  // very last
+        fWin1UVy[i] = cosf(M_PI * (i - ny + oy + 0.5f) / (oy * 2));
+        fWin1UVy[i] = fWin1UVy[i] * fWin1UVy[i];  // right window (falled cosine)
+        fWin1UVyfirst[i] = fWin1UVy[i];                 // very first window
+        fWin1UVylast[i] = 1;                                  // very last
     }
 
+    Overlap9Windows = (int16_t *)malloc(size * 9 * sizeof(int16_t));
 
-    over->Overlap9Windows = (int16_t *)malloc(over->size * 9 * sizeof(int16_t));
-
-    int16_t *winOverUVTL = over->Overlap9Windows;
-    int16_t *winOverUVTM = over->Overlap9Windows + over->size;
-    int16_t *winOverUVTR = over->Overlap9Windows + over->size * 2;
-    int16_t *winOverUVML = over->Overlap9Windows + over->size * 3;
-    int16_t *winOverUVMM = over->Overlap9Windows + over->size * 4;
-    int16_t *winOverUVMR = over->Overlap9Windows + over->size * 5;
-    int16_t *winOverUVBL = over->Overlap9Windows + over->size * 6;
-    int16_t *winOverUVBM = over->Overlap9Windows + over->size * 7;
-    int16_t *winOverUVBR = over->Overlap9Windows + over->size * 8;
+    int16_t *winOverUVTL = Overlap9Windows;
+    int16_t *winOverUVTM = Overlap9Windows + size;
+    int16_t *winOverUVTR = Overlap9Windows + size * 2;
+    int16_t *winOverUVML = Overlap9Windows + size * 3;
+    int16_t *winOverUVMM = Overlap9Windows + size * 4;
+    int16_t *winOverUVMR = Overlap9Windows + size * 5;
+    int16_t *winOverUVBL = Overlap9Windows + size * 6;
+    int16_t *winOverUVBM = Overlap9Windows + size * 7;
+    int16_t *winOverUVBR = Overlap9Windows + size * 8;
 
     for (int j = 0; j < ny; j++) {
         for (int i = 0; i < nx; i++) {
-            winOverUVTL[i] = (int)(over->fWin1UVyfirst[j] * over->fWin1UVxfirst[i] * 2048 + 0.5f);
-            winOverUVTM[i] = (int)(over->fWin1UVyfirst[j] * over->fWin1UVx[i] * 2048 + 0.5f);
-            winOverUVTR[i] = (int)(over->fWin1UVyfirst[j] * over->fWin1UVxlast[i] * 2048 + 0.5f);
-            winOverUVML[i] = (int)(over->fWin1UVy[j] * over->fWin1UVxfirst[i] * 2048 + 0.5f);
-            winOverUVMM[i] = (int)(over->fWin1UVy[j] * over->fWin1UVx[i] * 2048 + 0.5f);
-            winOverUVMR[i] = (int)(over->fWin1UVy[j] * over->fWin1UVxlast[i] * 2048 + 0.5f);
-            winOverUVBL[i] = (int)(over->fWin1UVylast[j] * over->fWin1UVxfirst[i] * 2048 + 0.5f);
-            winOverUVBM[i] = (int)(over->fWin1UVylast[j] * over->fWin1UVx[i] * 2048 + 0.5f);
-            winOverUVBR[i] = (int)(over->fWin1UVylast[j] * over->fWin1UVxlast[i] * 2048 + 0.5f);
+            winOverUVTL[i] = (int)(fWin1UVyfirst[j] * fWin1UVxfirst[i] * 2048 + 0.5f);
+            winOverUVTM[i] = (int)(fWin1UVyfirst[j] * fWin1UVx[i] * 2048 + 0.5f);
+            winOverUVTR[i] = (int)(fWin1UVyfirst[j] * fWin1UVxlast[i] * 2048 + 0.5f);
+            winOverUVML[i] = (int)(fWin1UVy[j] * fWin1UVxfirst[i] * 2048 + 0.5f);
+            winOverUVMM[i] = (int)(fWin1UVy[j] * fWin1UVx[i] * 2048 + 0.5f);
+            winOverUVMR[i] = (int)(fWin1UVy[j] * fWin1UVxlast[i] * 2048 + 0.5f);
+            winOverUVBL[i] = (int)(fWin1UVylast[j] * fWin1UVxfirst[i] * 2048 + 0.5f);
+            winOverUVBM[i] = (int)(fWin1UVylast[j] * fWin1UVx[i] * 2048 + 0.5f);
+            winOverUVBR[i] = (int)(fWin1UVylast[j] * fWin1UVxlast[i] * 2048 + 0.5f);
         }
         winOverUVTL += nx;
         winOverUVTM += nx;
@@ -119,19 +118,15 @@ void overInit(OverlapWindows *over, int nx, int ny, int ox, int oy) {
 }
 
 
-void overDeinit(OverlapWindows *over) {
-    free(over->Overlap9Windows);
-    free(over->fWin1UVx);
-    free(over->fWin1UVxfirst);
-    free(over->fWin1UVxlast);
-    free(over->fWin1UVy);
-    free(over->fWin1UVyfirst);
-    free(over->fWin1UVylast);
-}
 
-
-int16_t *overGetWindow(const OverlapWindows *over, int i) {
-    return over->Overlap9Windows + over->size * i;
+OverlapWindows::~OverlapWindows() {
+    free(Overlap9Windows);
+    free(fWin1UVx);
+    free(fWin1UVxfirst);
+    free(fWin1UVxlast);
+    free(fWin1UVy);
+    free(fWin1UVyfirst);
+    free(fWin1UVylast);
 }
 
 

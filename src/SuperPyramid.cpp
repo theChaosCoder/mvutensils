@@ -743,7 +743,7 @@ int GetPyramidLevelForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int ov
     return level;
 }
 
-FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int blkSizeX, int blkSizeY, int overlapX, int overlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi)
+FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi)
 : core(core), vsapi(vsapi) {
     // FIXME, calculate additional padding needed
 
@@ -774,26 +774,48 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int blkSizeX, in
         nRealWidth[plane] = vsapi->getFrameWidth(srcFrame, plane);
         nRealHeight[plane] = vsapi->getFrameHeight(srcFrame, plane);
 
-        // FIXME, calculate padding
         nWidth[plane] = nRealWidth[plane];
         nHeight[plane] = nRealHeight[plane];
     }
 
 
+
+    if (nBlkSizeX) {
+        int nBlkX = (nRealWidth[0] - nOverlapX) / (nBlkSizeX - nOverlapX);
+        int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+        if (nWidth_B < nRealWidth[0]) {
+            ++nBlkX;
+            nWidth[0] = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+            nWidth[1] = nWidth[0] / xRatioUV;
+            nWidth[2] = nWidth[0] / xRatioUV;
+        }
+    }
+
+    if (nBlkSizeY > 0) {
+        int nBlkY = (nRealHeight[0] - nOverlapY) / (nBlkSizeY - nOverlapY);
+        int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+        if (nHeight_B < nRealHeight[0]) {
+            ++nBlkY;
+            nHeight[0] = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+            nHeight[1] = nHeight[0] / yRatioUV;
+            nHeight[2] = nHeight[0] / yRatioUV;
+        }
+    }
+
     size_t tempBufferSize = (nWidth[0] * format->bytesPerSample * 8); // FIXME, roud up nicer?
 
     uint8_t *tempBuffer = vsh::vsh_aligned_malloc<uint8_t>(tempBufferSize, 32);
 
-    // FIXME, overlap padding
+    // FIXME, also limit the number of levels generated based on blksize to save memory
     if (format->bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
-            pyramidLevels[0].planes[plane].CopyAndPadPlane<uint8_t>(srcFrame, plane, nHPad[plane], nVPad[plane], blkSizeX - overlapX, blkSizeY - overlapY, core, vsapi);
+            pyramidLevels[0].planes[plane].CopyAndPadPlane<uint8_t>(srcFrame, plane, nHPad[plane], nVPad[plane], nWidth[plane] - nRealWidth[plane], nHeight[plane] - nRealHeight[plane], core, vsapi);
             for (int i = 1; i < levels; i++)
                 pyramidLevels[i].planes[plane].ReducePlane<uint8_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer, core, vsapi);
         }
     } else {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
-            pyramidLevels[0].planes[plane].CopyAndPadPlane<uint16_t>(srcFrame, plane, nHPad[plane], nVPad[plane], blkSizeX - overlapX, blkSizeY - overlapY, core, vsapi);
+            pyramidLevels[0].planes[plane].CopyAndPadPlane<uint16_t>(srcFrame, plane, nHPad[plane], nVPad[plane], nWidth[plane] - nRealWidth[plane], nHeight[plane] - nRealHeight[plane], core, vsapi);
             for (int i = 1; i < levels; i++)
                 pyramidLevels[i].planes[plane].ReducePlane<uint16_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer, core, vsapi);
         }

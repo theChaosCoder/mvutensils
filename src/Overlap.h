@@ -17,28 +17,30 @@
 #define OW_BM 7
 #define OW_BR 8
 
-typedef struct OverlapWindows {
-    int nx; // window sizes
-    int ny;
-    int ox; // overap sizes
-    int oy;
-    int size; // full window size= nx*ny
+class OverlapWindows {
+    int nx = -1; // window sizes
+    int ny = -1;
+    int ox = -1; // overap sizes
+    int oy = -1;
+    int size = -1; // full window size= nx*ny
 
-    int16_t *Overlap9Windows;
+    int16_t *Overlap9Windows = nullptr;
 
-    float *fWin1UVx;
-    float *fWin1UVxfirst;
-    float *fWin1UVxlast;
-    float *fWin1UVy;
-    float *fWin1UVyfirst;
-    float *fWin1UVylast;
-} OverlapWindows;
+    float *fWin1UVx = nullptr;
+    float *fWin1UVxfirst = nullptr;
+    float *fWin1UVxlast = nullptr;
+    float *fWin1UVy = nullptr;
+    float *fWin1UVyfirst = nullptr;
+    float *fWin1UVylast = nullptr;
+public:
+    OverlapWindows() = default;
+    void Init(int nx, int ny, int ox, int oy);
+    ~OverlapWindows();
+    const int16_t *GetWindow(int i) const {
+        return Overlap9Windows + size * i;
+    }
+};
 
-void overInit(OverlapWindows *over, int nx, int ny, int ox, int oy);
-
-void overDeinit(OverlapWindows *over);
-
-int16_t *overGetWindow(const OverlapWindows *over, int i);
 
 
 typedef void (*OverlapsFunction)(uint8_t *pDst, ptrdiff_t nDstPitch,

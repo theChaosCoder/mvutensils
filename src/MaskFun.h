@@ -23,7 +23,6 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "Fakery.h"
 #include "SuperPyramid.h"
 
 void CheckAndPadSmallY(int16_t *VXSmallY, int16_t *VYSmallY, int nBlkXP, int nBlkYP, int nBlkX, int nBlkY);

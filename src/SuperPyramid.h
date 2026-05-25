@@ -175,7 +175,7 @@ public: //? ?????
     VSCore *core;
     const VSAPI *vsapi;
 public:
-    FramePyramid(const VSFrame *srcFrame, int levels, int blkSizeX, int blkSizeY, int overlapX, int overlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi); // constructor to build from source frames
+    FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi); // constructor to build from source frames
 
     FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // constructor to reconstruct from frame properties
     ~FramePyramid();

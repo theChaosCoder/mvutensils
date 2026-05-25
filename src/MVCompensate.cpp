@@ -19,21 +19,22 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include <climits>
+#include <memory>
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
 #include "CopyCode.h"
-#include "Fakery.h"
 #include "Overlap.h"
-#include "MaskFun.h"
-#include "MVAnalysisData.h"
+//#include "MaskFun.h"
 #include "CommonMacros.h"
+#include "SuperPyramid.h"
+#include "MotionBlockPyramid.h"
 
 
 
 typedef struct MVCompensateData {
     VSNode *node;
-    const VSVideoInfo *vi;
+    VSVideoInfo vi;
     const VSVideoInfo *supervi;
 
     VSNode *super;
@@ -47,16 +48,15 @@ typedef struct MVCompensateData {
     int nSCD2;
     int tff;
     int tff_exists;
-
-    MVAnalysisData vectors_data;
+    int deltaFrame;
 
     bool chroma;
 
     int dstTempPitch;
     int dstTempPitchUV;
 
-    OverlapWindows *OverWins;
-    OverlapWindows *OverWinsUV;
+    OverlapWindows OverWins;
+    OverlapWindows OverWinsUV;
 
     OverlapsFunction OVERS[3];
     COPYFunction BLIT[3];
@@ -64,25 +64,12 @@ typedef struct MVCompensateData {
 } MVCompensateData;
 
 
-// FIXME, template things
-typedef uint8_t PixelType;
-
+template<typename PixelType>
 static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
-
     MVCompensateData *d = (MVCompensateData *)instanceData;
+    int nref = n + d->deltaFrame;
 
     if (activationReason == arInitial) {
-        // XXX off could be calculated during initialisation
-        int off, nref;
-        if (d->vectors_data.nDeltaFrame > 0) {
-            off = d->vectors_data.isBackward ? 1 : -1;
-            off *= d->vectors_data.nDeltaFrame;
-            nref = n + off;
-        } else {
-            nref = -d->vectors_data.nDeltaFrame; // positive frame number (special static mode)
-        }
-
         vsapi->requestFrameFilter(n, d->vectors, frameCtx);
 
         if (nref < n && nref >= 0)
@@ -90,15 +77,9 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
 
         vsapi->requestFrameFilter(n, d->super, frameCtx);
 
-        if (nref >= n && nref < d->vi->numFrames)
+        if (nref >= n && nref < d->vi.numFrames)
             vsapi->requestFrameFilter(nref, d->super, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
-
-        // FIXME, should grab the properties from clip to make more sense, clip is also good to have when returning the unchanged frame for out of range nref
-        VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
-
-
         uint8_t *pDst[3] = { NULL };
         uint8_t *pDstCur[3] = { NULL };
         const uint8_t *pRef[3] = { NULL };
@@ -108,40 +89,27 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
         ptrdiff_t nSrcPitches[3] = { 0 };
 
         const VSFrame *mvn = vsapi->getFrameFilter(n, d->vectors, frameCtx);
-        FakeGroupOfPlanes fgop;
-        fgopInit(&fgop, &d->vectors_data);
-        const VSMap *mvprops = vsapi->getFramePropertiesRO(mvn);
-        fgopUpdate(&fgop, (const uint8_t *)vsapi->mapGetData(mvprops, prop_MVTools_vectors, 0, NULL));
+        MotionBlockPyramid vectors(mvn, 0, "MVUtensils", core, vsapi);
         vsapi->freeFrame(mvn);
 
-        int off, nref;
-        if (d->vectors_data.nDeltaFrame > 0) {
-            off = (d->vectors_data.isBackward) ? 1 : -1;
-            off *= d->vectors_data.nDeltaFrame;
-            nref = n + off;
-        } else {
-            nref = -d->vectors_data.nDeltaFrame; // positive frame number (special static mode)
-        }
-
-
-        const int xRatioUV = d->vectors_data.xRatioUV;
-        const int yRatioUV = d->vectors_data.yRatioUV;
+        const int xRatioUV = vectors.xRatioUV;
+        const int yRatioUV = vectors.yRatioUV;
         const int ySubUV = (yRatioUV == 2) ? 1 : 0;
         const int xSubUV = (xRatioUV == 2) ? 1 : 0;
-        const int nWidth[3] = { d->vectors_data.nWidth, nWidth[0] >> xSubUV, nWidth[1] };
-        const int nHeight[3] = { d->vectors_data.nHeight, nHeight[0] >> ySubUV, nHeight[1] };
-        const int nOverlapX[3] = { d->vectors_data.nOverlapX, nOverlapX[0] >> xSubUV, nOverlapX[1] };
-        const int nOverlapY[3] = { d->vectors_data.nOverlapY, nOverlapY[0] >> ySubUV, nOverlapY[1] };
-        const int nBlkSizeX[3] = { d->vectors_data.nBlkSizeX, nBlkSizeX[0] >> xSubUV, nBlkSizeX[1] };
-        const int nBlkSizeY[3] = { d->vectors_data.nBlkSizeY, nBlkSizeY[0] >> ySubUV, nBlkSizeY[1] };
-        const int nBlkX = d->vectors_data.nBlkX;
-        const int nBlkY = d->vectors_data.nBlkY;
+        const int nWidth[3] = { vectors.nWidth, nWidth[0] >> xSubUV, nWidth[1] };
+        const int nHeight[3] = { vectors.nHeight, nHeight[0] >> ySubUV, nHeight[1] };
+        const int nOverlapX[3] = { vectors.nOverlapX, nOverlapX[0] >> xSubUV, nOverlapX[1] };
+        const int nOverlapY[3] = { vectors.nOverlapY, nOverlapY[0] >> ySubUV, nOverlapY[1] };
+        const int nBlkSizeX[3] = { vectors.nBlkSizeX, nBlkSizeX[0] >> xSubUV, nBlkSizeX[1] };
+        const int nBlkSizeY[3] = { vectors.nBlkSizeY, nBlkSizeY[0] >> ySubUV, nBlkSizeY[1] };
+        const int nBlkX = vectors.nBlkX;
+        const int nBlkY = vectors.nBlkY;
         const int64_t thSAD = d->thSAD;
         const int dstTempPitch[3] = { d->dstTempPitch, d->dstTempPitchUV, d->dstTempPitchUV };
         const bool chroma = d->chroma;
-        const int nPel = d->vectors_data.nPel;
-        const int nHPadding[3] = { d->vectors_data.nHPadding, nHPadding[0] >> xSubUV, nHPadding[1] };
-        const int nVPadding[3] = { d->vectors_data.nVPadding, nVPadding[0] >> ySubUV, nVPadding[1] };
+        const int nPel = vectors.nPel;
+        const int nHPadding[3] = { vectors.nHPadding, nHPadding[0] >> xSubUV, nHPadding[1] };
+        const int nVPadding[3] = { vectors.nVPadding, nVPadding[0] >> ySubUV, nVPadding[1] };
         const int scBehavior = d->scBehavior;
         const int fields = d->fields;
         const int time256 = d->time256;
@@ -154,32 +122,26 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
 
         int num_planes = chroma ? 3 : 1;
 
-        if (fgopIsUsable(&fgop, d->nSCD1, d->nSCD2)) {
-            // No need to check nref because nref is always in range when fgop is usable.
+        const VSFrame *realSrc = vsapi->getFrameFilter(n, d->node, frameCtx);
+        VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, realSrc, core);
+        vsapi->freeFrame(realSrc);
+        const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
+        FramePyramid pSrcGOF(src, "MVUtensils", core, vsapi);
+        const auto &pSrcPlanes = pSrcGOF.GetLevel(0).planes;
+
+        if (nref >= 0 && nref < d->vi.numFrames && vectors.IsUsable(d->nSCD1, d->nSCD2)) {
             const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-            FramePyramid pSrcGOF(src, "MVUtensils", core, vsapi);
             FramePyramid pRefGOF(ref, "MVUtensils", core, vsapi);
+            const auto &pRefPlanes = pRefGOF.GetLevel(0).planes;
 
             for (int i = 0; i < d->supervi->format.numPlanes; i++) {
                 pDstCur[i] = pDst[i] = vsapi->getWritePtr(dst, i);
                 nDstPitches[i] = vsapi->getStride(dst, i);
-                // FIXME, these probably expect to point at padded planes
-                /* 
-                * original code
-                pSrc[i] = vsapi->getReadPtr(src, i);
-                nSrcPitches[i] = vsapi->getStride(src, i);
-                pRef[i] = vsapi->getReadPtr(ref, i);
-                nRefPitches[i] = vsapi->getStride(ref, i);
-                */
-
                 pSrc[i] = pSrcGOF.GetLevel(0).planes[i].pPlane[0];
                 nSrcPitches[i] = pSrcGOF.GetLevel(0).planes[i].nPitch;
                 pRef[i] = pRefGOF.GetLevel(0).planes[i].pPlane[0];
                 nRefPitches[i] = pRefGOF.GetLevel(0).planes[i].nPitch;
             }
-
-            const auto &pRefPlanes = pRefGOF.GetLevel(0).planes;
-            const auto &pSrcPlanes = pSrcGOF.GetLevel(0).planes;
 
 
             int fieldShift = 0;
@@ -189,7 +151,6 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                 int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
                 if (err && !d->tff_exists) {
                     vsapi->setFilterError("Compensate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                    fgopDeinit(&fgop);
                     vsapi->freeFrame(src);
                     vsapi->freeFrame(dst);
                     vsapi->freeFrame(ref);
@@ -203,7 +164,6 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                 int ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
                 if (err && !d->tff_exists) {
                     vsapi->setFilterError("Compensate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                    fgopDeinit(&fgop);
                     vsapi->freeFrame(src);
                     vsapi->freeFrame(dst);
                     vsapi->freeFrame(ref);
@@ -218,24 +178,25 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
             }
 
             if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
+                // FIXME, don't write beyond destination with no overlap
                 for (int by = 0; by < nBlkY; by++) {
                     int xx[3] = { 0 };
 
                     for (int bx = 0; bx < nBlkX; bx++) {
                         int i = by * nBlkX + bx;
-                        const FakeBlockData *block = fgopGetBlock(&fgop, 0, i);
+                        const BlockData block = vectors.GetBlock(i);
 
                         int blx[3], bly[3];
 
-                        if (block->vector.sad < thSAD) {
-                            blx[0] = block->x * nPel + block->vector.x * time256 / 256;
-                            bly[0] = block->y * nPel + block->vector.y * time256 / 256 + fieldShift;
+                        if (block.vector.sad < thSAD) {
+                            blx[0] = block.x * nPel + block.vector.x * time256 / 256;
+                            bly[0] = block.y * nPel + block.vector.y * time256 / 256 + fieldShift;
                         } else {
                             blx[0] = bx * nBlkSizeX[0] * nPel;
                             bly[0] = by * nBlkSizeY[0] * nPel + fieldShift;
                         }
 
-                        const auto &pPlanes = (block->vector.sad < thSAD) ? pRefPlanes : pSrcPlanes;
+                        const auto &pPlanes = (block.vector.sad < thSAD) ? pRefPlanes : pSrcPlanes;
 
                         blx[1] = blx[2] = blx[0] >> xSubUV;
                         bly[1] = bly[2] = bly[0] >> ySubUV;
@@ -266,24 +227,24 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                     for (int bx = 0; bx < nBlkX; bx++) {
                         // select window
                         wbx = bx == nBlkX - 1 ? 2 : wbx; //(bx + nBlkX - 3) / (nBlkX - 2);
-                        int16_t *winOver[3] = { overGetWindow(d->OverWins, wby + wbx) };
+                        const int16_t *winOver[3] = { d->OverWins.GetWindow(wby + wbx) };
                         if (chroma)
-                            winOver[1] = winOver[2] = overGetWindow(d->OverWinsUV, wby + wbx);
+                            winOver[1] = winOver[2] = d->OverWinsUV.GetWindow(wby + wbx);
 
                         int i = by * nBlkX + bx;
-                        const FakeBlockData *block = fgopGetBlock(&fgop, 0, i);
+                        const BlockData block = vectors.GetBlock(i);
 
                         int blx[3], bly[3];
 
-                        if (block->vector.sad < thSAD) {
-                            blx[0] = block->x * nPel + block->vector.x * time256 / 256;
-                            bly[0] = block->y * nPel + block->vector.y * time256 / 256 + fieldShift;
+                        if (block.vector.sad < thSAD) {
+                            blx[0] = block.x * nPel + block.vector.x * time256 / 256;
+                            bly[0] = block.y * nPel + block.vector.y * time256 / 256 + fieldShift;
                         } else {
                             blx[0] = bx * (nBlkSizeX[0] - nOverlapX[0]) * nPel;
                             bly[0] = by * (nBlkSizeY[0] - nOverlapY[0]) * nPel + fieldShift;
                         }
 
-                        const auto &pPlanes = (block->vector.sad < thSAD) ? pRefPlanes : pSrcPlanes;
+                        const auto &pPlanes = (block.vector.sad < thSAD) ? pRefPlanes : pSrcPlanes;
 
                         blx[1] = blx[2] = blx[0] >> xSubUV;
                         bly[1] = bly[2] = bly[0] >> ySubUV;
@@ -303,8 +264,7 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                 }
 
                 for (int plane = 0; plane < num_planes; plane++) {
-                    d->ToPixels(pDst[plane], nDstPitches[plane], DstTemp[plane], dstTempPitch[plane], nWidth_B[plane], nHeight_B[plane], bitsPerSample);
-
+                    d->ToPixels(pDst[plane], nDstPitches[plane], DstTemp[plane], dstTempPitch[plane], std::min(vsapi->getFrameWidth(dst, plane), nWidth_B[plane]), std::min(vsapi->getFrameHeight(dst, plane), nHeight_B[plane]), bitsPerSample);
                     free(DstTemp[plane]);
                 }
             }
@@ -334,110 +294,62 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                 }
             }
 
+
             vsapi->freeFrame(ref);
-        } else { // fgopIsUsable()
-            // FIXME, this simply returns the original clip frame if the reference frame is out of range, rewrite to not use memcpy
 
-            if (!scBehavior && nref < d->vi->numFrames && nref >= 0) {
-                vsapi->freeFrame(src);
-                src = vsapi->getFrameFilter(nref, d->super, frameCtx);
-            }
-
-            for (int plane = 0; plane < num_planes; plane++) {
-                pDst[plane] = vsapi->getWritePtr(dst, plane);
-                nDstPitches[plane] = vsapi->getStride(dst, plane);
-                pSrc[plane] = vsapi->getReadPtr(src, plane);
-                nSrcPitches[plane] = vsapi->getStride(src, plane);
-
-                vsh::bitblt(pDst[plane], nDstPitches[plane], pSrc[plane], nSrcPitches[plane], nWidth[plane] * sizeof(PixelType), nHeight[plane]);
-            }
+            return dst;
+        } else {
+           
+            // Copy image+block size padding to dst
+            for (int plane = 0; plane < num_planes; plane++)
+                vsh::bitblt(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), pSrcPlanes[plane].GetPointer<PixelType>(0, 0), pSrcPlanes[plane].nPitch, pSrcPlanes[plane].nWidth * sizeof(PixelType), d->vi.height);
         }
 
-        fgopDeinit(&fgop);
-
         vsapi->freeFrame(src);
-
-        return dst;
     }
 
-    return 0;
+    return nullptr;
 }
 
 
 static void VS_CC mvcompensateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
     MVCompensateData *d = (MVCompensateData *)instanceData;
-
-    if (d->vectors_data.nOverlapX || d->vectors_data.nOverlapY) {
-        overDeinit(d->OverWins);
-        free(d->OverWins);
-        if (d->chroma) {
-            overDeinit(d->OverWinsUV);
-            free(d->OverWinsUV);
-        }
-    }
 
     vsapi->freeNode(d->super);
     vsapi->freeNode(d->vectors);
     vsapi->freeNode(d->node);
-    free(d);
-}
-
-
-static void selectFunctions(MVCompensateData *d) {
-    const unsigned xRatioUV = d->vectors_data.xRatioUV;
-    const unsigned yRatioUV = d->vectors_data.yRatioUV;
-    const unsigned nBlkSizeX = d->vectors_data.nBlkSizeX;
-    const unsigned nBlkSizeY = d->vectors_data.nBlkSizeY;
-    const unsigned bits = d->vi->format.bytesPerSample * 8;
-
-    if (d->vi->format.bitsPerSample == 8) {
-        d->ToPixels = ToPixels<uint16_t, uint8_t>;
-    } else {
-        d->ToPixels = ToPixels<uint32_t, uint16_t>;
-    }
-
-    d->OVERS[0] = selectOverlapsFunction(nBlkSizeX, nBlkSizeY, bits);
-    d->BLIT[0] = selectCopyFunction(nBlkSizeX, nBlkSizeY, bits);
-
-    d->OVERS[1] = d->OVERS[2] = selectOverlapsFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits);
-    d->BLIT[1] = d->BLIT[2] = selectCopyFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits);
+    delete d;
 }
 
 
 static void VS_CC mvcompensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
-
-    MVCompensateData d;
-    MVCompensateData *data;
-
+    std::unique_ptr<MVCompensateData> d(new MVCompensateData());
     int err;
 
-    d.scBehavior = !!vsapi->mapGetInt(in, "scbehavior", 0, &err);
+    d->scBehavior = !!vsapi->mapGetInt(in, "scbehavior", 0, &err);
     if (err)
-        d.scBehavior = 1;
+        d->scBehavior = 1;
 
-    d.thSAD = vsapi->mapGetInt(in, "thsad", 0, &err);
+    d->thSAD = vsapi->mapGetInt(in, "thsad", 0, &err);
     if (err)
-        d.thSAD = 10000;
+        d->thSAD = 10000;
 
-    d.fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
+    d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 
     double time = vsapi->mapGetFloat(in, "time", 0, &err);
     if (err)
         time = 100.0;
 
-    d.nSCD1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
+    d->nSCD1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
     if (err)
-        d.nSCD1 = MV_DEFAULT_SCD1;
+        d->nSCD1 = MV_DEFAULT_SCD1;
 
-    d.nSCD2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
+    d->nSCD2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
     if (err)
-        d.nSCD2 = MV_DEFAULT_SCD2;
+        d->nSCD2 = MV_DEFAULT_SCD2;
 
-    d.tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
-    d.tff_exists = !err;
+    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
+    d->tff_exists = !err;
 
 
     if (time < 0.0 || time > 100.0) {
@@ -446,113 +358,114 @@ static void VS_CC mvcompensateCreate(const VSMap *in, VSMap *out, void *userData
     }
 
 
-    d.super = vsapi->mapGetNode(in, "super", 0, NULL);
+    d->super = vsapi->mapGetNode(in, "super", 0, NULL);
 
 #define ERROR_SIZE 1024
     char errorMsg[ERROR_SIZE] = "Compensate: failed to retrieve first frame from super clip. Error message: ";
     size_t errorLen = strlen(errorMsg);
-    const VSFrame *evil = vsapi->getFrame(0, d.super, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+    const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
 #undef ERROR_SIZE
     if (!evil) {
         vsapi->mapSetError(out, errorMsg);
-        vsapi->freeNode(d.super);
+        vsapi->freeNode(d->super);
         return;
     }
 
-    FramePyramid FPEvil(evil, "MVUtensils", core, vsapi);
+    FramePyramid super(evil, "MVUtensils", core, vsapi);
 
-    // Note that this invalidates all data pointers in FPEvil
+    // Note that this invalidates all data pointers in super
     vsapi->freeFrame(evil);
 
-    d.vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
+    d->vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
+
+    d->node = vsapi->mapGetNode(in, "clip", 0, 0);
+    d->vi = *vsapi->getVideoInfo(d->node);
 
 #define ERROR_SIZE 512
     char error[ERROR_SIZE + 1] = { 0 };
-    const char *filter_name = "Compensate";
 
-    adataFromVectorClip(&d.vectors_data, d.vectors, filter_name, "vectors", vsapi, error, ERROR_SIZE);
+    const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+    MotionBlockPyramid vectors(evil2, 0, "MVUtensils", core, vsapi);
 
-    int64_t nSCD1_old = d.nSCD1;
-    scaleThSCD(&d.nSCD1, &d.nSCD2, &d.vectors_data, filter_name, error, ERROR_SIZE);
+    int64_t nSCD1_old = d->nSCD1;
+    vectors.ScaleThSCD(d->nSCD1, d->nSCD2, d->vi.format.bitsPerSample);
 #undef ERROR_SIZE
 
     if (error[0]) {
         vsapi->mapSetError(out, error);
 
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.vectors);
+        vsapi->freeNode(d->super);
+        vsapi->freeNode(d->vectors);
+        vsapi->freeNode(d->node);
         return;
     }
 
+    d->deltaFrame = vectors.nDeltaFrame;
 
-    if (d.fields && d.vectors_data.nPel < 2) {
+    if (d->fields && vectors.nPel < 2) {
         vsapi->mapSetError(out, "Compensate: fields option requires pel > 1.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.vectors);
+        vsapi->freeNode(d->super);
+        vsapi->freeNode(d->vectors);
+        vsapi->freeNode(d->node);
         return;
     }
 
-    d.thSAD = d.thSAD * d.nSCD1 / nSCD1_old; // normalize to block SAD
+    d->thSAD = d->thSAD * d->nSCD1 / nSCD1_old; // normalize to block SAD
 
+    d->dstTempPitch = ((vectors.nWidth + 15) / 16) * 16 * d->vi.format.bytesPerSample * 2;
+    d->dstTempPitchUV = (((vectors.nWidth / vectors.xRatioUV) + 15) / 16) * 16 * d->vi.format.bytesPerSample * 2;
 
-    d.node = vsapi->mapGetNode(in, "clip", 0, 0);
-    d.vi = vsapi->getVideoInfo(d.node);
-
-
-    d.dstTempPitch = ((d.vectors_data.nWidth + 15) / 16) * 16 * d.vi->format.bytesPerSample * 2;
-    d.dstTempPitchUV = (((d.vectors_data.nWidth / d.vectors_data.xRatioUV) + 15) / 16) * 16 * d.vi->format.bytesPerSample * 2;
-
-
-    d.supervi = vsapi->getVideoInfo(d.super);
-    int nSuperWidth = d.supervi->width;
+    d->supervi = vsapi->getVideoInfo(d->super);
     
-    // FIXME, full dimension checks
-
-    /*
-
-    if (d.vectors_data.nHeight != nHeightS || d.vectors_data.nHeight != d.vi->height || d.vectors_data.nWidth != nSuperWidth - d.nSuperHPad * 2 || d.vectors_data.nWidth != d.vi->width || d.vectors_data.nPel != d.nSuperPel) {
+    if (vectors.nHeight != super.nHeight[0] || vectors.nWidth != super.nWidth[0]  || vectors.nRealHeight != d->vi.height || vectors.nRealWidth != d->vi.width || vectors.nPel != super.nPel) {
         vsapi->mapSetError(out, "Compensate: wrong source or super clip frame size.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.vectors);
-        vsapi->freeNode(d.node);
+        vsapi->freeNode(d->super);
+        vsapi->freeNode(d->vectors);
+        vsapi->freeNode(d->node);
         return;
     }
 
-        */
-
-    if (!vsh::isConstantVideoFormat(d.vi) || d.vi->format.bitsPerSample > 16 || d.vi->format.sampleType != stInteger || d.vi->format.subSamplingW > 1 || d.vi->format.subSamplingH > 1 || (d.vi->format.colorFamily != cfYUV && d.vi->format.colorFamily != cfGray)) {
+    if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 16 || d->vi.format.sampleType != stInteger || d->vi.format.subSamplingW > 1 || d->vi.format.subSamplingH > 1 || (d->vi.format.colorFamily != cfYUV && d->vi.format.colorFamily != cfGray)) {
         vsapi->mapSetError(out, "Compensate: input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.vectors);
-        vsapi->freeNode(d.node);
+        vsapi->freeNode(d->super);
+        vsapi->freeNode(d->vectors);
+        vsapi->freeNode(d->node);
         return;
     }
 
+    d->chroma = (d->vi.format.colorFamily != cfGray);
 
-    if (d.vectors_data.nOverlapX || d.vectors_data.nOverlapY) {
-        d.OverWins = (OverlapWindows *)malloc(sizeof(OverlapWindows));
-        overInit(d.OverWins, d.vectors_data.nBlkSizeX, d.vectors_data.nBlkSizeY, d.vectors_data.nOverlapX, d.vectors_data.nOverlapY);
-        if (d.chroma) {
-            d.OverWinsUV = (OverlapWindows *)malloc(sizeof(OverlapWindows));
-            overInit(d.OverWinsUV, d.vectors_data.nBlkSizeX / d.vectors_data.xRatioUV, d.vectors_data.nBlkSizeY / d.vectors_data.yRatioUV, d.vectors_data.nOverlapX / d.vectors_data.xRatioUV, d.vectors_data.nOverlapY / d.vectors_data.yRatioUV);
-        }
+    if (vectors.nOverlapX > 0 || vectors.nOverlapY > 0) {
+        d->OverWins.Init(vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY);
+        if (d->chroma)
+            d->OverWinsUV.Init(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, vectors.nOverlapX / vectors.xRatioUV, vectors.nOverlapY / vectors.yRatioUV);
     }
 
-    d.time256 = (int)(time * 256 / 100);
+    const unsigned bits = d->vi.format.bytesPerSample * 8;
 
-    selectFunctions(&d);
+    if (d->vi.format.bitsPerSample == 8) {
+        d->ToPixels = ToPixels<uint16_t, uint8_t>;
+    } else {
+        d->ToPixels = ToPixels<uint32_t, uint16_t>;
+    }
+
+    d->OVERS[0] = selectOverlapsFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);
+    d->BLIT[0] = selectCopyFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);
+
+    d->OVERS[1] = d->OVERS[2] = selectOverlapsFunction(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, bits);
+    d->BLIT[1] = d->BLIT[2] = selectCopyFunction(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, bits);
+
+    d->time256 = (int)(time * 256 / 100);
 
 
-    data = (MVCompensateData *)malloc(sizeof(d));
-    *data = d;
-
-    VSFilterDependency deps[2] = { 
-        // {data->node, rpGeneral}, //compensate doesn't actually request frames from the input clip.
-        {data->super, rpGeneral},
-        {data->vectors, rpGeneral},
+    VSFilterDependency deps[3] = { 
+        {d->node, rpStrictSpatial},
+        {d->super, rpStrictSpatial},
+        {d->vectors, rpNoFrameReuse},
     };
 
-    vsapi->createVideoFilter(out, "Compensate", data->vi,  mvcompensateGetFrame, mvcompensateFree, fmParallel, deps,  ARRAY_SIZE(deps), data, core);
+    vsapi->createVideoFilter(out, "Compensate", &d->vi, d->vi.format.bytesPerSample == 1 ? mvcompensateGetFrame<uint8_t> : mvcompensateGetFrame<uint16_t>, mvcompensateFree, fmParallel, deps,  ARRAY_SIZE(deps), d.get(), core);
+    d.release();
 }
 
 

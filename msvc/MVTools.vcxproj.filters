@@ -27,9 +27,6 @@
     <ClInclude Include="..\src\SimpleResize.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\PlaneOfBlocks.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\SADFunctions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -40,15 +37,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\MVDegrains.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\MVAnalysisData.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\GroupOfPlanes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\Fakery.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\CopyCode.h">
@@ -110,9 +98,6 @@
     <ClCompile Include="..\src\SADFunctions.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\PlaneOfBlocks.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\Overlap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -137,19 +122,10 @@
     <ClCompile Include="..\src\MVDegrains_AVX2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\Fakery.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\CPU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\GroupOfPlanes.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\MVAnalyse.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\MVAnalysisData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\MVBlockFPS.cpp">

@@ -92,15 +92,11 @@
     <ClInclude Include="..\src\CommonMacros.h" />
     <ClInclude Include="..\src\CopyCode.h" />
     <ClInclude Include="..\src\CPU.h" />
-    <ClInclude Include="..\src\Fakery.h" />
-    <ClInclude Include="..\src\GroupOfPlanes.h" />
     <ClInclude Include="..\src\MaskFun.h" />
     <ClInclude Include="..\src\MotionBlockPyramid.h" />
-    <ClInclude Include="..\src\MVAnalysisData.h" />
     <ClInclude Include="..\src\MVDegrains.h" />
     <ClInclude Include="..\src\MVFlowFPSHelper.h" />
     <ClInclude Include="..\src\Overlap.h" />
-    <ClInclude Include="..\src\PlaneOfBlocks.h" />
     <ClInclude Include="..\src\SADFunctions.h" />
     <ClInclude Include="..\src\SimpleResize.h" />
     <ClInclude Include="..\src\sse2neon.h" />
@@ -110,15 +106,12 @@
     <ClCompile Include="..\src\CopyCode.cpp" />
     <ClCompile Include="..\src\CPU.cpp" />
     <ClCompile Include="..\src\EntryPoint.cpp" />
-    <ClCompile Include="..\src\Fakery.cpp" />
-    <ClCompile Include="..\src\GroupOfPlanes.cpp" />
     <ClCompile Include="..\src\MaskFun.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\src\MotionBlockPyramid.cpp" />
     <ClCompile Include="..\src\MVAnalyse.cpp" />
-    <ClCompile Include="..\src\MVAnalysisData.cpp" />
     <ClCompile Include="..\src\MVBlockFPS.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -178,7 +171,6 @@
     <ClCompile Include="..\src\MVSuper.cpp" />
     <ClCompile Include="..\src\Overlap.cpp" />
     <ClCompile Include="..\src\Overlap_AVX2.cpp" />
-    <ClCompile Include="..\src\PlaneOfBlocks.cpp" />
     <ClCompile Include="..\src\SADFunctions.cpp" />
     <ClCompile Include="..\src\SADFunctions_AVX2.cpp" />
     <ClCompile Include="..\src\SimpleResize.cpp" />

@@ -1,3 +1,1669 @@
 #include "MotionBlockPyramid.h"
 
+#include <VSHelper4.h>
+#include "CommonFunctions.h"
+#include <functional>
+#include <stdexcept>
 
+///////////////////////////////////
+
+void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) {
+    int normFactor = 3 - nLogPel + parentLevel.nLogPel;
+    int mulFactor = (normFactor < 0) ? -normFactor : 0;
+    normFactor = (normFactor < 0) ? 0 : normFactor;
+    int normov = (nBlkSizeX - nOverlapX) * (nBlkSizeY - nOverlapY);
+    int aoddx = (nBlkSizeX * 3 - nOverlapX * 2);
+    int aevenx = (nBlkSizeX * 3 - nOverlapX * 4);
+    int aoddy = (nBlkSizeY * 3 - nOverlapY * 2);
+    int aeveny = (nBlkSizeY * 3 - nOverlapY * 4);
+    // note: overlapping is still (v2.5.7) not processed properly
+    double scaleov = 1.0 / normov;
+    for (int l = 0, index = 0; l < nBlkY; l++) {
+        for (int k = 0; k < nBlkX; k++, index++) {
+            VECTOR v1, v2, v3, v4;
+            int i = k;
+            int j = l;
+            if (i >= 2 * parentLevel.nBlkX)
+                i = 2 * parentLevel.nBlkX - 1;
+            if (j >= 2 * parentLevel.nBlkY)
+                j = 2 * parentLevel.nBlkY - 1;
+            int offy = -1 + 2 * (j % 2);
+            int offx = -1 + 2 * (i % 2);
+
+            if ((i == 0) || (i >= 2 * parentLevel.nBlkX - 1)) {
+                if ((j == 0) || (j >= 2 * parentLevel.nBlkY - 1)) {
+                    v1 = v2 = v3 = v4 = parentLevel.vectors[i / 2 + (j / 2) * parentLevel.nBlkX];
+                } else {
+                    v1 = v2 = parentLevel.vectors[i / 2 + (j / 2) * parentLevel.nBlkX];
+                    v3 = v4 = parentLevel.vectors[i / 2 + (j / 2 + offy) * parentLevel.nBlkX];
+                }
+            } else if ((j == 0) || (j >= 2 * parentLevel.nBlkY - 1)) {
+                v1 = v2 = parentLevel.vectors[i / 2 + (j / 2) * parentLevel.nBlkX];
+                v3 = v4 = parentLevel.vectors[i / 2 + offx + (j / 2) * parentLevel.nBlkX];
+            } else {
+                v1 = parentLevel.vectors[i / 2 + (j / 2) * parentLevel.nBlkX];
+                v2 = parentLevel.vectors[i / 2 + offx + (j / 2) * parentLevel.nBlkX];
+                v3 = parentLevel.vectors[i / 2 + (j / 2 + offy) * parentLevel.nBlkX];
+                v4 = parentLevel.vectors[i / 2 + offx + (j / 2 + offy) * parentLevel.nBlkX];
+            }
+
+            int64_t temp_sad;
+
+            if (nOverlapX == 0 && nOverlapY == 0) {
+                vectors[index].x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
+                vectors[index].y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
+                temp_sad = 9 * v1.sad + 3 * v2.sad + 3 * v3.sad + v4.sad + 8;
+            } else if (nOverlapX <= (nBlkSizeX >> 1) && nOverlapY <= (nBlkSizeY >> 1)) { // corrected in v1.4.11
+                int ax1 = (offx > 0) ? aoddx : aevenx;
+                int ax2 = (nBlkSizeX - nOverlapX) * 4 - ax1;
+                int ay1 = (offy > 0) ? aoddy : aeveny;
+                int ay2 = (nBlkSizeY - nOverlapY) * 4 - ay1;
+                // 64 bit so that the multiplications by the SADs don't overflow with 16 bit input.
+                int64_t a11 = ax1 * ay1, a12 = ax1 * ay2, a21 = ax2 * ay1, a22 = ax2 * ay2;
+                vectors[index].x = (int)((a11 * v1.x + a21 * v2.x + a12 * v3.x + a22 * v4.x) * scaleov);
+                vectors[index].y = (int)((a11 * v1.y + a21 * v2.y + a12 * v3.y + a22 * v4.y) * scaleov);
+                temp_sad = (a11 * v1.sad + a21 * v2.sad + a12 * v3.sad + a22 * v4.sad) * scaleov;
+            } else { // large overlap. Weights are not quite correct but let it be
+                // Dead branch. The overlap is no longer allowed to be more than half the block size.
+                assert(false);
+            }
+            vectors[index].x = (vectors[index].x >> normFactor) * (1 << mulFactor);
+            vectors[index].y = (vectors[index].y >> normFactor) * (1 << mulFactor);
+            vectors[index].sad = temp_sad >> 4;
+        }
+    }
+}
+
+void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) {
+    // estimate global motion from current plane vectors data for using on next plane - added by Fizick
+    // on input globalMVec is prev estimation
+    // on output globalMVec is doubled for next scale plane using
+
+    // use very simple but robust method
+    // more advanced method (like MVDepan) can be implemented later
+
+    // find most frequent x
+    std::fill(freqArray.begin(), freqArray.end(), 0);
+    size_t indmin = freqArray.size() - 1;
+    size_t indmax = 0;
+    for (int i = 0; i < nBlkCount; i++) {
+        size_t ind = (freqArray.size() >> 1) + vectors[i].x;
+        if (ind >= 0 && ind < freqArray.size()) {
+            freqArray[ind] += 1;
+            if (ind > indmax)
+                indmax = ind;
+            if (ind < indmin)
+                indmin = ind;
+        }
+    }
+    int count = freqArray[indmin];
+    size_t index = indmin;
+    for (size_t i = indmin + 1; i <= indmax; i++) {
+        if (freqArray[i] > count) {
+            count = freqArray[i];
+            index = i;
+        }
+    }
+    int medianx = (index - (freqArray.size() >> 1)); // most frequent value
+
+    // find most frequent y
+    std::fill(freqArray.begin(), freqArray.end(), 0);
+    indmin = freqArray.size() - 1;
+    indmax = 0;
+    for (size_t i = 0; i < nBlkCount; i++) {
+        size_t ind = (freqArray.size() >> 1) + vectors[i].y;
+        if (ind >= 0 && ind < freqArray.size()) {
+            freqArray[ind] += 1;
+            if (ind > indmax)
+                indmax = ind;
+            if (ind < indmin)
+                indmin = ind;
+        }
+    }
+    count = freqArray[indmin];
+    index = indmin;
+    for (size_t i = indmin + 1; i <= indmax; i++) {
+        if (freqArray[i] > count) {
+            count = freqArray[i];
+            index = i;
+        }
+    }
+    int mediany = (index - (freqArray.size() >> 1)); // most frequent value
+
+
+    // iteration to increase precision
+    int meanvx = 0;
+    int meanvy = 0;
+    int num = 0;
+    for (int i = 0; i < nBlkCount; i++) {
+        if (abs(vectors[i].x - medianx) < 6 && abs(vectors[i].y - mediany) < 6) {
+            meanvx += vectors[i].x;
+            meanvy += vectors[i].y;
+            num += 1;
+        }
+    }
+
+    // output vectors must be doubled for next (finer) scale level
+    if (num > 0) {
+        globalMVec.x = 2 * meanvx / num;
+        globalMVec.y = 2 * meanvy / num;
+    } else {
+        globalMVec.x = 2 * medianx;
+        globalMVec.y = 2 * mediany;
+    }
+}
+
+
+////////////////////////////////////////////////
+
+static inline int Median3(int a, int b, int c) {
+    // b a c || c a b
+    if (((b <= a) && (a <= c)) || ((c <= a) && (a <= b)))
+        return a;
+
+    // a b c || c b a
+    else if (((a <= b) && (b <= c)) || ((c <= b) && (b <= a)))
+        return b;
+
+    // b c a || a c b
+    else
+        return c;
+}
+
+static void GetMedian(int &vx, int &vy, int vx1, int vy1, int vx2, int vy2, int vx3, int vy3) { // existant median vector (not mixed)
+    vx = Median3(vx1, vx2, vx3);
+    vy = Median3(vy1, vy2, vy3);
+    if ((vx == vx1 && vy == vy1) || (vx == vx2 && vy == vy2) || (vx == vx3 && vy == vy3))
+        return;
+    else {
+        vx = vx1;
+        vy = vy1;
+    }
+}
+
+void MotionBlockPyramid::DivideVectorsExtra(int divideExtra) {
+    assert(dividedVectors.empty());
+    dividedVectors.resize(pyramidLevels[0].nBlkCount * 4);
+
+    const VECTOR *blocks_in = pyramidLevels[0].vectors.data();
+    VECTOR *blocks_out = dividedVectors.data();
+
+    int nBlkY = pyramidLevels[0].nBlkY;
+    int nBlkX = pyramidLevels[0].nBlkX;
+
+    // top blocks
+    for (int bx = 0; bx < nBlkX; bx++) {
+        VECTOR block = blocks_in[bx];
+        block.sad >>= 2;
+
+        blocks_out[bx * 2] = block;                 // top left subblock
+        blocks_out[bx * 2 + 1] = block;             // top right subblock
+        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
+        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
+    }
+
+    blocks_out += nBlkX * 4;
+    blocks_in += nBlkX;
+
+    // middle blocks
+    for (int by = 1; by < nBlkY - 1; by++) {
+        int bx = 0;
+
+        VECTOR block = blocks_in[bx];
+        block.sad >>= 2;
+
+        blocks_out[bx * 2] = block;                 // top left subblock
+        blocks_out[bx * 2 + 1] = block;             // top right subblock
+        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
+        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
+
+        for (bx = 1; bx < nBlkX - 1; bx++) {
+            block = blocks_in[bx];
+            block.sad >>= 2;
+
+            blocks_out[bx * 2] = block;                 // top left subblock
+            blocks_out[bx * 2 + 1] = block;             // top right subblock
+            blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
+            blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
+
+            if (divideExtra > 1) {
+                GetMedian(blocks_out[bx * 2].x, blocks_out[bx * 2].y,
+                    blocks_in[bx].x, blocks_in[bx].y,
+                    blocks_in[bx - 1].x, blocks_in[bx - 1].y,
+                    blocks_in[bx - nBlkX].x, blocks_in[bx - nBlkX].y);
+
+                GetMedian(blocks_out[bx * 2 + 1].x, blocks_out[bx * 2 + 1].y,
+                    blocks_in[bx].x, blocks_in[bx].y,
+                    blocks_in[bx + 1].x, blocks_in[bx + 1].y,
+                    blocks_in[bx - nBlkX].x, blocks_in[bx - nBlkX].y);
+
+                GetMedian(blocks_out[bx * 2 + nBlkX * 2].x, blocks_out[bx * 2 + nBlkX * 2].y,
+                    blocks_in[bx].x, blocks_in[bx].y,
+                    blocks_in[bx - 1].x, blocks_in[bx - 1].y,
+                    blocks_in[bx + nBlkX].x, blocks_in[bx + nBlkX].y);
+
+                GetMedian(blocks_out[bx * 2 + nBlkX * 2 + 1].x, blocks_out[bx * 2 + nBlkX * 2 + 1].y,
+                    blocks_in[bx].x, blocks_in[bx].y,
+                    blocks_in[bx + 1].x, blocks_in[bx + 1].y,
+                    blocks_in[bx + nBlkX].x, blocks_in[bx + nBlkX].y);
+            }
+        }
+
+        bx = nBlkX - 1;
+
+        block = blocks_in[bx];
+        block.sad >>= 2;
+
+        blocks_out[bx * 2] = block;                 // top left subblock
+        blocks_out[bx * 2 + 1] = block;             // top right subblock
+        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
+        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
+
+        blocks_out += nBlkX * 4;
+        blocks_in += nBlkX;
+    }
+
+    // bottom blocks
+    for (int bx = 0; bx < nBlkX; bx++) {
+        VECTOR block = blocks_in[bx];
+        block.sad >>= 2;
+
+        blocks_out[bx * 2] = block;                 // top left subblock
+        blocks_out[bx * 2 + 1] = block;             // top right subblock
+        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
+        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
+    }
+}
+
+
+/////////////////////////////////////////////////////////////
+
+
+
+#ifdef _MSC_VER
+#define FORCE_INLINE __forceinline
+#else
+#define FORCE_INLINE __attribute__((always_inline))
+#endif
+
+
+/* fetch the block in the reference frame, which is pointed by the vector (vx, vy) */
+template <int nLogPelT, typename PixelType>
+const uint8_t *MotionBlockLevel::GetRefBlock(int nVx, int nVy) const {
+    if constexpr (nLogPelT == 0)
+        return pRefFrame->planes[0].GetAbsolutePointerPel1<PixelType>(x[0] + nVx, y[0] + nVy);
+    else if constexpr (nLogPelT == 1)
+        return pRefFrame->planes[0].GetAbsolutePointerPel2<PixelType>(x[0] * 2 + nVx, y[0] * 2 + nVy);
+    else if constexpr (nLogPelT == 2)
+        return pRefFrame->planes[0].GetAbsolutePointerPel4<PixelType>(x[0] * 4 + nVx, y[0] * 4 + nVy);
+    return nullptr;
+}
+
+
+template <int nLogPelT, typename PixelType>
+const uint8_t *MotionBlockLevel::GetRefBlockU(int nVx, int nVy) const {
+    int xbias = (nVx < 0) * ((1 << nLogxRatioUV) - 1);
+    int ybias = (nVy < 0) * ((1 << nLogyRatioUV) - 1);
+
+    if constexpr (nLogPelT == 0)
+        return pRefFrame->planes[1].GetAbsolutePointerPel1<PixelType>(
+            x[1] + ((nVx + xbias) >> nLogxRatioUV),
+            y[1] + ((nVy + ybias) >> nLogyRatioUV));
+    else if constexpr (nLogPelT == 1)
+        return pRefFrame->planes[1].GetAbsolutePointerPel2<PixelType>(
+            x[1] * 2 + ((nVx + xbias) >> nLogxRatioUV),
+            y[1] * 2 + ((nVy + ybias) >> nLogyRatioUV));
+    else if constexpr (nLogPelT == 2)
+        return pRefFrame->planes[1].GetAbsolutePointerPel4<PixelType>(
+            x[1] * 4 + ((nVx + xbias) >> nLogxRatioUV),
+            y[1] * 4 + ((nVy + ybias) >> nLogyRatioUV));
+    return nullptr;
+}
+
+
+template <int nLogPelT, typename PixelType>
+const uint8_t *MotionBlockLevel::GetRefBlockV(int nVx, int nVy) const {
+    int xbias = (nVx < 0) * ((1 << nLogxRatioUV) - 1);
+    int ybias = (nVy < 0) * ((1 << nLogyRatioUV) - 1);
+
+    if constexpr (nLogPelT == 0)
+        return pRefFrame->planes[2].GetAbsolutePointerPel1<PixelType>(
+            x[2] + ((nVx + xbias) >> nLogxRatioUV),
+            y[2] + ((nVy + ybias) >> nLogyRatioUV));
+    else if constexpr (nLogPelT == 1)
+        return pRefFrame->planes[2].GetAbsolutePointerPel2<PixelType>(
+            x[2] * 2 + ((nVx + xbias) >> nLogxRatioUV),
+            y[2] * 2 + ((nVy + ybias) >> nLogyRatioUV));
+    else if constexpr (nLogPelT == 2)
+        return pRefFrame->planes[2].GetAbsolutePointerPel4<PixelType>(
+            x[2] * 4 + ((nVx + xbias) >> nLogxRatioUV),
+            y[2] * 4 + ((nVy + ybias) >> nLogyRatioUV));
+    return nullptr;
+}
+
+
+/* computes square distance between two vectors */
+static unsigned int SquareDifferenceNorm(const VECTOR &v1, const int v2x, const int v2y) {
+    return (v1.x - v2x) * (v1.x - v2x) + (v1.y - v2y) * (v1.y - v2y);
+}
+
+
+/* computes the cost of a vector (vx, vy) */
+int MotionBlockLevel::MotionDistorsion(int vx, int vy) const {
+    int dist = SquareDifferenceNorm(predictor, vx, vy);
+    return (int)((nLambda * dist) >> 8);
+}
+
+// FIXME, can this one be removed by manipulating SAD/SATD function pointers?
+template <bool useSatd>
+int64_t MotionBlockLevel::LumaSAD(const uint8_t *pRef0) const {
+    if constexpr (!useSatd)
+        return SAD(pSrc_temp[0], nSrcPitch_temp[0], pRef0, nRefPitch[0]);
+    else
+        return SATD(pSrc_temp[0], nSrcPitch_temp[0], pRef0, nRefPitch[0]);
+}
+
+
+/* check if a vector is inside search boundaries */
+bool MotionBlockLevel::IsVectorOK(int vx, int vy) const {
+    return ((vx >= nDxMin) &&
+        (vy >= nDyMin) &&
+        (vx < nDxMax) &&
+        (vy < nDyMax));
+}
+
+
+#define CHECKMV_PENALTYNEW (1 << 1)
+#define CHECKMV_UPDATEDIR (1 << 2)
+#define CHECKMV_UPDATEBESTMV (1 << 3)
+
+template <bool useSatd, int nLogPel, int flags, typename PixelType>
+void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
+    if (IsVectorOK(vx, vy)) {
+        int64_t cost = MotionDistorsion(vx, vy);
+        if (cost >= nMinCost)
+            return;
+
+        const uint8_t *blocks[] = {
+            GetRefBlock<nLogPel, PixelType>(vx, vy),
+            chroma ? GetRefBlockU<nLogPel, PixelType>(vx, vy) : nullptr,
+            chroma ? GetRefBlockV<nLogPel, PixelType>(vx, vy) : nullptr,
+        };
+        int64_t sad = LumaSAD<useSatd>(blocks[0]);
+        cost += sad + ((flags & CHECKMV_PENALTYNEW) ? ((penaltyNew * sad) >> 8) : 0);
+        if (cost >= nMinCost)
+            return;
+
+        int64_t saduv = 0;
+        if (chroma) {
+            saduv += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], blocks[1], nRefPitch[1]);
+            saduv += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], blocks[2], nRefPitch[2]);
+
+            cost += saduv + ((flags & CHECKMV_PENALTYNEW) ? ((penaltyNew * saduv) >> 8) : 0);
+            if (cost >= nMinCost)
+                return;
+        }
+
+        if (flags & CHECKMV_UPDATEBESTMV) {
+            bestMV.x = vx;
+            bestMV.y = vy;
+        }
+        nMinCost = cost;
+        bestMV.sad = sad + saduv;
+        if (flags & CHECKMV_UPDATEDIR)
+            *dir = val;
+    }
+}
+
+
+/* check if the vector (vx, vy) is better than the best vector found so far without penalty new - renamed in v.2.11*/
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::CheckMV0(int vx, int vy) { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
+    CheckMV_Template<useSatd, nLogPel, CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
+}
+
+
+/* check if the vector (vx, vy) is better than the best vector found so far */
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::CheckMV(int vx, int vy) { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
+    CheckMV_Template<useSatd, nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
+}
+
+
+/* check if the vector (vx, vy) is better, and update dir accordingly */
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::CheckMV2(int vx, int vy, int *dir, int val) {
+    CheckMV_Template<useSatd, nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, dir, val);
+}
+
+
+/* check if the vector (vx, vy) is better, and update dir accordingly, but not bestMV.x, y */
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::CheckMVdir(int vx, int vy, int *dir, int val) {
+    CheckMV_Template<useSatd, nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR, PixelType>(vx, vy, dir, val);
+}
+
+
+/* clip a vector to the search boundaries */
+VECTOR MotionBlockLevel::ClipMV(VECTOR v) const {
+    VECTOR v2;
+    v2.x = std::min(std::max(v.x, nDxMin), nDxMax - 1);
+    v2.y = std::min(std::max(v.y, nDyMin), nDyMax - 1);
+    v2.sad = v.sad;
+    return v2;
+}
+
+
+/* find the median between a, b and c */
+static int Median(int a, int b, int c) {
+    return std::max(std::min(a, b), std::min(std::max(a, b), c));
+}
+
+
+void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) {
+
+    /* constant fields */
+
+    nPel = _nPel;
+    nLogPel = ilog2(nPel);
+    // nLogPel=0 for nPel=1, 1 for nPel=2, 2 for nPel=4, i.e. (x*nPel) = (x<<nLogPel)
+    nLogScale = _nLevel;
+    nScale = iexp2(nLogScale);
+
+    nBlkSizeX = _nBlkSizeX;
+    nBlkSizeY = _nBlkSizeY;
+    nOverlapX = _nOverlapX;
+    nOverlapY = _nOverlapY;
+
+    nBlkX = _nBlkX;
+    nBlkY = _nBlkY;
+    nBlkCount = nBlkX * nBlkY;
+
+    xRatioUV = _xRatioUV;
+    yRatioUV = _yRatioUV;
+    nLogxRatioUV = ilog2(xRatioUV);
+    nLogyRatioUV = ilog2(yRatioUV);
+
+    bytesPerSample = (bitsPerSample + 7) / 8;
+
+    smallestPlane = smallestPlane;
+    chroma = chroma;
+
+    globalMVPredictor = zeroMV;
+
+    /* arrays memory allocation */
+
+    vectors.resize(nBlkCount);
+
+    /* function pointers initialization */
+    SAD = selectSADFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
+    BLITLUMA = selectCopyFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
+
+    SADCHROMA = selectSADFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
+    BLITCHROMA = selectCopyFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
+
+    if (nBlkSizeX == 16 && nBlkSizeY == 2)
+        SATD = NULL;
+    else
+        SATD = selectSATDFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
+
+    if (!chroma)
+        SADCHROMA = NULL;
+
+
+    // 64 required for effective use of x264 sad on Core2
+#define ALIGN_PLANES 64
+
+    nSrcPitch_temp[0] = nBlkSizeX * bytesPerSample;
+    nSrcPitch_temp[1] = nBlkSizeX / xRatioUV * bytesPerSample;
+    nSrcPitch_temp[2] = nSrcPitch_temp[1];
+
+    // Four extra bytes because pixel_sad_4x4_mmx2 reads four bytes more than it should (but doesn't use them in any way).
+    pSrc_temp[0] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY * nSrcPitch_temp[0] + 4, ALIGN_PLANES);
+    pSrc_temp[1] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[1] + 4, ALIGN_PLANES);
+    pSrc_temp[2] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[2] + 4, ALIGN_PLANES);
+
+#undef ALIGN_PLANES
+
+    freqArray.resize(8192 * nPel * 2);
+
+    verybigSAD = nBlkSizeX * nBlkSizeY * (1 << bitsPerSample);
+}
+
+MotionBlockLevel::~MotionBlockLevel() {
+    vsh::vsh_aligned_free(pSrc_temp[0]);
+    vsh::vsh_aligned_free(pSrc_temp[1]);
+    vsh::vsh_aligned_free(pSrc_temp[2]);
+}
+
+void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) {
+    // Left (or right) predictor
+    if ((blkScanDir == 1 && blkx > 0) || (blkScanDir == -1 && blkx < nBlkX - 1))
+        predictors[1] = ClipMV(vectors[blkidx - blkScanDir]);
+    else
+        predictors[1] = ClipMV(zeroMVfieldShifted); // v1.11.1 - values instead of pointer
+
+    // Up predictor
+    if (blky > 0)
+        predictors[2] = ClipMV(vectors[blkidx - nBlkX]);
+    else
+        predictors[2] = ClipMV(zeroMVfieldShifted);
+
+    // bottom-right pridictor (from coarse level)
+    if ((blky < nBlkY - 1) && ((blkScanDir == 1 && blkx < nBlkX - 1) || (blkScanDir == -1 && blkx > 0)))
+        predictors[3] = ClipMV(vectors[blkidx + nBlkX + blkScanDir]);
+    else
+        // Up-right predictor
+        if ((blky > 0) && ((blkScanDir == 1 && blkx < nBlkX - 1) || (blkScanDir == -1 && blkx > 0)))
+            predictors[3] = ClipMV(vectors[blkidx - nBlkX + blkScanDir]);
+        else
+            predictors[3] = ClipMV(zeroMVfieldShifted);
+
+    // Median predictor
+    if (blky > 0) { // replaced 1 by 0 - Fizick
+        predictors[0].x = Median(predictors[1].x, predictors[2].x, predictors[3].x);
+        predictors[0].y = Median(predictors[1].y, predictors[2].y, predictors[3].y);
+        //      predictors[0].sad = Median(predictors[1].sad, predictors[2].sad, predictors[3].sad);
+        // but it is not true median vector (x and y may be mixed) and not its sad ?!
+        // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
+        predictors[0].sad = VSMAX(predictors[1].sad, VSMAX(predictors[2].sad, predictors[3].sad));
+    } else {
+        //        predictors[0].x = (predictors[1].x + predictors[2].x + predictors[3].x);
+        //        predictors[0].y = (predictors[1].y + predictors[2].y + predictors[3].y);
+        //      predictors[0].sad = (predictors[1].sad + predictors[2].sad + predictors[3].sad);
+        // but for top line we have only left predictor[1] - v1.6.0
+        predictors[0] = predictors[1];
+    }
+
+    // if there are no other planes, predictor is the median
+    if (smallestPlane)
+        predictor = predictors[0];
+    double scale = LSAD / (double)(LSAD + (predictor.sad >> 1));
+    nLambda = nLambda * scale * scale;
+
+    predictors[4] = ClipMV(zeroMVfieldShifted);
+}
+
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::DiamondSearch(int length) {
+    enum Direction {
+        Right = 1,
+        Left = 2,
+        Down = 4,
+        Up = 8,
+    };
+
+    int dx;
+    int dy;
+
+    // We begin by making no assumption on which direction to search.
+    int direction = 15;
+
+    int lastDirection;
+
+    while (direction > 0) {
+        dx = bestMV.x;
+        dy = bestMV.y;
+        lastDirection = direction;
+        direction = 0;
+
+        // First, we look the directions that were hinted by the previous step
+        // of the algorithm. If we find one, we add it to the set of directions
+        // we'll test next
+        if (lastDirection & Right)
+            CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy, &direction, Right);
+        if (lastDirection & Left)
+            CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy, &direction, Left);
+        if (lastDirection & Down)
+            CheckMV2<useSatd, nLogPel, PixelType>(dx, dy + length, &direction, Down);
+        if (lastDirection & Up)
+            CheckMV2<useSatd, nLogPel, PixelType>(dx, dy - length, &direction, Up);
+
+        // If one of the directions improves the SAD, we make further tests
+        // on the diagonals
+        if (direction) {
+            lastDirection = direction;
+            dx = bestMV.x;
+            dy = bestMV.y;
+
+            if (lastDirection & (Right + Left)) {
+                CheckMV2<useSatd, nLogPel, PixelType>(dx, dy + length, &direction, Down);
+                CheckMV2<useSatd, nLogPel, PixelType>(dx, dy - length, &direction, Up);
+            } else {
+                CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy, &direction, Right);
+                CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy, &direction, Left);
+            }
+        }
+
+        // If not, we do not stop here. We infer from the last direction the
+        // diagonals to be checked, because we might be lucky.
+        else {
+            switch (lastDirection) {
+                case Right:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    break;
+                case Left:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    break;
+                case Down:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    break;
+                case Up:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    break;
+                case Right + Down:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    break;
+                case Left + Down:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    break;
+                case Right + Up:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    break;
+                case Left + Up:
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    break;
+                default:
+                    // Even the default case may happen, in the first step of the
+                    // algorithm for example.
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    break;
+            }
+        }
+    }
+}
+
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::ExpandingSearch(int r, int s, int mvx, int mvy) {
+    // diameter = 2*r + 1, step=s
+    // part of true enhaustive search (thin expanding square) around mvx, mvy
+
+    // sides of square without corners
+    for (int i = -r + s; i < r; i += s) // without corners! - v2.1
+    {
+        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy - r);
+        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy + r);
+    }
+
+    for (int j = -r + s; j < r; j += s) {
+        CheckMV<useSatd, nLogPel, PixelType>(mvx - r, mvy + j);
+        CheckMV<useSatd, nLogPel, PixelType>(mvx + r, mvy + j);
+    }
+
+    // then corners - they are more far from cenrer
+    CheckMV<useSatd, nLogPel, PixelType>(mvx - r, mvy - r);
+    CheckMV<useSatd, nLogPel, PixelType>(mvx - r, mvy + r);
+    CheckMV<useSatd, nLogPel, PixelType>(mvx + r, mvy - r);
+    CheckMV<useSatd, nLogPel, PixelType>(mvx + r, mvy + r);
+}
+
+
+/* (x-1)%6 */
+static constexpr int mod6m1[8] = { 5, 0, 1, 2, 3, 4, 5, 0 };
+/* radius 2 hexagon. repeated entries are to avoid having to compute mod6 every time. */
+static constexpr int hex2[8][2] = { { -1, -2 }, { -2, 0 }, { -1, 2 }, { 1, 2 }, { 2, 0 }, { 1, -2 }, { -1, -2 }, { -2, 0 } };
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::Hex2Search(int i_me_range) { //adopted from x264
+    int dir = -2;
+    int bmx = bestMV.x;
+    int bmy = bestMV.y;
+
+    if (i_me_range > 1) {
+        /* hexagon */
+        //        COST_MV_X3_DIR( -2,0, -1, 2,  1, 2, costs   );
+        //        COST_MV_X3_DIR(  2,0,  1,-2, -1,-2, costs+3 );
+        //        COPY2_IF_LT( bcost, costs[0], dir, 0 );
+        //        COPY2_IF_LT( bcost, costs[1], dir, 1 );
+        //        COPY2_IF_LT( bcost, costs[2], dir, 2 );
+        //        COPY2_IF_LT( bcost, costs[3], dir, 3 );
+        //        COPY2_IF_LT( bcost, costs[4], dir, 4 );
+        //        COPY2_IF_LT( bcost, costs[5], dir, 5 );
+        CheckMVdir<useSatd, nLogPel, PixelType>(bmx - 2, bmy, &dir, 0);
+        CheckMVdir<useSatd, nLogPel, PixelType>(bmx - 1, bmy + 2, &dir, 1);
+        CheckMVdir<useSatd, nLogPel, PixelType>(bmx + 1, bmy + 2, &dir, 2);
+        CheckMVdir<useSatd, nLogPel, PixelType>(bmx + 2, bmy, &dir, 3);
+        CheckMVdir<useSatd, nLogPel, PixelType>(bmx + 1, bmy - 2, &dir, 4);
+        CheckMVdir<useSatd, nLogPel, PixelType>(bmx - 1, bmy - 2, &dir, 5);
+
+
+        if (dir != -2) {
+            bmx += hex2[dir + 1][0];
+            bmy += hex2[dir + 1][1];
+            /* half hexagon, not overlapping the previous iteration */
+            for (int i = 1; i < i_me_range / 2 && IsVectorOK(bmx, bmy); i++) {
+                const int odir = mod6m1[dir + 1];
+                //                COST_MV_X3_DIR( hex2[odir+0][0], hex2[odir+0][1],
+                //                                hex2[odir+1][0], hex2[odir+1][1],
+                //                                hex2[odir+2][0], hex2[odir+2][1],
+                //                                costs );
+
+                dir = -2;
+                //                COPY2_IF_LT( bcost, costs[0], dir, odir-1 );
+                //                COPY2_IF_LT( bcost, costs[1], dir, odir   );
+                //                COPY2_IF_LT( bcost, costs[2], dir, odir+1 );
+
+                CheckMVdir<useSatd, nLogPel, PixelType>(bmx + hex2[odir + 0][0], bmy + hex2[odir + 0][1], &dir, odir - 1);
+                CheckMVdir<useSatd, nLogPel, PixelType>(bmx + hex2[odir + 1][0], bmy + hex2[odir + 1][1], &dir, odir);
+                CheckMVdir<useSatd, nLogPel, PixelType>(bmx + hex2[odir + 2][0], bmy + hex2[odir + 2][1], &dir, odir + 1);
+                if (dir == -2)
+                    break;
+                bmx += hex2[dir + 1][0];
+                bmy += hex2[dir + 1][1];
+            }
+        }
+
+        bestMV.x = bmx;
+        bestMV.y = bmy;
+    }
+    /* square refine */
+    //        omx = bmx; omy = bmy;
+    //        COST_MV_X4(  0,-1,  0,1, -1,0, 1,0 );
+    //        COST_MV_X4( -1,-1, -1,1, 1,-1, 1,1 );
+    ExpandingSearch<useSatd, nLogPel, PixelType>(1, 1, bmx, bmy);
+}
+
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::CrossSearch(int start, int x_max, int y_max, int mvx, int mvy) { // part of umh  search
+
+    for (int i = start; i < x_max; i += 2) {
+        CheckMV<useSatd, nLogPel, PixelType>(mvx - i, mvy);
+        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy);
+    }
+
+    for (int j = start; j < y_max; j += 2) {
+        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy - j);
+        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy + j);
+    }
+}
+
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::UMHSearch(int i_me_range, int omx, int omy) { // radius
+    // Uneven-cross Multi-Hexagon-grid Search (see x264)
+    /* hexagon grid */
+
+    //            int omx = bestMV.x;
+    //            int omy = bestMV.y;
+    // my mod: do not shift the center after Cross
+    CrossSearch<useSatd, nLogPel, PixelType>(1, i_me_range, i_me_range, omx, omy);
+
+
+    int i = 1;
+    do {
+        static const int hex4[16][2] = {
+            { -4, 2 }, { -4, 1 }, { -4, 0 }, { -4, -1 }, { -4, -2 }, { 4, -2 }, { 4, -1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, { 2, 3 }, { 0, 4 }, { -2, 3 }, { -2, -3 }, { 0, -4 }, { 2, -3 },
+        };
+
+        for (int j = 0; j < 16; j++) {
+            int mx = omx + hex4[j][0] * i;
+            int my = omy + hex4[j][1] * i;
+            CheckMV<useSatd, nLogPel, PixelType>(mx, my);
+        }
+    } while (++i <= i_me_range / 4);
+
+    //            if( bmy <= mv_y_max )
+    //                goto me_hex2;
+    Hex2Search<useSatd, nLogPel, PixelType>(i_me_range);
+}
+
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::Refine() {
+    // then, we refine, according to the search type
+    if (searchType == SearchType::Logarithmic) {
+        for (int i = nSearchParam; i > 0; i /= 2)
+            DiamondSearch<useSatd, nLogPel, PixelType>(i);
+    } else if (searchType == SearchType::Exhaustive) {
+        int mvx = bestMV.x;
+        int mvy = bestMV.y;
+        for (int i = 1; i <= nSearchParam; i++) // region is same as enhausted, but ordered by radius (from near to far)
+            ExpandingSearch<useSatd, nLogPel, PixelType>(1, 1, mvx, mvy);
+    } else if (searchType == SearchType::Hex2) {
+        Hex2Search<useSatd, nLogPel, PixelType>(nSearchParam);
+
+    } else if (searchType == SearchType::UnevenMultiHexagon) {
+        UMHSearch<useSatd, nLogPel, PixelType>(nSearchParam, bestMV.x, bestMV.y);
+
+    } else if (searchType == SearchType::Horizontal) {
+        int mvx = bestMV.x;
+        int mvy = bestMV.y;
+        for (int i = 1; i <= nSearchParam; i++) {
+            CheckMV<useSatd, nLogPel, PixelType>(mvx - i, mvy);
+            CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy);
+        }
+    } else if (searchType == SearchType::Vertical) {
+        int mvx = bestMV.x;
+        int mvy = bestMV.y;
+        for (int i = 1; i <= nSearchParam; i++) {
+            CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy - i);
+            CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy + i);
+        }
+    }
+}
+
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany, int &badcount) {
+
+    // FIXME, aren't several predictors usually the same? make sure duplicate vectors aren't tested several times
+    VECTOR predictors[5]; /* set of predictors for the current block */
+    FetchPredictors(blkIdx, blkx, blky, blkScanDir, predictors);
+
+    // We treat zero alone
+    // Do we bias zero with not taking into account distorsion ?
+    bestMV.x = zeroMVfieldShifted.x;
+    bestMV.y = zeroMVfieldShifted.y;
+    const uint8_t *zeroMVBlocks[3] = {
+        GetRefBlock<nLogPel, PixelType>(0, zeroMVfieldShifted.y),
+        chroma ? GetRefBlockU<nLogPel, PixelType>(0, 0) : nullptr,
+        chroma ? GetRefBlockV<nLogPel, PixelType>(0, 0) : nullptr, };
+    int64_t sad = LumaSAD<useSatd>(zeroMVBlocks[0]);
+    if (chroma) {
+        sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], zeroMVBlocks[1], nRefPitch[1]);
+        sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], zeroMVBlocks[2], nRefPitch[2]);
+    }
+    bestMV.sad = sad;
+    nMinCost = sad + ((penaltyZero * sad) >> 8); // v.1.11.0.2
+
+    VECTOR bestMVMany[8];
+    int64_t nMinCostMany[8] = { 0 };
+
+    if (tryMany) {
+        //  refine around zero
+        Refine<useSatd, nLogPel, PixelType>();
+        bestMVMany[0] = bestMV; // save bestMV
+        nMinCostMany[0] = nMinCost;
+    }
+
+    // Global MV predictor  - added by Fizick
+    globalMVPredictor = ClipMV(globalMVPredictor);
+    const uint8_t *globalPredBlocks[3] = {
+        GetRefBlock<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y),
+        chroma ? GetRefBlockU<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y) : nullptr,
+        chroma ? GetRefBlockV<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y) : nullptr,
+    };
+    sad = LumaSAD<useSatd>(globalPredBlocks[0]);
+    if (chroma) {
+        sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], globalPredBlocks[1], nRefPitch[1]);
+        sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], globalPredBlocks[2], nRefPitch[2]);
+    }
+    int64_t cost = sad + ((pglobal * sad) >> 8);
+
+    if (cost < nMinCost || tryMany) {
+        bestMV.x = globalMVPredictor.x;
+        bestMV.y = globalMVPredictor.y;
+        bestMV.sad = sad;
+        nMinCost = cost;
+    }
+    if (tryMany) {
+        // refine around global
+        Refine<useSatd, nLogPel, PixelType>();               // reset bestMV
+        bestMVMany[1] = bestMV; // save bestMV
+        nMinCostMany[1] = nMinCost;
+    }
+    const uint8_t *predBlocks[3] = {
+        GetRefBlock<nLogPel, PixelType>(predictor.x, predictor.y),
+        chroma ? GetRefBlockU<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
+        chroma ? GetRefBlockV<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
+    };
+    sad = LumaSAD<useSatd>(predBlocks[0]);
+    if (chroma) {
+        sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], predBlocks[1], nRefPitch[1]);
+        sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], predBlocks[2], nRefPitch[2]);
+    }
+    cost = sad;
+
+    if (cost < nMinCost || tryMany) {
+        bestMV.x = predictor.x;
+        bestMV.y = predictor.y;
+        bestMV.sad = sad;
+        nMinCost = cost;
+    }
+    if (tryMany) {
+        // refine around predictor
+        Refine<useSatd, nLogPel, PixelType>();               // reset bestMV
+        bestMVMany[2] = bestMV; // save bestMV
+        nMinCostMany[2] = nMinCost;
+    }
+
+    // then all the other predictors
+    int npred = 4;
+
+    for (int i = 0; i < npred; i++) {
+        if (tryMany)
+            nMinCost = verybigSAD + 1;
+        CheckMV0<useSatd, nLogPel, PixelType>(predictors[i].x, predictors[i].y);
+        if (tryMany) {
+            // refine around predictor
+            Refine<useSatd, nLogPel, PixelType>();                   // reset bestMV
+            bestMVMany[i + 3] = bestMV; // save bestMV
+            nMinCostMany[i + 3] = nMinCost;
+        }
+    }
+
+
+    if (tryMany) { // select best of multi best
+        nMinCost = verybigSAD + 1;
+        for (int i = 0; i < npred + 3; i++) {
+            if (nMinCostMany[i] < nMinCost) {
+                bestMV = bestMVMany[i];
+                nMinCost = nMinCostMany[i];
+            }
+        }
+    } else {
+        // then, we refine, according to the search type
+        Refine<useSatd, nLogPel, PixelType>();
+    }
+
+    int64_t foundSAD = bestMV.sad;
+
+#define BADCOUNT_LIMIT 16
+
+    if (blkIdx > 1 && foundSAD > (badSAD + badSAD * badcount / BADCOUNT_LIMIT)) {
+        // bad vector, try wide search
+        // with some soft limit (BADCOUNT_LIMIT) of bad cured vectors (time consumed)
+        badcount++;
+
+        if (badrange > 0) { // UMH
+            // rathe good is not found, lets try around zero
+            UMHSearch<useSatd, nLogPel, PixelType>(badrange * (1 << nLogPel), 0, 0);
+        } else if (badrange < 0) { // ESA
+            for (int i = 1; i < -badrange * (1 << nLogPel); i += (1 << nLogPel)) { // at radius
+                ExpandingSearch<useSatd, nLogPel, PixelType>(i, 1 << nLogPel, 0, 0);
+                if (bestMV.sad < foundSAD / 4)
+                    break; // stop search if rathe good is found
+            }
+        }
+
+        int mvx = bestMV.x; // refine in small area
+        int mvy = bestMV.y;
+        for (int i = 1; i < (1 << nLogPel); i++) { // small radius
+            ExpandingSearch<useSatd, nLogPel, PixelType>(i, 1, mvx, mvy);
+        }
+    }
+
+
+    // we store the result
+    vectors[blkIdx] = bestMV;
+}
+
+
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+    SearchType st, int stp, int lambda, int lsad, int pnew,
+    int plevel, VECTOR *globalMVec, int fieldShift,
+    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
+
+    badSAD = badSAD;
+    badrange = badrange;
+    zeroMVfieldShifted.x = 0;
+    zeroMVfieldShifted.y = fieldShift;
+    zeroMVfieldShifted.sad = 0;
+    globalMVPredictor.x = (1 << nLogPel) * globalMVec->x; // v1.8.2
+    globalMVPredictor.y = (1 << nLogPel) * globalMVec->y + fieldShift;
+    globalMVPredictor.sad = globalMVec->sad;
+    penaltyNew = pnew; // penalty for new vector
+    LSAD = lsad;       // SAD limit for lambda using
+    // may be they must be scaled by nPel ?
+
+
+    VECTOR *pBlkData = vectors.data();
+
+    this->pRefFrame = &pRefFrame;
+
+
+    y[0] = pSrcFrame.planes[0].nVPadding;
+
+    if (chroma) {
+        y[1] = pSrcFrame.planes[1].nVPadding;
+        y[2] = pSrcFrame.planes[2].nVPadding;
+    }
+
+    nRefPitch[0] = pRefFrame.planes[0].nPitch;
+    if (chroma) {
+        nRefPitch[1] = pRefFrame.planes[1].nPitch;
+        nRefPitch[2] = pRefFrame.planes[2].nPitch;
+    }
+
+    searchType = st;    //( nLogScale == 0 ) ? st : EXHAUSTIVE;
+    nSearchParam = stp; //*nPel; // v1.8.2 - redesigned in v1.8.5
+
+    int nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
+    if (plevel == 1)
+        nLambdaLevel = nLambdaLevel * nScale; // scale lambda - Fizick
+    else if (plevel == 2)
+        nLambdaLevel = nLambdaLevel * nScale * nScale;
+
+    penaltyZero = pzero;
+    this->pglobal = pglobal;
+    int badcount = 0;
+    // Functions using float must not be used here
+
+    for (int blky = 0; blky < nBlkY; blky++) {
+        int blkScanDir = (blky % 2 == 0 || !meander) ? 1 : -1;
+        // meander (alternate) scan blocks (even row left to right, odd row right to left)
+        int blkxStart = (blky % 2 == 0 || !meander) ? 0 : nBlkX - 1;
+        if (blkScanDir == 1) { // start with leftmost block
+            x[0] = pSrcFrame.planes[0].nHPadding;
+            if (chroma) {
+                x[1] = pSrcFrame.planes[1].nHPadding;
+                x[2] = pSrcFrame.planes[2].nHPadding;
+            }
+        } else { // start with rightmost block, but it is already set at prev row
+            x[0] = pSrcFrame.planes[0].nHPadding + (nBlkSizeX - nOverlapX) * (nBlkX - 1);
+            if (chroma) {
+                x[1] = pSrcFrame.planes[1].nHPadding + ((nBlkSizeX - nOverlapX) / xRatioUV) * (nBlkX - 1);
+                x[2] = pSrcFrame.planes[2].nHPadding + ((nBlkSizeX - nOverlapX) / xRatioUV) * (nBlkX - 1);
+            }
+        }
+        for (int iblkx = 0; iblkx < nBlkX; iblkx++) {
+            int blkx = blkxStart + iblkx * blkScanDir;
+            int blkIdx = blky * nBlkX + blkx;
+
+            // FIXME, eliminate realsrc temp
+            const uint8_t *pRealSrc[3] = {};
+            pRealSrc[0] = pSrcFrame.planes[0].GetAbsolutePelPointer<PixelType>(x[0], y[0]);
+            if (chroma) {
+                pRealSrc[1] = pSrcFrame.planes[1].GetAbsolutePelPointer<PixelType>(x[1], y[1]);
+                pRealSrc[2] = pSrcFrame.planes[2].GetAbsolutePelPointer<PixelType>(x[2], y[2]);
+            }
+
+            //create aligned copy
+            BLITLUMA(pSrc_temp[0], nSrcPitch_temp[0], pRealSrc[0], pSrcFrame.planes[0].nPitch);
+            //set the to the aligned copy
+            if (chroma) {
+                BLITCHROMA(pSrc_temp[1], nSrcPitch_temp[1], pRealSrc[1], pSrcFrame.planes[1].nPitch);
+                BLITCHROMA(pSrc_temp[2], nSrcPitch_temp[2], pRealSrc[2], pSrcFrame.planes[2].nPitch);
+            }
+
+            if (blky == 0)
+                nLambda = 0;
+            else
+                nLambda = nLambdaLevel;
+
+            // decreased padding of coarse levels
+            int nHPaddingScaled = pSrcFrame.planes[0].nHPadding >> nLogScale;
+            int nVPaddingScaled = pSrcFrame.planes[0].nVPadding >> nLogScale;
+            /* computes search boundaries */
+            nDxMax = (pSrcFrame.planes[0].nPaddedWidth - x[0] - nBlkSizeX - pSrcFrame.planes[0].nHPadding + nHPaddingScaled) << nLogPel;
+            nDyMax = (pSrcFrame.planes[0].nPaddedHeight - y[0] - nBlkSizeY - pSrcFrame.planes[0].nVPadding + nVPaddingScaled) << nLogPel;
+            nDxMin = -((x[0] - pSrcFrame.planes[0].nHPadding + nHPaddingScaled) << nLogPel);
+            nDyMin = -((y[0] - pSrcFrame.planes[0].nVPadding + nVPaddingScaled) << nLogPel);
+
+            /* search the mv */
+            predictor = ClipMV(vectors[blkIdx]);
+            PseudoEPZSearch<useSatd, nLogPel, PixelType>(blkIdx, blkx, blky, blkScanDir, tryMany, badcount);
+
+            /* write the results */
+            pBlkData[blkx] = bestMV;
+
+            /* increment indexes & pointers */
+            if (iblkx < nBlkX - 1) {
+                x[0] += (nBlkSizeX - nOverlapX) * blkScanDir;
+                if (chroma) {
+                    x[1] += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV) * blkScanDir;
+                    x[2] += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV) * blkScanDir;
+                }
+            }
+        }
+        pBlkData += nBlkX;
+
+        y[0] += (nBlkSizeY - nOverlapY);
+        if (chroma) {
+            y[1] += ((nBlkSizeY - nOverlapY) >> nLogyRatioUV);
+            y[2] += ((nBlkSizeY - nOverlapY) >> nLogyRatioUV);
+        }
+    }
+}
+
+
+static constexpr decltype(&MotionBlockLevel::DoSearchMVs<false, 0, uint8_t>) SearchMVs_Table8[] = {
+    &MotionBlockLevel::DoSearchMVs<false, 0, uint8_t>, &MotionBlockLevel::DoSearchMVs<false, 1, uint8_t>, &MotionBlockLevel::DoSearchMVs<false, 2, uint8_t>,
+    &MotionBlockLevel::DoSearchMVs<true, 0, uint8_t>, &MotionBlockLevel::DoSearchMVs<true, 1, uint8_t>, &MotionBlockLevel::DoSearchMVs<true, 2, uint8_t>
+};
+
+static constexpr decltype(&MotionBlockLevel::DoSearchMVs<false, 0, uint16_t>) SearchMVs_Table16[] = {
+    &MotionBlockLevel::DoSearchMVs<false, 0, uint16_t>, &MotionBlockLevel::DoSearchMVs<false, 1, uint16_t>, &MotionBlockLevel::DoSearchMVs<false, 2, uint16_t>,
+    &MotionBlockLevel::DoSearchMVs<true, 0, uint16_t>, &MotionBlockLevel::DoSearchMVs<true, 1, uint16_t>, &MotionBlockLevel::DoSearchMVs<true, 2, uint16_t>
+};
+
+
+void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+    SearchType st, int stp, int lambda, int lsad, int pnew,
+    int plevel, VECTOR *globalMVec,
+    int fieldShift, bool useSatd,
+    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
+
+    int index = nLogPel + (useSatd ? 3 : 0);
+    if (bytesPerSample == 1)
+        std::invoke(SearchMVs_Table8[index], this, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+    else
+        std::invoke(SearchMVs_Table16[index], this, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+}
+
+
+// FIXME, basically rewrite it this way: check so src and ref frames are compatible in padding and size and such
+// if so store all the old values in the old variables and also copy all the old vectors
+// use then use it to predict the new vectors
+template <bool useSatd, int nLogPel, typename PixelType>
+void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+    SearchType st, int stp, int lambda, int pnew,
+    int fieldShift, int64_t thSAD, int smooth, bool meander) {
+                                    
+    zeroMVfieldShifted.x = 0;
+    zeroMVfieldShifted.y = fieldShift;
+    zeroMVfieldShifted.sad = 0;
+    globalMVPredictor.x = 0;          //nPel*globalMVec->x;// there is no global
+    globalMVPredictor.y = fieldShift; //nPel*globalMVec->y + fieldShift;
+    globalMVPredictor.sad = 9999999;  //globalMVec->sad;
+    penaltyNew = pnew; // penalty for new vector
+
+    int nBlkXold = nBlkX;
+    int nBlkYold = nBlkY;
+    int nBlkSizeXold = nBlkSizeX;
+    int nBlkSizeYold = nBlkSizeY;
+    int nOverlapXold = nOverlapX;
+    int nOverlapYold = nOverlapY;
+    int nStepXold = nBlkSizeXold - nOverlapXold;
+    int nStepYold = nBlkSizeYold - nOverlapYold;
+    int nLogPelold = ilog2(nPel);
+
+    std::vector<VECTOR> oldVectors;
+    std::swap(oldVectors, vectors);
+
+    
+    // FIXME, needs more adjustment? how to pass changed blocksize/overlap?
+    nBlkX = (pSrcFrame.planes[0].nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
+    nBlkY = (pSrcFrame.planes[0].nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
+
+    vectors.resize(nBlkX * nBlkY);
+
+    VECTOR *pBlkData = vectors.data();
+
+    this->pRefFrame = &pRefFrame;
+
+    x[0] = pSrcFrame.planes[0].nHPadding;
+    y[0] = pSrcFrame.planes[0].nVPadding;
+    if (chroma) {
+        x[1] = pSrcFrame.planes[1].nHPadding;
+        x[2] = pSrcFrame.planes[2].nHPadding;
+        y[1] = pSrcFrame.planes[1].nVPadding;
+        y[2] = pSrcFrame.planes[2].nVPadding;
+    }
+
+    nRefPitch[0] = pRefFrame.planes[0].nPitch;
+    if (chroma) {
+        nRefPitch[1] = pRefFrame.planes[1].nPitch;
+        nRefPitch[2] = pRefFrame.planes[2].nPitch;
+    }
+
+    searchType = st;
+    nSearchParam = stp; //*nPel; // v1.8.2 - redesigned in v1.8.5
+
+    int nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
+
+
+    // Functions using float must not be used here
+    for (int blky = 0; blky < nBlkY; blky++) {
+        int blkScanDir = (blky % 2 == 0 || !meander) ? 1 : -1;
+        // meander (alternate) scan blocks (even row left to right, odd row right to left)
+        int blkxStart = (blky % 2 == 0 || !meander) ? 0 : nBlkX - 1;
+        if (blkScanDir == 1) { // start with leftmost block
+            x[0] = pSrcFrame.planes[0].nHPadding;
+            if (chroma) {
+                x[1] = pSrcFrame.planes[1].nHPadding;
+                x[2] = pSrcFrame.planes[2].nHPadding;
+            }
+        } else { // start with rightmost block, but it is already set at prev row
+            x[0] = pSrcFrame.planes[0].nHPadding + (nBlkSizeX - nOverlapX) * (nBlkX - 1);
+            if (chroma) {
+                x[1] = pSrcFrame.planes[1].nHPadding + ((nBlkSizeX - nOverlapX) / xRatioUV) * (nBlkX - 1);
+                x[2] = pSrcFrame.planes[2].nHPadding + ((nBlkSizeX - nOverlapX) / xRatioUV) * (nBlkX - 1);
+            }
+        }
+        for (int iblkx = 0; iblkx < nBlkX; iblkx++) {
+            int blkx = blkxStart + iblkx * blkScanDir;
+            int blkIdx = blky * nBlkX + blkx;
+
+            const uint8_t *pRealSrc[3] = {};
+            pRealSrc[0] = pSrcFrame.planes[0].GetAbsolutePelPointer<PixelType>(x[0], y[0]);
+            if (chroma) {
+                pRealSrc[1] = pSrcFrame.planes[1].GetAbsolutePelPointer<PixelType>(x[1], y[1]);
+                pRealSrc[2] = pSrcFrame.planes[2].GetAbsolutePelPointer<PixelType>(x[2], y[2]);
+            }
+
+            //create aligned copy
+            BLITLUMA(pSrc_temp[0], nSrcPitch_temp[0], pRealSrc[0], pSrcFrame.planes[0].nPitch);
+            //set the to the aligned copy
+            if (chroma) {
+                BLITCHROMA(pSrc_temp[1], nSrcPitch_temp[1], pRealSrc[1], pSrcFrame.planes[1].nPitch);
+                BLITCHROMA(pSrc_temp[2], nSrcPitch_temp[2], pRealSrc[2], pSrcFrame.planes[2].nPitch);
+            }
+
+            if (blky == 0)
+                nLambda = 0;
+            else
+                nLambda = nLambdaLevel;
+
+
+            // may be they must be scaled by nPel ?
+
+            /* computes search boundaries */
+            nDxMax = (pSrcFrame.planes[0].nPaddedWidth - x[0] - nBlkSizeX) << nLogPel;
+            nDyMax = (pSrcFrame.planes[0].nPaddedHeight - y[0] - nBlkSizeY) << nLogPel;
+            nDxMin = -(x[0] << nLogPel);
+            nDyMin = -(y[0] << nLogPel);
+
+            // get and interplolate old vectors
+            int centerX = nBlkSizeX / 2 + (nBlkSizeX - nOverlapX) * blkx; // center of new block
+            int blkxold = (centerX - nBlkSizeXold / 2) / nStepXold;       // centerXold less or equal to new
+            int centerY = nBlkSizeY / 2 + (nBlkSizeY - nOverlapY) * blky;
+            int blkyold = (centerY - nBlkSizeYold / 2) / nStepYold;
+
+            int deltaX = VSMAX(0, centerX - (nBlkSizeXold / 2 + nStepXold * blkxold)); // distance from old to new
+            int deltaY = VSMAX(0, centerY - (nBlkSizeYold / 2 + nStepYold * blkyold));
+
+            int blkxold1 = VSMIN(nBlkXold - 1, VSMAX(0, blkxold));
+            int blkxold2 = VSMIN(nBlkXold - 1, VSMAX(0, blkxold + 1));
+            int blkyold1 = VSMIN(nBlkYold - 1, VSMAX(0, blkyold));
+            int blkyold2 = VSMIN(nBlkYold - 1, VSMAX(0, blkyold + 1));
+
+            VECTOR vectorOld; // interpolated or nearest
+
+            if (smooth == 1) { // interpolate
+                VECTOR vectorOld1 = oldVectors[blkxold1 + blkyold1 * nBlkXold]; // 4 old nearest vectors (may coinside)
+                VECTOR vectorOld2 = oldVectors[blkxold2 + blkyold1 * nBlkXold];
+                VECTOR vectorOld3 = oldVectors[blkxold1 + blkyold2 * nBlkXold];
+                VECTOR vectorOld4 = oldVectors[blkxold2 + blkyold2 * nBlkXold];
+
+                // interpolate
+                int vector1_x = vectorOld1.x * nStepXold + deltaX * (vectorOld2.x - vectorOld1.x); // scaled by nStepXold to skip slow division
+                int vector1_y = vectorOld1.y * nStepXold + deltaX * (vectorOld2.y - vectorOld1.y);
+                int64_t vector1_sad = vectorOld1.sad * nStepXold + deltaX * (vectorOld2.sad - vectorOld1.sad);
+
+                int vector2_x = vectorOld3.x * nStepXold + deltaX * (vectorOld4.x - vectorOld3.x);
+                int vector2_y = vectorOld3.y * nStepXold + deltaX * (vectorOld4.y - vectorOld3.y);
+                int64_t vector2_sad = vectorOld3.sad * nStepXold + deltaX * (vectorOld4.sad - vectorOld3.sad);
+
+                vectorOld.x = (vector1_x + deltaY * (vector2_x - vector1_x) / nStepYold) / nStepXold;
+                vectorOld.y = (vector1_y + deltaY * (vector2_y - vector1_y) / nStepYold) / nStepXold;
+                vectorOld.sad = (vector1_sad + deltaY * (vector2_sad - vector1_sad) / nStepYold) / nStepXold;
+
+            } else { // nearest
+                if (deltaX * 2 < nStepXold && deltaY * 2 < nStepYold)
+                    vectorOld = oldVectors[blkxold1 + blkyold1 * nBlkXold];
+                else if (deltaX * 2 >= nStepXold && deltaY * 2 < nStepYold)
+                    vectorOld = oldVectors[blkxold2 + blkyold1 * nBlkXold];
+                else if (deltaX * 2 < nStepXold && deltaY * 2 >= nStepYold)
+                    vectorOld = oldVectors[blkxold1 + blkyold2 * nBlkXold];
+                else //(deltaX*2>=nStepXold && deltaY*2>=nStepYold )
+                    vectorOld = oldVectors[blkxold2 + blkyold2 * nBlkXold];
+            }
+
+            // scale vector to new nPel
+            vectorOld.x = (vectorOld.x << nLogPel) >> nLogPelold;
+            vectorOld.y = (vectorOld.y << nLogPel) >> nLogPelold;
+
+            predictor = ClipMV(vectorOld);                                                                    // predictor
+            predictor.sad = vectorOld.sad * (nBlkSizeX * nBlkSizeY) / (nBlkSizeXold * nBlkSizeYold); // normalized to new block size
+
+            bestMV = predictor;
+
+            const uint8_t *blocks[3] = {
+                GetRefBlock<nLogPel, PixelType>(predictor.x, predictor.y),
+                chroma ? GetRefBlockU<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
+                chroma ? GetRefBlockV<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr, };
+            int64_t sad = LumaSAD<useSatd>(blocks[0]);
+            if (chroma) {
+                sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], blocks[1], nRefPitch[1]);
+                sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], blocks[2], nRefPitch[2]);
+            }
+            bestMV.sad = sad;
+            nMinCost = sad;
+
+            if (bestMV.sad > thSAD) { // if old interpolated vector is bad
+                // then, we refine, according to the search type
+
+                if (searchType == SearchType::Logarithmic) {
+                    for (int i = nSearchParam; i > 0; i /= 2)
+                        DiamondSearch<useSatd, nLogPel, PixelType>(i);
+
+                } else if (searchType == SearchType::Exhaustive) {
+                    int mvx = bestMV.x;
+                    int mvy = bestMV.y;
+                    for (int i = 1; i <= nSearchParam; i++) // region is same as exhaustive, but ordered by radius (from near to far)
+                        ExpandingSearch<useSatd, nLogPel, PixelType>(i, 1, mvx, mvy);
+                } else if (searchType == SearchType::Hex2) {
+                    Hex2Search<useSatd, nLogPel, PixelType>(nSearchParam);
+
+                } else if (searchType == SearchType::UnevenMultiHexagon) {
+                    UMHSearch<useSatd, nLogPel, PixelType>(nSearchParam, bestMV.x, bestMV.y);
+
+                } else if (searchType == SearchType::Horizontal) {
+                    int mvx = bestMV.x;
+                    int mvy = bestMV.y;
+                    for (int i = 1; i <= nSearchParam; i++) {
+                        CheckMV<useSatd, nLogPel, PixelType>(mvx - i, mvy);
+                        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy);
+                    }
+                } else if (searchType == SearchType::Vertical) {
+                    int mvx = bestMV.x;
+                    int mvy = bestMV.y;
+                    for (int i = 1; i <= nSearchParam; i++) {
+                        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy - i);
+                        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy + i);
+                    }
+                }
+            }
+
+            // we store the result
+            vectors[blkIdx] = bestMV;
+
+
+            /* write the results */
+            pBlkData[blkx] = bestMV;
+
+
+            if (iblkx < nBlkX - 1) {
+                x[0] += (nBlkSizeX - nOverlapX) * blkScanDir;
+                if (chroma) {
+                    x[1] += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV) * blkScanDir;
+                    x[2] += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV) * blkScanDir;
+                }
+            }
+        }
+        pBlkData += nBlkX;
+
+        y[0] += (nBlkSizeY - nOverlapY);
+        if (chroma) {
+            y[1] += ((nBlkSizeY - nOverlapY) >> nLogyRatioUV);
+            y[2] += ((nBlkSizeY - nOverlapY) >> nLogyRatioUV);
+        }
+    }
+}
+
+static const decltype(&MotionBlockLevel::doRecalculateMVs<false, 0, uint8_t>) doPobRecalculateMVs_Table8[] = {
+    &MotionBlockLevel::doRecalculateMVs<false, 0, uint8_t>, &MotionBlockLevel::doRecalculateMVs<false, 1, uint8_t>, &MotionBlockLevel::doRecalculateMVs<false, 2, uint8_t>,
+    &MotionBlockLevel::doRecalculateMVs<true, 0, uint8_t>, &MotionBlockLevel::doRecalculateMVs<true, 1, uint8_t>, &MotionBlockLevel::doRecalculateMVs<true, 2, uint8_t>,
+};
+
+static const decltype(&MotionBlockLevel::doRecalculateMVs<false, 0, uint8_t>) doPobRecalculateMVs_Table16[] = {
+    &MotionBlockLevel::doRecalculateMVs<false, 0, uint16_t>, &MotionBlockLevel::doRecalculateMVs<false, 1, uint16_t>, &MotionBlockLevel::doRecalculateMVs<false, 2, uint16_t>,
+    &MotionBlockLevel::doRecalculateMVs<true, 0, uint16_t>, &MotionBlockLevel::doRecalculateMVs<true, 1, uint16_t>, &MotionBlockLevel::doRecalculateMVs<true, 2, uint16_t>,
+};
+
+void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+    SearchType st, int stp, int lambda, int pnew,
+    int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) {
+    int index = nLogPel + (useSatd ? 3 : 0);
+    if (bytesPerSample == 1)
+        std::invoke(doPobRecalculateMVs_Table8[index], this, pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+    else
+        std::invoke(doPobRecalculateMVs_Table16[index], this, pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+}
+
+
+bool MotionBlockLevel::IsSceneChange(int64_t nTh1, int nTh2) const {
+    int sum = 0;
+    for (int i = 0; i < nBlkCount; i++)
+        sum += (vectors[i].sad > nTh1) ? 1 : 0;
+
+    return (sum > nTh2);
+}
+
+
+/// ///////////////////////////////////////////////////////
+
+// FIXME, how should the levels modifier work? how did it work?
+// levels > 0 means use that many levels, levels < 0 means use all valid levels except abs(levels) from the end, levels = 0 means use all valid levels
+MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int nDeltaFrame, int bitsPerSample) {
+    this->nBlkSizeX = nBlkSizeX;
+    this->nBlkSizeY = nBlkSizeY;
+    this->nOverlapX = nOverlapX;
+    this->nOverlapY = nOverlapY;
+    this->nDeltaFrame = nDeltaFrame;
+    xRatioUV = src.xRatioUV;
+    yRatioUV = src.yRatioUV;
+    this->chroma = src.chroma && chroma;
+    nWidth = src.nWidth[0];
+    nHeight = src.nHeight[0];
+    nRealWidth = src.nRealWidth[0];
+    nRealHeight = src.nRealHeight[0];
+    nPel = src.nPel;
+    nBlkX = (nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
+    nBlkY = (nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
+
+    int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+    int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+
+    if (nWidth_B < nRealWidth || nHeight_B < nRealHeight)
+        throw std::runtime_error("The chosen block size will leave some pixels unprocessed. Derive a new super clip with appropriate options!");
+
+    // calculate valid levels
+    int nLevelsMax = 0;
+    while (((nWidth_B >> nLevelsMax) - nOverlapX) / (nBlkSizeX - nOverlapX) > 0 &&
+        ((nHeight_B >> nLevelsMax) - nOverlapY) / (nBlkSizeY - nOverlapY) > 0)
+        nLevelsMax++;
+
+    nLevelCount = nLevels > 0 ? nLevels : nLevelsMax + nLevels;
+    pyramidLevels.resize(nLevelCount);
+
+    for (int i = 0; i < nLevelCount; i++) {
+        const bool smallestPlane = (i == nLevelCount - 1);
+        int nBlkXCurrent = ((nWidth_B >> i) - nOverlapX) / (nBlkSizeX - nOverlapX);
+        int nBlkYCurrent = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
+
+        pyramidLevels[i].Initialize(nBlkXCurrent, nBlkYCurrent, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 1, i, smallestPlane, chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, bitsPerSample);
+    }
+}
+
+MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) {
+    // FIXME, add error checking
+
+    const VSVideoFormat *vi = vsapi->getVideoFrameFormat(src);
+    auto props = vsapi->getFramePropertiesRO(src);
+    int err;
+    nWidth = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisWidth").c_str(), 0, &err);
+    nHeight = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisHeight").c_str(), 0, &err);
+    nRealWidth = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisRealWidth").c_str(), 0, &err);
+    nRealHeight = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisRealHeight").c_str(), 0, &err);
+    nHPadding = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisHPad").c_str(), 0, &err);
+    nVPadding = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisVPad").c_str(), 0, &err);
+    nPel = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisPel").c_str(), 0, &err);
+    nLevelCount = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisLevels").c_str(), 0, &err);
+    chroma = !!vsapi->mapGetInt(props, (prefix + "AnalysisChroma").c_str(), 0, &err);
+    xRatioUV = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisXRatioUV").c_str(), 0, &err);
+    yRatioUV = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisYRatioUV").c_str(), 0, &err);
+
+    nBlkSizeX = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisBlkSizeX").c_str(), 0, &err);
+    nBlkSizeY = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisBlkSizeY").c_str(), 0, &err);
+
+    nOverlapX = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisOverlapX").c_str(), 0, &err);
+    nOverlapY = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisOverlapY").c_str(), 0, &err);
+
+    nBlkX = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisNBlkX").c_str(), 0, &err);
+    nBlkY = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisNBlkY").c_str(), 0, &err);
+
+    nDeltaFrame = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisDeltaFrame").c_str(), 0, &err);
+
+    pyramidLevels.resize(nLevelCount);
+
+    std::string vectorsProp = prefix + "AnalysisVectors";
+
+    int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+    int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+
+    valid = true;
+
+    for (int i = 0; i < nLevelCount; i++) {
+        int nBlkX1 = ((nWidth_B >> i) - nOverlapX) / (nBlkSizeX - nOverlapX);
+        int nBlkY1 = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
+        int size = vsapi->mapGetDataSize(props, vectorsProp.c_str(), i, &err);
+        pyramidLevels[i].Initialize(nBlkX1, nBlkY1, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 0, i, (i == nLevelCount - 1), chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, vi->bitsPerSample);
+        if (size == nBlkX1 * nBlkY1 * sizeof(VECTOR)) {
+            const char *data = vsapi->mapGetData(props, vectorsProp.c_str(), i, &err);
+            if (!data)
+                throw std::runtime_error("Motion vector data corrupt, missing");
+            pyramidLevels[i].vectors.resize(nBlkX1 * nBlkY1);
+            std::memcpy(pyramidLevels[i].vectors.data(), data, size);
+        } else {
+            valid = false;
+        }
+    }
+}
+
+
+void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
+    SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
+    int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
+    int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
+    SearchType coarseSearchType, bool chroma) {
+
+    int fieldShiftCur = (nLevelCount - 1 == 0) ? fieldShift : 0; // may be non zero for finest level only
+
+    VECTOR globalMV = zeroMV; // create and init global motion vector as zero
+
+    if (!global)
+        pglobal = pzero;
+
+    // Search the motion vectors, for the low details interpolations first
+    SearchType searchTypeSmallest = (nLevelCount == 1 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for smallest coarse plane
+    int nSearchParamSmallest = (nLevelCount == 1) ? nPelSearch : nSearchParam;
+    bool tryManyLevel = tryMany && nLevelCount > 1;
+    pyramidLevels[nLevelCount - 1].SearchMVs(
+        pSrcGOF.GetLevel(nLevelCount - 1),
+        pRefGOF.GetLevel(nLevelCount - 1),
+        searchTypeSmallest, nSearchParamSmallest, nLambda, lsad, pnew, plevel,
+        &globalMV, fieldShiftCur, useSatd,
+        pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
+    // Refining the search until we reach the highest detail interpolation.
+
+    for (int i = nLevelCount - 2; i >= 0; i--) {
+        SearchType searchTypeLevel = (i == 0 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for coarse planes
+        int nSearchParamLevel = (i == 0) ? nPelSearch : nSearchParam;                                                            // special case for finest level
+        if (global) {
+            pyramidLevels[i + 1].EstimateGlobalMVDoubled(globalMV); // get updated global MV (doubled)
+        }
+        pyramidLevels[i].InterpolatePredictorsFromParent(pyramidLevels[i + 1]);
+        fieldShiftCur = (i == 0) ? fieldShift : 0; // may be non zero for finest level only
+        tryManyLevel = tryMany && i > 0;           // not for finest level to not decrease speed
+        pyramidLevels[i].SearchMVs(pSrcGOF.GetLevel(i), pRefGOF.GetLevel(i),
+            searchTypeLevel, nSearchParamLevel, nLambda, lsad, pnew, plevel,
+            &globalMV, fieldShiftCur, useSatd,
+            pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
+    }
+
+    valid = true;
+}
+
+
+void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
+    SearchType searchType, int nSearchParam, int nLambda, int pnew,
+    int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) {
+
+    // Search the motion vectors, for the low details interpolations first
+    // Refining the search until we reach the highest detail interpolation.
+    pyramidLevels[0].RecalculateMVs(pSrcGOF.GetLevel(0), pRefGOF.GetLevel(0),
+        searchType, nSearchParam, nLambda, pnew,
+        fieldShift, thSAD, useSatd, smooth, meander);
+}
+
+void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix, VSCore *core, const VSAPI *vsapi) {
+    auto props = vsapi->getFramePropertiesRW(dst);
+
+    vsapi->mapSetInt(props, (prefix + "AnalysisWidth").c_str(), nWidth, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisHeight").c_str(), nHeight, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisRealWidth").c_str(), nRealWidth, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisRealHeight").c_str(), nRealHeight, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisHPad").c_str(), nHPadding, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisVPad").c_str(), nVPadding, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisPel").c_str(), nPel, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisLevels").c_str(), pyramidLevels.size() + (divideExtra ? 1 : 0), maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisChroma").c_str(), chroma, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisXRatioUV").c_str(), xRatioUV, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisYRatioUV").c_str(), yRatioUV, maReplace);
+
+
+    vsapi->mapSetInt(props, (prefix + "AnalysisBlkSizeX").c_str(), nBlkSizeX, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisBlkSizeY").c_str(), nBlkSizeY, maReplace);
+
+    vsapi->mapSetInt(props, (prefix + "AnalysisOverlapX").c_str(), nOverlapX, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisOverlapY").c_str(), nOverlapY, maReplace);
+
+    vsapi->mapSetInt(props, (prefix + "AnalysisNBlkX").c_str(), nBlkX, maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisNBlkY").c_str(), nBlkY, maReplace);
+
+    vsapi->mapSetInt(props, (prefix + "AnalysisDeltaFrame").c_str(), nDeltaFrame, maReplace);
+
+
+    std::string vectorsProp = prefix + "AnalysisVectors";
+
+    if (divideExtra) {
+        vsapi->mapSetData(props,
+            vectorsProp.c_str(),
+            (const char *)dividedVectors.data(),
+            dividedVectors.size() * sizeof(VECTOR),
+            dtBinary,
+            maReplace);
+    }
+
+    for (int i = 0; i < nLevelCount; i++) {
+        const auto &plane = pyramidLevels[i];
+        vsapi->mapSetData(props,
+            vectorsProp.c_str(),
+            (const char *)plane.vectors.data(),
+            plane.vectors.size() * sizeof(VECTOR),
+            dtBinary,
+            maAppend);
+    };
+
+}
+
+bool MotionBlockPyramid::IsUsable(int64_t thscd1, int thscd2) const {
+    return !pyramidLevels[0].IsSceneChange(thscd1, thscd2) && valid;
+}
+
+BlockData MotionBlockPyramid::GetBlock(int nBlk) const {
+    int bY = nBlk / nBlkX;
+    int bX = nBlk % nBlkX;
+
+    return { bX * (nBlkSizeX - nOverlapX), bY * (nBlkSizeY - nOverlapY), pyramidLevels[0].vectors[nBlk] };
+}
+
+void MotionBlockPyramid::ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const {
+
+    int maxSAD = 8 * 8 * 255;
+
+    if (thscd1 > maxSAD)
+        throw std::runtime_error("thscd1 can be at most " + std::to_string(maxSAD));
+
+    // SCD thresholds
+    int referenceBlockSize = 8 * 8;
+    thscd1 = thscd1 * (nBlkSizeX * nBlkSizeY) / referenceBlockSize;
+    if (chroma)
+        thscd1 += thscd1 / (xRatioUV * yRatioUV) * 2;
+
+    int pixelMax = (1 << bitsPerSample) - 1;
+    thscd1 = (int64_t)((double)thscd1 * pixelMax / 255.0 + 0.5);
+
+    thscd2 = thscd2 * nBlkX * nBlkY / 256;
+}
