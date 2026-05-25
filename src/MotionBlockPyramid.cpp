@@ -824,7 +824,7 @@ void MotionBlockLevel::Refine() {
         int mvx = bestMV.x;
         int mvy = bestMV.y;
         for (int i = 1; i <= nSearchParam; i++) // region is same as enhausted, but ordered by radius (from near to far)
-            ExpandingSearch<nLogPel, PixelType>(1, 1, mvx, mvy);
+            ExpandingSearch<nLogPel, PixelType>(i, 1, mvx, mvy);
     } else if (searchType == SearchType::Hex2) {
         Hex2Search<nLogPel, PixelType>(nSearchParam);
 
