@@ -944,3 +944,7 @@ void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) {
     vsapi->mapSetInt(props, (prefix + "SuperYRatioUV").c_str(), yRatioUV, maReplace);
 }
 
+const FramePyramidLevel &FramePyramid::GetLevel(int level) const {
+    assert(level >= 0 && level < static_cast<int>(pyramidLevels.size()));
+    return pyramidLevels[level];
+}

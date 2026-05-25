@@ -32,9 +32,8 @@ enum class SearchType {
 };
 
 
-#define MV_DEFAULT_SCD1 400
-#define MV_DEFAULT_SCD2 130
-
+static constexpr const int MV_DEFAULT_SCD1 = 400;
+static constexpr const int MV_DEFAULT_SCD2 = 130;
 
 static constexpr const VECTOR zeroMV = { 0, 0, -1 };
 
@@ -42,8 +41,9 @@ static constexpr const VECTOR zeroMV = { 0, 0, -1 };
 // A motion block level is the motion estimation context euivalent
 // to a level of the super pyramid, it contains all the data and parameters needed to perform motion estimation on this level
 
-struct MotionBlockLevel {
-
+class MotionBlockLevel {
+    friend class MotionBlockPyramid;
+private:
     /* fields set at initialization */
 
     int nBlkX;        /* width in number of blocks */
@@ -119,8 +119,6 @@ struct MotionBlockLevel {
     int nSrcPitch_temp[3];
     uint8_t *pSrc_temp[3] = {}; //for easy WRITE access to temp block
 private:
-    // FIXME!!!!!
-    // USESATD TEMPLATE ARGUMENT CAN PROBABLY BE REMOVED AND THE SAD FUNCTION POINTERS CAN BE USED INSTEAD, but it is used in a lot of places so maybe not worth the effort right now
     template <int nLogPel, typename PixelType>
     const uint8_t *GetRefBlock(int nVx, int nVy) const;
 
@@ -227,6 +225,7 @@ public:
     int nHPadding;
     int nVPadding;
     
+private:
     // not exported
 
     int divideExtra = 0;

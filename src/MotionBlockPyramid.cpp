@@ -1505,7 +1505,7 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
             pyramidLevels[i].vectors.resize(nBlkX1 * nBlkY1);
             std::memcpy(pyramidLevels[i].vectors.data(), data, size);
         } else {
-            valid = false;
+            throw std::runtime_error("Motion vector data corrupt, wrong size");
         }
     }
 }

@@ -31,7 +31,7 @@ int PlaneDimensionLuma(int numPixels, int ratioUV, int pad);
 
 // FIXME, note that nPel is duplicated and weird everywhere if anything it should go in the FramePyramidLevel or something
 
-struct PyramidPlane {
+class PyramidPlane {
 public:
     // Almost all manipulations are done on the VSFrame storage before assigning it here
     const uint8_t *pPlane[16] = {};
@@ -143,12 +143,13 @@ private:
     void PadPlaneData(int plane);
 };
 
-struct FramePyramidLevel {
+class FramePyramidLevel {
+public:
     PyramidPlane planes[3] = {};
 };
 
 class FramePyramid {
-public: //? ?????
+public:
     std::vector<FramePyramidLevel> pyramidLevels; // 0 is the orignal padded frame, higher levels are n times reduced
     int nPel = 1; // Why is nPel stored here as well? It's trivial to get with an accessor from the top level plane
 
@@ -172,6 +173,7 @@ public: //? ?????
     int bitsPerSample = -1;
     int bytesPerSample = -1;
 
+private:
     VSCore *core;
     const VSAPI *vsapi;
 public:
@@ -182,8 +184,5 @@ public:
     void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi);
     void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi);
     void ExportFrameData(VSFrame *dst, const std::string &prefix); // Stores all levels as frame properties of the output frame, note that each used plane is stored as a separate property
-    const FramePyramidLevel &GetLevel(int level) const {
-        assert(level >= 0 && level < static_cast<int>(pyramidLevels.size()));
-        return pyramidLevels[level];
-    }
+    const FramePyramidLevel &GetLevel(int level) const;
 };
