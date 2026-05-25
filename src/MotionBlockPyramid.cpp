@@ -83,7 +83,8 @@ void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) {
     // more advanced method (like MVDepan) can be implemented later
 
     // find most frequent x
-    std::fill(freqArray.begin(), freqArray.end(), 0);
+    freqArray.resize(8192 * nPel * 2);
+
     size_t indmin = freqArray.size() - 1;
     size_t indmax = 0;
     for (int i = 0; i < nBlkCount; i++) {
@@ -151,6 +152,8 @@ void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) {
         globalMVec.x = 2 * medianx;
         globalMVec.y = 2 * mediany;
     }
+
+    freqArray.clear();
 }
 
 
@@ -354,16 +357,6 @@ int MotionBlockLevel::MotionDistorsion(int vx, int vy) const {
     return (int)((nLambda * dist) >> 8);
 }
 
-// FIXME, can this one be removed by manipulating SAD/SATD function pointers?
-template <bool useSatd>
-int64_t MotionBlockLevel::LumaSAD(const uint8_t *pRef0) const {
-    if constexpr (!useSatd)
-        return SAD(pSrc_temp[0], nSrcPitch_temp[0], pRef0, nRefPitch[0]);
-    else
-        return SATD(pSrc_temp[0], nSrcPitch_temp[0], pRef0, nRefPitch[0]);
-}
-
-
 /* check if a vector is inside search boundaries */
 bool MotionBlockLevel::IsVectorOK(int vx, int vy) const {
     return ((vx >= nDxMin) &&
@@ -377,7 +370,7 @@ bool MotionBlockLevel::IsVectorOK(int vx, int vy) const {
 #define CHECKMV_UPDATEDIR (1 << 2)
 #define CHECKMV_UPDATEBESTMV (1 << 3)
 
-template <bool useSatd, int nLogPel, int flags, typename PixelType>
+template <int nLogPel, int flags, typename PixelType>
 void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
     if (IsVectorOK(vx, vy)) {
         int64_t cost = MotionDistorsion(vx, vy);
@@ -389,7 +382,7 @@ void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
             chroma ? GetRefBlockU<nLogPel, PixelType>(vx, vy) : nullptr,
             chroma ? GetRefBlockV<nLogPel, PixelType>(vx, vy) : nullptr,
         };
-        int64_t sad = LumaSAD<useSatd>(blocks[0]);
+        int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], blocks[0], nRefPitch[0]);
         cost += sad + ((flags & CHECKMV_PENALTYNEW) ? ((penaltyNew * sad) >> 8) : 0);
         if (cost >= nMinCost)
             return;
@@ -417,30 +410,30 @@ void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
 
 
 /* check if the vector (vx, vy) is better than the best vector found so far without penalty new - renamed in v.2.11*/
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::CheckMV0(int vx, int vy) { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
-    CheckMV_Template<useSatd, nLogPel, CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
+    CheckMV_Template<nLogPel, CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
 }
 
 
 /* check if the vector (vx, vy) is better than the best vector found so far */
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::CheckMV(int vx, int vy) { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
-    CheckMV_Template<useSatd, nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
+    CheckMV_Template<nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
 }
 
 
 /* check if the vector (vx, vy) is better, and update dir accordingly */
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::CheckMV2(int vx, int vy, int *dir, int val) {
-    CheckMV_Template<useSatd, nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, dir, val);
+    CheckMV_Template<nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, dir, val);
 }
 
 
 /* check if the vector (vx, vy) is better, and update dir accordingly, but not bestMV.x, y */
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::CheckMVdir(int vx, int vy, int *dir, int val) {
-    CheckMV_Template<useSatd, nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR, PixelType>(vx, vy, dir, val);
+    CheckMV_Template<nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR, PixelType>(vx, vy, dir, val);
 }
 
 
@@ -495,37 +488,7 @@ void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _n
 
     vectors.resize(nBlkCount);
 
-    /* function pointers initialization */
-    SAD = selectSADFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
-    BLITLUMA = selectCopyFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
-
-    SADCHROMA = selectSADFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
-    BLITCHROMA = selectCopyFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
-
-    if (nBlkSizeX == 16 && nBlkSizeY == 2)
-        SATD = NULL;
-    else
-        SATD = selectSATDFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
-
-    if (!chroma)
-        SADCHROMA = NULL;
-
-
-    // 64 required for effective use of x264 sad on Core2
-#define ALIGN_PLANES 64
-
-    nSrcPitch_temp[0] = nBlkSizeX * bytesPerSample;
-    nSrcPitch_temp[1] = nBlkSizeX / xRatioUV * bytesPerSample;
-    nSrcPitch_temp[2] = nSrcPitch_temp[1];
-
-    // Four extra bytes because pixel_sad_4x4_mmx2 reads four bytes more than it should (but doesn't use them in any way).
-    pSrc_temp[0] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY * nSrcPitch_temp[0] + 4, ALIGN_PLANES);
-    pSrc_temp[1] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[1] + 4, ALIGN_PLANES);
-    pSrc_temp[2] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[2] + 4, ALIGN_PLANES);
-
-#undef ALIGN_PLANES
-
-    freqArray.resize(8192 * nPel * 2);
+    assert(nBlkSizeX != 16 && nBlkSizeY != 2);
 
     verybigSAD = nBlkSizeX * nBlkSizeY * (1 << bitsPerSample);
 }
@@ -584,8 +547,37 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
     predictors[4] = ClipMV(zeroMVfieldShifted);
 }
 
+void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) {
+    this->chroma = chroma;
+    // FIXME, add some SATD size check like the initialization assert?
 
-template <bool useSatd, int nLogPel, typename PixelType>
+    /* function pointers initialization */
+    if (useSatd)
+        SAD = selectSATDFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
+    else
+        SAD = selectSADFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
+    BLITLUMA = selectCopyFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
+    if (chroma) {
+        SADCHROMA = selectSADFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
+        BLITCHROMA = selectCopyFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
+    }
+
+    // 64 required for effective use of x264 sad on Core2
+#define ALIGN_PLANES 64
+
+    nSrcPitch_temp[0] = nBlkSizeX * bytesPerSample;
+    nSrcPitch_temp[1] = nBlkSizeX / xRatioUV * bytesPerSample;
+    nSrcPitch_temp[2] = nSrcPitch_temp[1];
+
+    // Four extra bytes because pixel_sad_4x4_mmx2 reads four bytes more than it should (but doesn't use them in any way).
+    pSrc_temp[0] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY * nSrcPitch_temp[0] + 4, ALIGN_PLANES);
+    pSrc_temp[1] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[1] + 4, ALIGN_PLANES);
+    pSrc_temp[2] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[2] + 4, ALIGN_PLANES);
+
+#undef ALIGN_PLANES
+}
+
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DiamondSearch(int length) {
     enum Direction {
         Right = 1,
@@ -612,13 +604,13 @@ void MotionBlockLevel::DiamondSearch(int length) {
         // of the algorithm. If we find one, we add it to the set of directions
         // we'll test next
         if (lastDirection & Right)
-            CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy, &direction, Right);
+            CheckMV2<nLogPel, PixelType>(dx + length, dy, &direction, Right);
         if (lastDirection & Left)
-            CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy, &direction, Left);
+            CheckMV2<nLogPel, PixelType>(dx - length, dy, &direction, Left);
         if (lastDirection & Down)
-            CheckMV2<useSatd, nLogPel, PixelType>(dx, dy + length, &direction, Down);
+            CheckMV2<nLogPel, PixelType>(dx, dy + length, &direction, Down);
         if (lastDirection & Up)
-            CheckMV2<useSatd, nLogPel, PixelType>(dx, dy - length, &direction, Up);
+            CheckMV2<nLogPel, PixelType>(dx, dy - length, &direction, Up);
 
         // If one of the directions improves the SAD, we make further tests
         // on the diagonals
@@ -628,11 +620,11 @@ void MotionBlockLevel::DiamondSearch(int length) {
             dy = bestMV.y;
 
             if (lastDirection & (Right + Left)) {
-                CheckMV2<useSatd, nLogPel, PixelType>(dx, dy + length, &direction, Down);
-                CheckMV2<useSatd, nLogPel, PixelType>(dx, dy - length, &direction, Up);
+                CheckMV2<nLogPel, PixelType>(dx, dy + length, &direction, Down);
+                CheckMV2<nLogPel, PixelType>(dx, dy - length, &direction, Up);
             } else {
-                CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy, &direction, Right);
-                CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy, &direction, Left);
+                CheckMV2<nLogPel, PixelType>(dx + length, dy, &direction, Right);
+                CheckMV2<nLogPel, PixelType>(dx - length, dy, &direction, Left);
             }
         }
 
@@ -641,48 +633,48 @@ void MotionBlockLevel::DiamondSearch(int length) {
         else {
             switch (lastDirection) {
                 case Right:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
                     break;
                 case Left:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
                     break;
                 case Down:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
                     break;
                 case Up:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
                     break;
                 case Right + Down:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
                     break;
                 case Left + Down:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
                     break;
                 case Right + Up:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
                     break;
                 case Left + Up:
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
                     break;
                 default:
                     // Even the default case may happen, in the first step of the
                     // algorithm for example.
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
-                    CheckMV2<useSatd, nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy + length, &direction, Right + Down);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy + length, &direction, Left + Down);
+                    CheckMV2<nLogPel, PixelType>(dx + length, dy - length, &direction, Right + Up);
+                    CheckMV2<nLogPel, PixelType>(dx - length, dy - length, &direction, Left + Up);
                     break;
             }
         }
@@ -690,7 +682,7 @@ void MotionBlockLevel::DiamondSearch(int length) {
 }
 
 
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::ExpandingSearch(int r, int s, int mvx, int mvy) {
     // diameter = 2*r + 1, step=s
     // part of true enhaustive search (thin expanding square) around mvx, mvy
@@ -698,20 +690,20 @@ void MotionBlockLevel::ExpandingSearch(int r, int s, int mvx, int mvy) {
     // sides of square without corners
     for (int i = -r + s; i < r; i += s) // without corners! - v2.1
     {
-        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy - r);
-        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy + r);
+        CheckMV<nLogPel, PixelType>(mvx + i, mvy - r);
+        CheckMV<nLogPel, PixelType>(mvx + i, mvy + r);
     }
 
     for (int j = -r + s; j < r; j += s) {
-        CheckMV<useSatd, nLogPel, PixelType>(mvx - r, mvy + j);
-        CheckMV<useSatd, nLogPel, PixelType>(mvx + r, mvy + j);
+        CheckMV<nLogPel, PixelType>(mvx - r, mvy + j);
+        CheckMV<nLogPel, PixelType>(mvx + r, mvy + j);
     }
 
     // then corners - they are more far from cenrer
-    CheckMV<useSatd, nLogPel, PixelType>(mvx - r, mvy - r);
-    CheckMV<useSatd, nLogPel, PixelType>(mvx - r, mvy + r);
-    CheckMV<useSatd, nLogPel, PixelType>(mvx + r, mvy - r);
-    CheckMV<useSatd, nLogPel, PixelType>(mvx + r, mvy + r);
+    CheckMV<nLogPel, PixelType>(mvx - r, mvy - r);
+    CheckMV<nLogPel, PixelType>(mvx - r, mvy + r);
+    CheckMV<nLogPel, PixelType>(mvx + r, mvy - r);
+    CheckMV<nLogPel, PixelType>(mvx + r, mvy + r);
 }
 
 
@@ -720,7 +712,7 @@ static constexpr int mod6m1[8] = { 5, 0, 1, 2, 3, 4, 5, 0 };
 /* radius 2 hexagon. repeated entries are to avoid having to compute mod6 every time. */
 static constexpr int hex2[8][2] = { { -1, -2 }, { -2, 0 }, { -1, 2 }, { 1, 2 }, { 2, 0 }, { 1, -2 }, { -1, -2 }, { -2, 0 } };
 
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::Hex2Search(int i_me_range) { //adopted from x264
     int dir = -2;
     int bmx = bestMV.x;
@@ -736,12 +728,12 @@ void MotionBlockLevel::Hex2Search(int i_me_range) { //adopted from x264
         //        COPY2_IF_LT( bcost, costs[3], dir, 3 );
         //        COPY2_IF_LT( bcost, costs[4], dir, 4 );
         //        COPY2_IF_LT( bcost, costs[5], dir, 5 );
-        CheckMVdir<useSatd, nLogPel, PixelType>(bmx - 2, bmy, &dir, 0);
-        CheckMVdir<useSatd, nLogPel, PixelType>(bmx - 1, bmy + 2, &dir, 1);
-        CheckMVdir<useSatd, nLogPel, PixelType>(bmx + 1, bmy + 2, &dir, 2);
-        CheckMVdir<useSatd, nLogPel, PixelType>(bmx + 2, bmy, &dir, 3);
-        CheckMVdir<useSatd, nLogPel, PixelType>(bmx + 1, bmy - 2, &dir, 4);
-        CheckMVdir<useSatd, nLogPel, PixelType>(bmx - 1, bmy - 2, &dir, 5);
+        CheckMVdir<nLogPel, PixelType>(bmx - 2, bmy, &dir, 0);
+        CheckMVdir<nLogPel, PixelType>(bmx - 1, bmy + 2, &dir, 1);
+        CheckMVdir<nLogPel, PixelType>(bmx + 1, bmy + 2, &dir, 2);
+        CheckMVdir<nLogPel, PixelType>(bmx + 2, bmy, &dir, 3);
+        CheckMVdir<nLogPel, PixelType>(bmx + 1, bmy - 2, &dir, 4);
+        CheckMVdir<nLogPel, PixelType>(bmx - 1, bmy - 2, &dir, 5);
 
 
         if (dir != -2) {
@@ -760,9 +752,9 @@ void MotionBlockLevel::Hex2Search(int i_me_range) { //adopted from x264
                 //                COPY2_IF_LT( bcost, costs[1], dir, odir   );
                 //                COPY2_IF_LT( bcost, costs[2], dir, odir+1 );
 
-                CheckMVdir<useSatd, nLogPel, PixelType>(bmx + hex2[odir + 0][0], bmy + hex2[odir + 0][1], &dir, odir - 1);
-                CheckMVdir<useSatd, nLogPel, PixelType>(bmx + hex2[odir + 1][0], bmy + hex2[odir + 1][1], &dir, odir);
-                CheckMVdir<useSatd, nLogPel, PixelType>(bmx + hex2[odir + 2][0], bmy + hex2[odir + 2][1], &dir, odir + 1);
+                CheckMVdir<nLogPel, PixelType>(bmx + hex2[odir + 0][0], bmy + hex2[odir + 0][1], &dir, odir - 1);
+                CheckMVdir<nLogPel, PixelType>(bmx + hex2[odir + 1][0], bmy + hex2[odir + 1][1], &dir, odir);
+                CheckMVdir<nLogPel, PixelType>(bmx + hex2[odir + 2][0], bmy + hex2[odir + 2][1], &dir, odir + 1);
                 if (dir == -2)
                     break;
                 bmx += hex2[dir + 1][0];
@@ -777,26 +769,26 @@ void MotionBlockLevel::Hex2Search(int i_me_range) { //adopted from x264
     //        omx = bmx; omy = bmy;
     //        COST_MV_X4(  0,-1,  0,1, -1,0, 1,0 );
     //        COST_MV_X4( -1,-1, -1,1, 1,-1, 1,1 );
-    ExpandingSearch<useSatd, nLogPel, PixelType>(1, 1, bmx, bmy);
+    ExpandingSearch<nLogPel, PixelType>(1, 1, bmx, bmy);
 }
 
 
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::CrossSearch(int start, int x_max, int y_max, int mvx, int mvy) { // part of umh  search
 
     for (int i = start; i < x_max; i += 2) {
-        CheckMV<useSatd, nLogPel, PixelType>(mvx - i, mvy);
-        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy);
+        CheckMV<nLogPel, PixelType>(mvx - i, mvy);
+        CheckMV<nLogPel, PixelType>(mvx + i, mvy);
     }
 
     for (int j = start; j < y_max; j += 2) {
-        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy - j);
-        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy + j);
+        CheckMV<nLogPel, PixelType>(mvx, mvy - j);
+        CheckMV<nLogPel, PixelType>(mvx, mvy + j);
     }
 }
 
 
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::UMHSearch(int i_me_range, int omx, int omy) { // radius
     // Uneven-cross Multi-Hexagon-grid Search (see x264)
     /* hexagon grid */
@@ -804,7 +796,7 @@ void MotionBlockLevel::UMHSearch(int i_me_range, int omx, int omy) { // radius
     //            int omx = bestMV.x;
     //            int omy = bestMV.y;
     // my mod: do not shift the center after Cross
-    CrossSearch<useSatd, nLogPel, PixelType>(1, i_me_range, i_me_range, omx, omy);
+    CrossSearch<nLogPel, PixelType>(1, i_me_range, i_me_range, omx, omy);
 
 
     int i = 1;
@@ -816,52 +808,52 @@ void MotionBlockLevel::UMHSearch(int i_me_range, int omx, int omy) { // radius
         for (int j = 0; j < 16; j++) {
             int mx = omx + hex4[j][0] * i;
             int my = omy + hex4[j][1] * i;
-            CheckMV<useSatd, nLogPel, PixelType>(mx, my);
+            CheckMV<nLogPel, PixelType>(mx, my);
         }
     } while (++i <= i_me_range / 4);
 
     //            if( bmy <= mv_y_max )
     //                goto me_hex2;
-    Hex2Search<useSatd, nLogPel, PixelType>(i_me_range);
+    Hex2Search<nLogPel, PixelType>(i_me_range);
 }
 
 
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::Refine() {
     // then, we refine, according to the search type
     if (searchType == SearchType::Logarithmic) {
         for (int i = nSearchParam; i > 0; i /= 2)
-            DiamondSearch<useSatd, nLogPel, PixelType>(i);
+            DiamondSearch<nLogPel, PixelType>(i);
     } else if (searchType == SearchType::Exhaustive) {
         int mvx = bestMV.x;
         int mvy = bestMV.y;
         for (int i = 1; i <= nSearchParam; i++) // region is same as enhausted, but ordered by radius (from near to far)
-            ExpandingSearch<useSatd, nLogPel, PixelType>(1, 1, mvx, mvy);
+            ExpandingSearch<nLogPel, PixelType>(1, 1, mvx, mvy);
     } else if (searchType == SearchType::Hex2) {
-        Hex2Search<useSatd, nLogPel, PixelType>(nSearchParam);
+        Hex2Search<nLogPel, PixelType>(nSearchParam);
 
     } else if (searchType == SearchType::UnevenMultiHexagon) {
-        UMHSearch<useSatd, nLogPel, PixelType>(nSearchParam, bestMV.x, bestMV.y);
+        UMHSearch<nLogPel, PixelType>(nSearchParam, bestMV.x, bestMV.y);
 
     } else if (searchType == SearchType::Horizontal) {
         int mvx = bestMV.x;
         int mvy = bestMV.y;
         for (int i = 1; i <= nSearchParam; i++) {
-            CheckMV<useSatd, nLogPel, PixelType>(mvx - i, mvy);
-            CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy);
+            CheckMV<nLogPel, PixelType>(mvx - i, mvy);
+            CheckMV<nLogPel, PixelType>(mvx + i, mvy);
         }
     } else if (searchType == SearchType::Vertical) {
         int mvx = bestMV.x;
         int mvy = bestMV.y;
         for (int i = 1; i <= nSearchParam; i++) {
-            CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy - i);
-            CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy + i);
+            CheckMV<nLogPel, PixelType>(mvx, mvy - i);
+            CheckMV<nLogPel, PixelType>(mvx, mvy + i);
         }
     }
 }
 
 
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany, int &badcount) {
 
     // FIXME, aren't several predictors usually the same? make sure duplicate vectors aren't tested several times
@@ -876,7 +868,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         GetRefBlock<nLogPel, PixelType>(0, zeroMVfieldShifted.y),
         chroma ? GetRefBlockU<nLogPel, PixelType>(0, 0) : nullptr,
         chroma ? GetRefBlockV<nLogPel, PixelType>(0, 0) : nullptr, };
-    int64_t sad = LumaSAD<useSatd>(zeroMVBlocks[0]);
+    int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], zeroMVBlocks[0], nRefPitch[0]);
     if (chroma) {
         sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], zeroMVBlocks[1], nRefPitch[1]);
         sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], zeroMVBlocks[2], nRefPitch[2]);
@@ -889,7 +881,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
 
     if (tryMany) {
         //  refine around zero
-        Refine<useSatd, nLogPel, PixelType>();
+        Refine<nLogPel, PixelType>();
         bestMVMany[0] = bestMV; // save bestMV
         nMinCostMany[0] = nMinCost;
     }
@@ -901,7 +893,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         chroma ? GetRefBlockU<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y) : nullptr,
         chroma ? GetRefBlockV<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y) : nullptr,
     };
-    sad = LumaSAD<useSatd>(globalPredBlocks[0]);
+    sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], globalPredBlocks[0], nRefPitch[0]);
     if (chroma) {
         sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], globalPredBlocks[1], nRefPitch[1]);
         sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], globalPredBlocks[2], nRefPitch[2]);
@@ -916,7 +908,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
     }
     if (tryMany) {
         // refine around global
-        Refine<useSatd, nLogPel, PixelType>();               // reset bestMV
+        Refine<nLogPel, PixelType>();               // reset bestMV
         bestMVMany[1] = bestMV; // save bestMV
         nMinCostMany[1] = nMinCost;
     }
@@ -925,7 +917,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         chroma ? GetRefBlockU<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
         chroma ? GetRefBlockV<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
     };
-    sad = LumaSAD<useSatd>(predBlocks[0]);
+    sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], predBlocks[0], nRefPitch[0]);
     if (chroma) {
         sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], predBlocks[1], nRefPitch[1]);
         sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], predBlocks[2], nRefPitch[2]);
@@ -940,7 +932,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
     }
     if (tryMany) {
         // refine around predictor
-        Refine<useSatd, nLogPel, PixelType>();               // reset bestMV
+        Refine<nLogPel, PixelType>();               // reset bestMV
         bestMVMany[2] = bestMV; // save bestMV
         nMinCostMany[2] = nMinCost;
     }
@@ -951,10 +943,10 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
     for (int i = 0; i < npred; i++) {
         if (tryMany)
             nMinCost = verybigSAD + 1;
-        CheckMV0<useSatd, nLogPel, PixelType>(predictors[i].x, predictors[i].y);
+        CheckMV0<nLogPel, PixelType>(predictors[i].x, predictors[i].y);
         if (tryMany) {
             // refine around predictor
-            Refine<useSatd, nLogPel, PixelType>();                   // reset bestMV
+            Refine<nLogPel, PixelType>();                   // reset bestMV
             bestMVMany[i + 3] = bestMV; // save bestMV
             nMinCostMany[i + 3] = nMinCost;
         }
@@ -971,7 +963,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         }
     } else {
         // then, we refine, according to the search type
-        Refine<useSatd, nLogPel, PixelType>();
+        Refine<nLogPel, PixelType>();
     }
 
     int64_t foundSAD = bestMV.sad;
@@ -985,10 +977,10 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
 
         if (badrange > 0) { // UMH
             // rathe good is not found, lets try around zero
-            UMHSearch<useSatd, nLogPel, PixelType>(badrange * (1 << nLogPel), 0, 0);
+            UMHSearch<nLogPel, PixelType>(badrange * (1 << nLogPel), 0, 0);
         } else if (badrange < 0) { // ESA
             for (int i = 1; i < -badrange * (1 << nLogPel); i += (1 << nLogPel)) { // at radius
-                ExpandingSearch<useSatd, nLogPel, PixelType>(i, 1 << nLogPel, 0, 0);
+                ExpandingSearch<nLogPel, PixelType>(i, 1 << nLogPel, 0, 0);
                 if (bestMV.sad < foundSAD / 4)
                     break; // stop search if rathe good is found
             }
@@ -997,7 +989,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         int mvx = bestMV.x; // refine in small area
         int mvy = bestMV.y;
         for (int i = 1; i < (1 << nLogPel); i++) { // small radius
-            ExpandingSearch<useSatd, nLogPel, PixelType>(i, 1, mvx, mvy);
+            ExpandingSearch<nLogPel, PixelType>(i, 1, mvx, mvy);
         }
     }
 
@@ -1007,7 +999,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
 }
 
 
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int lsad, int pnew,
     int plevel, VECTOR *globalMVec, int fieldShift,
@@ -1111,7 +1103,7 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
 
             /* search the mv */
             predictor = ClipMV(vectors[blkIdx]);
-            PseudoEPZSearch<useSatd, nLogPel, PixelType>(blkIdx, blkx, blky, blkScanDir, tryMany, badcount);
+            PseudoEPZSearch<nLogPel, PixelType>(blkIdx, blkx, blky, blkScanDir, tryMany, badcount);
 
             /* write the results */
             pBlkData[blkx] = bestMV;
@@ -1136,35 +1128,36 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
 }
 
 
-static constexpr decltype(&MotionBlockLevel::DoSearchMVs<false, 0, uint8_t>) SearchMVs_Table8[] = {
-    &MotionBlockLevel::DoSearchMVs<false, 0, uint8_t>, &MotionBlockLevel::DoSearchMVs<false, 1, uint8_t>, &MotionBlockLevel::DoSearchMVs<false, 2, uint8_t>,
-    &MotionBlockLevel::DoSearchMVs<true, 0, uint8_t>, &MotionBlockLevel::DoSearchMVs<true, 1, uint8_t>, &MotionBlockLevel::DoSearchMVs<true, 2, uint8_t>
-};
-
-static constexpr decltype(&MotionBlockLevel::DoSearchMVs<false, 0, uint16_t>) SearchMVs_Table16[] = {
-    &MotionBlockLevel::DoSearchMVs<false, 0, uint16_t>, &MotionBlockLevel::DoSearchMVs<false, 1, uint16_t>, &MotionBlockLevel::DoSearchMVs<false, 2, uint16_t>,
-    &MotionBlockLevel::DoSearchMVs<true, 0, uint16_t>, &MotionBlockLevel::DoSearchMVs<true, 1, uint16_t>, &MotionBlockLevel::DoSearchMVs<true, 2, uint16_t>
-};
-
-
 void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int lsad, int pnew,
     int plevel, VECTOR *globalMVec,
     int fieldShift, bool useSatd,
     int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
 
-    int index = nLogPel + (useSatd ? 3 : 0);
-    if (bytesPerSample == 1)
-        std::invoke(SearchMVs_Table8[index], this, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
-    else
-        std::invoke(SearchMVs_Table16[index], this, pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+    InitMotionEstimationFields(useSatd, chroma);
+
+    if (bytesPerSample == 1) {
+        if (nLogPel == 0)
+            DoSearchMVs<0, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+        else if (nLogPel == 1)
+            DoSearchMVs<1, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+        else
+            DoSearchMVs<2, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+    } else {
+        if (nLogPel == 0)
+            DoSearchMVs<0, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+        else if (nLogPel == 1)
+            DoSearchMVs<1, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+        else
+            DoSearchMVs<2, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
+    }
 }
 
 
 // FIXME, basically rewrite it this way: check so src and ref frames are compatible in padding and size and such
 // if so store all the old values in the old variables and also copy all the old vectors
 // use then use it to predict the new vectors
-template <bool useSatd, int nLogPel, typename PixelType>
+template <int nLogPel, typename PixelType>
 void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int pnew,
     int fieldShift, int64_t thSAD, int smooth, bool meander) {
@@ -1332,7 +1325,7 @@ void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
                 GetRefBlock<nLogPel, PixelType>(predictor.x, predictor.y),
                 chroma ? GetRefBlockU<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
                 chroma ? GetRefBlockV<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr, };
-            int64_t sad = LumaSAD<useSatd>(blocks[0]);
+            int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], blocks[0], nRefPitch[0]);
             if (chroma) {
                 sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], blocks[1], nRefPitch[1]);
                 sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], blocks[2], nRefPitch[2]);
@@ -1345,32 +1338,32 @@ void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 
                 if (searchType == SearchType::Logarithmic) {
                     for (int i = nSearchParam; i > 0; i /= 2)
-                        DiamondSearch<useSatd, nLogPel, PixelType>(i);
+                        DiamondSearch<nLogPel, PixelType>(i);
 
                 } else if (searchType == SearchType::Exhaustive) {
                     int mvx = bestMV.x;
                     int mvy = bestMV.y;
                     for (int i = 1; i <= nSearchParam; i++) // region is same as exhaustive, but ordered by radius (from near to far)
-                        ExpandingSearch<useSatd, nLogPel, PixelType>(i, 1, mvx, mvy);
+                        ExpandingSearch<nLogPel, PixelType>(i, 1, mvx, mvy);
                 } else if (searchType == SearchType::Hex2) {
-                    Hex2Search<useSatd, nLogPel, PixelType>(nSearchParam);
+                    Hex2Search<nLogPel, PixelType>(nSearchParam);
 
                 } else if (searchType == SearchType::UnevenMultiHexagon) {
-                    UMHSearch<useSatd, nLogPel, PixelType>(nSearchParam, bestMV.x, bestMV.y);
+                    UMHSearch<nLogPel, PixelType>(nSearchParam, bestMV.x, bestMV.y);
 
                 } else if (searchType == SearchType::Horizontal) {
                     int mvx = bestMV.x;
                     int mvy = bestMV.y;
                     for (int i = 1; i <= nSearchParam; i++) {
-                        CheckMV<useSatd, nLogPel, PixelType>(mvx - i, mvy);
-                        CheckMV<useSatd, nLogPel, PixelType>(mvx + i, mvy);
+                        CheckMV<nLogPel, PixelType>(mvx - i, mvy);
+                        CheckMV<nLogPel, PixelType>(mvx + i, mvy);
                     }
                 } else if (searchType == SearchType::Vertical) {
                     int mvx = bestMV.x;
                     int mvy = bestMV.y;
                     for (int i = 1; i <= nSearchParam; i++) {
-                        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy - i);
-                        CheckMV<useSatd, nLogPel, PixelType>(mvx, mvy + i);
+                        CheckMV<nLogPel, PixelType>(mvx, mvy - i);
+                        CheckMV<nLogPel, PixelType>(mvx, mvy + i);
                     }
                 }
             }
@@ -1401,24 +1394,27 @@ void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     }
 }
 
-static const decltype(&MotionBlockLevel::doRecalculateMVs<false, 0, uint8_t>) doPobRecalculateMVs_Table8[] = {
-    &MotionBlockLevel::doRecalculateMVs<false, 0, uint8_t>, &MotionBlockLevel::doRecalculateMVs<false, 1, uint8_t>, &MotionBlockLevel::doRecalculateMVs<false, 2, uint8_t>,
-    &MotionBlockLevel::doRecalculateMVs<true, 0, uint8_t>, &MotionBlockLevel::doRecalculateMVs<true, 1, uint8_t>, &MotionBlockLevel::doRecalculateMVs<true, 2, uint8_t>,
-};
-
-static const decltype(&MotionBlockLevel::doRecalculateMVs<false, 0, uint8_t>) doPobRecalculateMVs_Table16[] = {
-    &MotionBlockLevel::doRecalculateMVs<false, 0, uint16_t>, &MotionBlockLevel::doRecalculateMVs<false, 1, uint16_t>, &MotionBlockLevel::doRecalculateMVs<false, 2, uint16_t>,
-    &MotionBlockLevel::doRecalculateMVs<true, 0, uint16_t>, &MotionBlockLevel::doRecalculateMVs<true, 1, uint16_t>, &MotionBlockLevel::doRecalculateMVs<true, 2, uint16_t>,
-};
-
 void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) {
-    int index = nLogPel + (useSatd ? 3 : 0);
-    if (bytesPerSample == 1)
-        std::invoke(doPobRecalculateMVs_Table8[index], this, pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
-    else
-        std::invoke(doPobRecalculateMVs_Table16[index], this, pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+
+    InitMotionEstimationFields(useSatd, chroma);
+
+    if (bytesPerSample == 1) {
+        if (nLogPel == 0)
+            MotionBlockLevel::doRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+        else if (nLogPel == 1)
+            MotionBlockLevel::doRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+        else
+            MotionBlockLevel::doRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+    } else {
+        if (nLogPel == 0)
+            MotionBlockLevel::doRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+        else if (nLogPel == 1)
+            MotionBlockLevel::doRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+        else
+            MotionBlockLevel::doRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+    }
 }
 
 

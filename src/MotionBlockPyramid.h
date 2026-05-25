@@ -74,11 +74,10 @@ struct MotionBlockLevel {
     int badrange;     // wide search radius
     int64_t verybigSAD;
 
-    SADFunction SAD;   /* function which computes the sad */
-    COPYFunction BLITLUMA;
-    COPYFunction BLITCHROMA;
-    SADFunction SADCHROMA;
-    SADFunction SATD; /* SATD function, (similar to SAD), used as replacement to dct */
+    SADFunction SAD = nullptr;   /* function which computes the sad */
+    SADFunction SADCHROMA = nullptr;
+    COPYFunction BLITLUMA = nullptr;
+    COPYFunction BLITCHROMA = nullptr;
 
     std::vector<VECTOR> vectors; /* motion vectors of the blocks */
     /* before the search, contains the hierachal predictor */
@@ -90,8 +89,8 @@ struct MotionBlockLevel {
     /* working fields */
     // the frame to compare to, may be possible to pass prefframe instead of whole pob to some functions
     // constant the whole time
-    const FramePyramidLevel *pRefFrame;
-    ptrdiff_t nRefPitch[3];
+    const FramePyramidLevel *pRefFrame = nullptr;
+    ptrdiff_t nRefPitch[3] = {};
 
     // These are all used deep in motion estimation
     VECTOR bestMV;    /* best vector found so far during the search */
@@ -131,66 +130,63 @@ private:
     template <int nLogPel, typename PixelType>
     const uint8_t *GetRefBlockV(int nVx, int nVy) const;
 
-    template <bool useSatd>
-    int64_t LumaSAD(const uint8_t *pRef0) const;
-
-    template <bool useSatd, int nLogPel, int flags, typename PixelType>
+    template <int nLogPel, int flags, typename PixelType>
     void CheckMV_Template(int vx, int vy, int *dir, int val);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void CheckMV0(int vx, int vy);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void CheckMV(int vx, int vy);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void CheckMV2(int vx, int vy, int *dir, int val);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void CheckMVdir(int vx, int vy, int *dir, int val);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void DiamondSearch(int length);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void ExpandingSearch(int r, int s, int mvx, int mvy);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void Hex2Search(int i_me_range);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void CrossSearch(int start, int x_max, int y_max, int mvx, int mvy);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void UMHSearch(int i_me_range, int omx, int omy);
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void Refine();
 
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
     void PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany, int &badcount);
 
-    bool IsVectorOK(int vx, int vy) const;
-    int MotionDistorsion(int vx, int vy) const;
-    VECTOR ClipMV(VECTOR v) const;
-    void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]);
-public:
-    // should be private but used in a table
-    template <bool useSatd, int nLogPel, typename PixelType>
+    template <int nLogPel, typename PixelType>
+    void doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+        SearchType st, int stp, int lambda, int pnew,
+        int fieldShift, int64_t thSAD, int smooth, bool meander);
+
+    template <int nLogPel, typename PixelType>
     void DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int lsad, int pnew,
         int plevel, VECTOR *globalMVec, int fieldShift,
         int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
 
+    bool IsVectorOK(int vx, int vy) const;
+    int MotionDistorsion(int vx, int vy) const;
+    VECTOR ClipMV(VECTOR v) const;
+    void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]);
+    void InitMotionEstimationFields(bool useSatd, bool chroma);
+public:
     void SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int lsad, int pnew,
         int plevel, VECTOR *globalMVec, int fieldShift, bool useSatd,
         int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
-
-    template <bool useSatd, int nLogPel, typename PixelType>
-    void doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-        SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, int smooth, bool meander);
 
     void RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int pnew,
