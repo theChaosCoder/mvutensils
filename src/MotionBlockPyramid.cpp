@@ -377,20 +377,15 @@ void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
         if (cost >= nMinCost)
             return;
 
-        const uint8_t *blocks[] = {
-            GetRefBlock<nLogPel, PixelType>(vx, vy),
-            chroma ? GetRefBlockU<nLogPel, PixelType>(vx, vy) : nullptr,
-            chroma ? GetRefBlockV<nLogPel, PixelType>(vx, vy) : nullptr,
-        };
-        int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], blocks[0], nRefPitch[0]);
+        int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], GetRefBlock<nLogPel, PixelType>(vx, vy), nRefPitch[0]);
         cost += sad + ((flags & CHECKMV_PENALTYNEW) ? ((penaltyNew * sad) >> 8) : 0);
         if (cost >= nMinCost)
             return;
 
         int64_t saduv = 0;
         if (chroma) {
-            saduv += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], blocks[1], nRefPitch[1]);
-            saduv += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], blocks[2], nRefPitch[2]);
+            saduv += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], GetRefBlockU<nLogPel, PixelType>(vx, vy), nRefPitch[1]);
+            saduv += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], GetRefBlockV<nLogPel, PixelType>(vx, vy), nRefPitch[2]);
 
             cost += saduv + ((flags & CHECKMV_PENALTYNEW) ? ((penaltyNew * saduv) >> 8) : 0);
             if (cost >= nMinCost)
@@ -864,14 +859,11 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
     // Do we bias zero with not taking into account distorsion ?
     bestMV.x = zeroMVfieldShifted.x;
     bestMV.y = zeroMVfieldShifted.y;
-    const uint8_t *zeroMVBlocks[3] = {
-        GetRefBlock<nLogPel, PixelType>(0, zeroMVfieldShifted.y),
-        chroma ? GetRefBlockU<nLogPel, PixelType>(0, 0) : nullptr,
-        chroma ? GetRefBlockV<nLogPel, PixelType>(0, 0) : nullptr, };
-    int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], zeroMVBlocks[0], nRefPitch[0]);
+
+    int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], GetRefBlock<nLogPel, PixelType>(0, zeroMVfieldShifted.y), nRefPitch[0]);
     if (chroma) {
-        sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], zeroMVBlocks[1], nRefPitch[1]);
-        sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], zeroMVBlocks[2], nRefPitch[2]);
+        sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], GetRefBlockU<nLogPel, PixelType>(0, 0), nRefPitch[1]);
+        sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], GetRefBlockV<nLogPel, PixelType>(0, 0), nRefPitch[2]);
     }
     bestMV.sad = sad;
     nMinCost = sad + ((penaltyZero * sad) >> 8); // v.1.11.0.2
@@ -888,15 +880,10 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
 
     // Global MV predictor  - added by Fizick
     globalMVPredictor = ClipMV(globalMVPredictor);
-    const uint8_t *globalPredBlocks[3] = {
-        GetRefBlock<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y),
-        chroma ? GetRefBlockU<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y) : nullptr,
-        chroma ? GetRefBlockV<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y) : nullptr,
-    };
-    sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], globalPredBlocks[0], nRefPitch[0]);
+    sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], GetRefBlock<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y), nRefPitch[0]);
     if (chroma) {
-        sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], globalPredBlocks[1], nRefPitch[1]);
-        sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], globalPredBlocks[2], nRefPitch[2]);
+        sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], GetRefBlockU<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y), nRefPitch[1]);
+        sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], GetRefBlockV<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y), nRefPitch[2]);
     }
     int64_t cost = sad + ((pglobal * sad) >> 8);
 
@@ -1321,14 +1308,10 @@ void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 
             bestMV = predictor;
 
-            const uint8_t *blocks[3] = {
-                GetRefBlock<nLogPel, PixelType>(predictor.x, predictor.y),
-                chroma ? GetRefBlockU<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
-                chroma ? GetRefBlockV<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr, };
-            int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], blocks[0], nRefPitch[0]);
+            int64_t sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], GetRefBlock<nLogPel, PixelType>(predictor.x, predictor.y), nRefPitch[0]);
             if (chroma) {
-                sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], blocks[1], nRefPitch[1]);
-                sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], blocks[2], nRefPitch[2]);
+                sad += SADCHROMA(pSrc_temp[1], nSrcPitch_temp[1], GetRefBlockU<nLogPel, PixelType>(predictor.x, predictor.y), nRefPitch[1]);
+                sad += SADCHROMA(pSrc_temp[2], nSrcPitch_temp[2], GetRefBlockV<nLogPel, PixelType>(predictor.x, predictor.y), nRefPitch[2]);
             }
             bestMV.sad = sad;
             nMinCost = sad;
