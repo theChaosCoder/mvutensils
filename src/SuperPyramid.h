@@ -55,7 +55,9 @@ public:
     int nHPadding = -1;
     int nVPadding = -1;
 
-    // FIXME, why is nPel duplicated?
+    int nHPaddingPel = -1;
+    int nVPaddingPel = -1;
+
     int nPel = 1; // 1 on all planes except the topmost where it can be 1, 2 or 4
 
     //int nHPaddingPel; // nPel * nHPadding
@@ -130,7 +132,8 @@ public:
 
     template<typename PixelType>
     const uint8_t *GetPointer(int nX, int nY) const {
-        return GetAbsolutePointer<PixelType>(nX + nHPadding, nY + nVPadding);
+        assert(nHPaddingPel >= 0 && nVPaddingPel >= 0);
+        return GetAbsolutePointer<PixelType>(nX + nHPaddingPel, nY + nVPaddingPel);
     }
 
 private:

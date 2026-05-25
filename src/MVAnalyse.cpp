@@ -40,17 +40,12 @@ struct MVAnalyseDataExtra {
 
     int deltaFrame;
 
-    /*! \brief motion vecteur cost factor */
     int nLambda;
 
-    /*! \brief search type chosen for refinement in the EPZ */
     SearchType searchType;
-
     SearchType searchTypeCoarse;
 
-    /*! \brief additionnal parameter for this search */
     int nSearchParam; // usually search radius
-
     int nPelSearch; // search radius at finest level
 
     int lsad;        // SAD limit for lambda using - added by Fizick
@@ -268,18 +263,15 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
     d->tff_exists = !err;
 
-    // FIXME, restore check
-    /*
-    if (d->searchType < 0 || d->searchType > 7) {
+    if (d->searchType < SearchType::Logarithmic || d->searchType > SearchType::Vertical) {
         vsapi->mapSetError(out, "Analyse: search must be between 0 and 7 (inclusive).");
         return;
     }
 
-    if (d->searchTypeCoarse < 0 || d->searchTypeCoarse > 7) {
+    if (d->searchTypeCoarse < SearchType::Logarithmic || d->searchTypeCoarse > SearchType::Vertical) {
         vsapi->mapSetError(out, "Analyse: search_coarse must be between 0 and 7 (inclusive).");
         return;
     }
-    */
 
     if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2) {
         vsapi->mapSetError(out, "Analyse: satd cannot work with 16x2 blocks.");
@@ -420,7 +412,6 @@ void mvanalyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "search:int:opt;"
                  "searchparam:int:opt;"
                  "pelsearch:int:opt;"
-                 "isb:int:opt;"
                  "lambda:int:opt;"
                  "chroma:int:opt;"
                  "delta:int:opt;"

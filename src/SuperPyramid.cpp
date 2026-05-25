@@ -17,6 +17,8 @@ void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int 
     nPaddedHeight = nHeight + 2 * vPad;
     nHPadding = hPad;
     nVPadding = vPad;
+    nHPaddingPel = nHPadding;
+    nVPaddingPel = nVPadding;
     nPel = 1;
 
     VSFrame *dst = vsapi->newVideoFrame(&dstFormat, nPaddedWidth, nPaddedHeight, nullptr, core);
@@ -194,6 +196,9 @@ template<typename PixelType>
 void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, uint8_t *tempBuffer, VSCore *core, const VSAPI *vsapi) {
     nVPadding = src.nVPadding;
     nHPadding = src.nHPadding;
+
+    nHPaddingPel = nHPadding;
+    nVPaddingPel = nVPadding;
 
     nWidth = PlaneDimensionLuma(src.nWidth, xRatioUV, nHPadding);
     nHeight = PlaneDimensionLuma(src.nHeight, yRatioUV, nVPadding);
@@ -556,6 +561,9 @@ void PyramidPlane::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, co
         Average2<PixelType>(pPlaneW[7], pPlane[4] + sizeof(PixelType), pPlane[6], nPitch, nPaddedWidth - 1, nPaddedHeight);
         Average2<PixelType>(pPlaneW[15], pPlane[12] + sizeof(PixelType), pPlane[14], nPitch, nPaddedWidth - 1, nPaddedHeight);
     }
+
+    nVPaddingPel = nVPadding * nPel;
+    nHPaddingPel = nHPadding * nPel;
 }
 
 
@@ -659,6 +667,9 @@ void PyramidPlane::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int pl
     } else if (nPel == 4) {
         SetExtPel4<PixelType>(pelFrame, plane, core, vsapi);
     }
+
+    nVPaddingPel = nVPadding * nPel;
+    nHPaddingPel = nHPadding * nPel;
 }
 
 template<typename PixelType>
@@ -701,6 +712,8 @@ void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vP
     nPitch = vsapi->getStride(planeFrame, 0);
     nHPadding = hPad;
     nVPadding = vPad;
+    nHPaddingPel = nHPadding;
+    nVPaddingPel = nVPadding;
     nOffsetPadding = nPitch * nVPadding + nHPadding * format->bytesPerSample;
 
     nPaddedWidth = vsapi->getFrameWidth(planeFrame, 0);
@@ -717,6 +730,9 @@ void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int 
     nPitch = vsapi->getStride(planeFrames[0], 0);
     nHPadding = hPad;
     nVPadding = vPad;
+    nHPaddingPel = nHPadding * pel;
+    nVPaddingPel = nVPadding * pel;
+
     nOffsetPadding = nPitch * nVPadding + nHPadding * format->bytesPerSample;
 
     for (int i = 0; i < pel * pel; i++) {

@@ -483,8 +483,6 @@ void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _n
 
     vectors.resize(nBlkCount);
 
-    assert(nBlkSizeX != 16 && nBlkSizeY != 2);
-
     verybigSAD = nBlkSizeX * nBlkSizeY * (1 << bitsPerSample);
 }
 
@@ -544,7 +542,9 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
 
 void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) {
     this->chroma = chroma;
-    // FIXME, add some SATD size check like the initialization assert?
+
+    // FIXME, report in a nicer way?
+    assert(!useSatd || (nBlkSizeX != 16 && nBlkSizeY != 2));
 
     /* function pointers initialization */
     if (useSatd)
@@ -1058,20 +1058,11 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
             int blkx = blkxStart + iblkx * blkScanDir;
             int blkIdx = blky * nBlkX + blkx;
 
-            // FIXME, eliminate realsrc temp
-            const uint8_t *pRealSrc[3] = {};
-            pRealSrc[0] = pSrcFrame.planes[0].GetAbsolutePelPointer<PixelType>(x[0], y[0]);
-            if (chroma) {
-                pRealSrc[1] = pSrcFrame.planes[1].GetAbsolutePelPointer<PixelType>(x[1], y[1]);
-                pRealSrc[2] = pSrcFrame.planes[2].GetAbsolutePelPointer<PixelType>(x[2], y[2]);
-            }
-
             //create aligned copy
-            BLITLUMA(pSrc_temp[0], nSrcPitch_temp[0], pRealSrc[0], pSrcFrame.planes[0].nPitch);
-            //set the to the aligned copy
+            BLITLUMA(pSrc_temp[0], nSrcPitch_temp[0], pSrcFrame.planes[0].GetAbsolutePelPointer<PixelType>(x[0], y[0]), pSrcFrame.planes[0].nPitch);
             if (chroma) {
-                BLITCHROMA(pSrc_temp[1], nSrcPitch_temp[1], pRealSrc[1], pSrcFrame.planes[1].nPitch);
-                BLITCHROMA(pSrc_temp[2], nSrcPitch_temp[2], pRealSrc[2], pSrcFrame.planes[2].nPitch);
+                BLITCHROMA(pSrc_temp[1], nSrcPitch_temp[1], pSrcFrame.planes[1].GetAbsolutePelPointer<PixelType>(x[1], y[1]), pSrcFrame.planes[1].nPitch);
+                BLITCHROMA(pSrc_temp[2], nSrcPitch_temp[2], pSrcFrame.planes[2].GetAbsolutePelPointer<PixelType>(x[2], y[2]), pSrcFrame.planes[2].nPitch);
             }
 
             if (blky == 0)
@@ -1141,9 +1132,6 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
 }
 
 
-// FIXME, basically rewrite it this way: check so src and ref frames are compatible in padding and size and such
-// if so store all the old values in the old variables and also copy all the old vectors
-// use then use it to predict the new vectors
 template <int nLogPel, typename PixelType>
 void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int pnew,
@@ -1152,10 +1140,10 @@ void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     zeroMVfieldShifted.x = 0;
     zeroMVfieldShifted.y = fieldShift;
     zeroMVfieldShifted.sad = 0;
-    globalMVPredictor.x = 0;          //nPel*globalMVec->x;// there is no global
-    globalMVPredictor.y = fieldShift; //nPel*globalMVec->y + fieldShift;
-    globalMVPredictor.sad = 9999999;  //globalMVec->sad;
-    penaltyNew = pnew; // penalty for new vector
+    globalMVPredictor.x = 0;          
+    globalMVPredictor.y = fieldShift;
+    globalMVPredictor.sad = 9999999;
+    penaltyNew = pnew;
 
     int nBlkXold = nBlkX;
     int nBlkYold = nBlkY;
@@ -1169,7 +1157,6 @@ void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 
     std::vector<VECTOR> oldVectors;
     std::swap(oldVectors, vectors);
-
     
     // FIXME, needs more adjustment? how to pass changed blocksize/overlap?
     nBlkX = (pSrcFrame.planes[0].nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
