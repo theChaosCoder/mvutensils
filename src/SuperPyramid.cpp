@@ -9,8 +9,8 @@ void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int 
     VSVideoFormat dstFormat = {};
     vsapi->queryVideoFormat(&dstFormat, cfGray, format->sampleType, format->bitsPerSample, 0, 0, core);
     
-    nRealWidth = vsapi->getFrameWidth(src, plane);;
-    nRealHeight = vsapi->getFrameHeight(src, plane);;
+    nRealWidth = vsapi->getFrameWidth(src, plane);
+    nRealHeight = vsapi->getFrameHeight(src, plane);
     nWidth = nRealWidth + nBlkSizePadX;
     nHeight = nRealHeight + nBlkSizePadY;
     nPaddedWidth = nWidth + 2 * hPad;
@@ -897,6 +897,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
 }
 
 
+// FIXME, this should probably be per plane or level
 FramePyramid::~FramePyramid() {
     for (auto &level : pyramidLevels) {
         for (int i = 0; i < 3; i++) {

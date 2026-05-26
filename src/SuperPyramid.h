@@ -60,9 +60,6 @@ public:
 
     int nPel = 1; // 1 on all planes except the topmost where it can be 1, 2 or 4
 
-    //int nHPaddingPel; // nPel * nHPadding
-    //int nVPaddingPel; // nPel * nVPadding
-
     const VSFrame *storage[16] = {};
 
     template<typename PixelType>
