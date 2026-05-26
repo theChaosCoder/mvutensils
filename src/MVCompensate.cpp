@@ -178,11 +178,22 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
             }
 
             if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
-                // FIXME, don't write beyond destination with no overlap
+                // Uses a more restrictive copy function to the right/bottom when necessary to handle block dimension padded frames
+
+                size_t blitSizeRight[3] = {};
+                size_t blitSizeBottom[3] = {};
+
+                for (int plane = 0; plane < num_planes; plane++) {
+                    blitSizeRight[plane] = (nBlkSizeX[plane] - (pSrcPlanes[plane].nWidth - vsapi->getFrameWidth(dst, plane))) * sizeof(PixelType);
+                    blitSizeBottom[plane] = (nBlkSizeY[plane] - (pSrcPlanes[plane].nHeight - vsapi->getFrameHeight(dst, plane)));
+                }
+
                 for (int by = 0; by < nBlkY; by++) {
-                    int xx[3] = { 0 };
+                    bool slowBlitY = (by == nBlkY - 1) && (blitSizeBottom[0] > 0);
+                    int xx[3] = {};
 
                     for (int bx = 0; bx < nBlkX; bx++) {
+                        bool slowBlitX = (bx == nBlkX - 1) && (blitSizeRight[0] > 0);
                         int i = by * nBlkX + bx;
                         const BlockData block = vectors.GetBlock(i);
 
@@ -201,10 +212,16 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                         blx[1] = blx[2] = blx[0] >> xSubUV;
                         bly[1] = bly[2] = bly[0] >> ySubUV;
 
-                        for (int plane = 0; plane < num_planes; plane++) {
-                            d->BLIT[plane](pDstCur[plane] + xx[plane], nDstPitches[plane], pPlanes[plane].GetPointer<PixelType>(blx[plane], bly[plane]), pPlanes[plane].nPitch);
-
-                            xx[plane] += nBlkSizeX[plane] * sizeof(PixelType);
+                        if (slowBlitX || slowBlitY) {
+                            for (int plane = 0; plane < num_planes; plane++) {
+                                vsh::bitblt(pDstCur[plane] + xx[plane], nDstPitches[plane], pPlanes[plane].GetPointer<PixelType>(blx[plane], bly[plane]), pPlanes[plane].nPitch, (slowBlitX && blitSizeRight[plane]) ? blitSizeRight[plane] : (nBlkSizeX[plane] * sizeof(PixelType)), (slowBlitY && blitSizeBottom[plane]) ? blitSizeBottom[plane] : nBlkSizeY[plane]);
+                                xx[plane] += nBlkSizeX[plane] * sizeof(PixelType);
+                            }
+                        } else {
+                            for (int plane = 0; plane < num_planes; plane++) {
+                                d->BLIT[plane](pDstCur[plane] + xx[plane], nDstPitches[plane], pPlanes[plane].GetPointer<PixelType>(blx[plane], bly[plane]), pPlanes[plane].nPitch);
+                                xx[plane] += nBlkSizeX[plane] * sizeof(PixelType);
+                            }
                         }
                     }
 
@@ -214,6 +231,8 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
             } else { // overlap
                 uint8_t *DstTemp[3] = { NULL };
                 uint8_t *pDstTemp[3] = { NULL };
+                // FIXME, the summation of overlaps can probably be done in a buffer only the size of (block height + hoverlap) and the width of the padded image because then each line pointer is easily wrapped
+                // ToPixels is just a function that clamps pixel value to a lower depth and can easily be run on a block or line at a time to limit output horizontally and vertically to the real image size
                 for (int plane = 0; plane < num_planes; plane++) {
                     pDstTemp[plane] = DstTemp[plane] = (uint8_t *)malloc(nHeight[plane] * dstTempPitch[plane]);
                     memset(DstTemp[plane], 0, nHeight_B[plane] * dstTempPitch[plane]);
@@ -300,7 +319,7 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
            // FIXME, maybe return original frame without copy
             // Copy image
             for (int plane = 0; plane < num_planes; plane++)
-                vsh::bitblt(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), pSrcPlanes[plane].GetPointer<PixelType>(0, 0), pSrcPlanes[plane].nPitch, pSrcPlanes[plane].nWidth * sizeof(PixelType), vsapi->getFrameHeight(dst, plane));
+                vsh::bitblt(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), pSrcPlanes[plane].GetPointer<PixelType>(0, 0), pSrcPlanes[plane].nPitch, vsapi->getFrameWidth(dst, plane) * sizeof(PixelType), vsapi->getFrameHeight(dst, plane));
         }
 
         vsapi->freeFrame(src);
