@@ -850,7 +850,7 @@ void MotionBlockLevel::Refine() {
 
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany, int &badcount) {
+void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, int64_t badSAD, int badrange, bool tryMany, int &badcount) {
 
     // FIXME, aren't several predictors usually the same? make sure duplicate vectors aren't tested several times
     VECTOR predictors[5]; /* set of predictors for the current block */
@@ -1082,7 +1082,7 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
 
             /* search the mv */
             predictor = ClipMV(vectors[blkIdx]);
-            PseudoEPZSearch<nLogPel, PixelType>(blkIdx, blkx, blky, blkScanDir, tryMany, badcount);
+            PseudoEPZSearch<nLogPel, PixelType>(blkIdx, blkx, blky, blkScanDir, badSAD, badrange, tryMany, badcount);
 
             /* write the results */
             pBlkData[blkx] = bestMV;

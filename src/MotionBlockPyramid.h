@@ -70,8 +70,6 @@ private:
     int penaltyNew;        // cost penalty factor for new candidates
     int penaltyZero;       // cost penalty factor for zero vector
     int pglobal;           // cost penalty factor for global predictor
-    int64_t badSAD;   // SAD threshold for more wide search
-    int badrange;     // wide search radius
     int64_t verybigSAD;
 
     SADFunction SAD = nullptr;   /* function which computes the sad */
@@ -159,7 +157,7 @@ private:
     void Refine();
 
     template <int nLogPel, typename PixelType>
-    void PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, bool tryMany, int &badcount);
+    void PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, int64_t badSAD, int badrange, bool tryMany, int &badcount);
 
     template <int nLogPel, typename PixelType>
     void doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
