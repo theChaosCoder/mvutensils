@@ -296,16 +296,16 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
 
 
             vsapi->freeFrame(ref);
-
-            return dst;
         } else {
-           
-            // Copy image+block size padding to dst
+           // FIXME, maybe return original frame without copy
+            // Copy image
             for (int plane = 0; plane < num_planes; plane++)
-                vsh::bitblt(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), pSrcPlanes[plane].GetPointer<PixelType>(0, 0), pSrcPlanes[plane].nPitch, pSrcPlanes[plane].nWidth * sizeof(PixelType), d->vi.height);
+                vsh::bitblt(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), pSrcPlanes[plane].GetPointer<PixelType>(0, 0), pSrcPlanes[plane].nPitch, pSrcPlanes[plane].nWidth * sizeof(PixelType), vsapi->getFrameHeight(dst, plane));
         }
 
         vsapi->freeFrame(src);
+
+        return dst;
     }
 
     return nullptr;

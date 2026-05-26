@@ -393,13 +393,13 @@ void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
                 return;
         }
 
-        if (flags & CHECKMV_UPDATEBESTMV) {
+        if constexpr (flags & CHECKMV_UPDATEBESTMV) {
             bestMV.x = vx;
             bestMV.y = vy;
         }
         nMinCost = cost;
         bestMV.sad = sad + saduv;
-        if (flags & CHECKMV_UPDATEDIR)
+        if constexpr (flags & CHECKMV_UPDATEDIR)
             *dir = val;
     }
 }
@@ -538,7 +538,7 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
     double scale = LSAD / (double)(LSAD + (predictor.sad >> 1));
     nLambda = nLambda * scale * scale;
 
-    predictors[4] = ClipMV(zeroMVfieldShifted);
+    predictors[4] = ClipMV(zeroMV);
 }
 
 void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) {
