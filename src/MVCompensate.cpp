@@ -80,13 +80,13 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
         if (nref >= n && nref < d->vi.numFrames)
             vsapi->requestFrameFilter(nref, d->super, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        uint8_t *pDst[3] = { NULL };
-        uint8_t *pDstCur[3] = { NULL };
-        const uint8_t *pRef[3] = { NULL };
-        ptrdiff_t nDstPitches[3] = { 0 };
-        ptrdiff_t nRefPitches[3] = { 0 };
-        const uint8_t *pSrc[3] = { NULL };
-        ptrdiff_t nSrcPitches[3] = { 0 };
+        uint8_t *pDst[3] = {};
+        uint8_t *pDstCur[3] = {};
+        const uint8_t *pRef[3] = {};
+        ptrdiff_t nDstPitches[3] = {};
+        ptrdiff_t nRefPitches[3] = {};
+        const uint8_t *pSrc[3] = {};
+        ptrdiff_t nSrcPitches[3] = {};
 
         const VSFrame *mvn = vsapi->getFrameFilter(n, d->vectors, frameCtx);
         MotionBlockPyramid vectors(mvn, 0, "MVUtensils", core, vsapi);
@@ -229,13 +229,12 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                         pDstCur[plane] += nBlkSizeY[plane] * nDstPitches[plane];
                 }
             } else { // overlap
-                uint8_t *DstTemp[3] = { NULL };
-                uint8_t *pDstTemp[3] = { NULL };
-                // FIXME, the summation of overlaps can probably be done in a buffer only the size of (block height + hoverlap) and the width of the padded image because then each line pointer is easily wrapped
-                // ToPixels is just a function that clamps pixel value to a lower depth and can easily be run on a block or line at a time to limit output horizontally and vertically to the real image size
+                uint8_t *DstTemp[3] = {};
+
+                // Allocate buffer for only nBlkSizeY rows instead of full frame height
+                // We'll output finalized rows and reuse the buffer as a sliding window
                 for (int plane = 0; plane < num_planes; plane++) {
-                    pDstTemp[plane] = DstTemp[plane] = (uint8_t *)malloc(nHeight[plane] * dstTempPitch[plane]);
-                    memset(DstTemp[plane], 0, nHeight_B[plane] * dstTempPitch[plane]);
+                    DstTemp[plane] = (uint8_t *)malloc(nBlkSizeY[plane] * dstTempPitch[plane]);
                 }
 
                 for (int by = 0; by < nBlkY; by++) {
@@ -243,9 +242,15 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                     int wbx = 0;
                     int xx[3] = { 0 };
 
+                    // Clear the non-overlapping region for this block row
+                    for (int plane = 0; plane < num_planes; plane++) {
+                        int clearStart = (by == 0) ? 0 : nOverlapY[plane];
+                        int clearRows = (by == 0) ? nBlkSizeY[plane] : (nBlkSizeY[plane] - nOverlapY[plane]);
+                        memset(DstTemp[plane] + clearStart * dstTempPitch[plane], 0, clearRows * dstTempPitch[plane]);
+                    }
+
                     for (int bx = 0; bx < nBlkX; bx++) {
-                        // select window
-                        wbx = bx == nBlkX - 1 ? 2 : wbx; //(bx + nBlkX - 3) / (nBlkX - 2);
+                        wbx = bx == nBlkX - 1 ? 2 : wbx;
                         const int16_t *winOver[3] = { d->OverWins.GetWindow(wby + wbx) };
                         if (chroma)
                             winOver[1] = winOver[2] = d->OverWinsUV.GetWindow(wby + wbx);
@@ -269,21 +274,37 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                         bly[1] = bly[2] = bly[0] >> ySubUV;
 
                         for (int plane = 0; plane < num_planes; plane++) {
-                            d->OVERS[plane](pDstTemp[plane] + xx[plane] * 2, dstTempPitch[plane], pPlanes[plane].GetPointer<PixelType>(blx[plane], bly[plane]), pPlanes[plane].nPitch, winOver[plane], nBlkSizeX[plane]);
-
+                            d->OVERS[plane](DstTemp[plane] + xx[plane] * 2, dstTempPitch[plane], pPlanes[plane].GetPointer<PixelType>(blx[plane], bly[plane]), pPlanes[plane].nPitch, winOver[plane], nBlkSizeX[plane]);
                             xx[plane] += (nBlkSizeX[plane] - nOverlapX[plane]) * sizeof(PixelType);
                         }
                         wbx = 1;
                     }
 
+                    // Output the finalized rows (non-overlapping portion)
+                    int rowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[0] : (nBlkSizeY[0] - nOverlapY[0]);
                     for (int plane = 0; plane < num_planes; plane++) {
-                        pDstTemp[plane] += dstTempPitch[plane] * (nBlkSizeY[plane] - nOverlapY[plane]);
+                        int planeRowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : (nBlkSizeY[plane] - nOverlapY[plane]);
+                        int outputHeight = std::min(planeRowsToOutput, std::min(vsapi->getFrameHeight(dst, plane), nHeight_B[plane]) - by * (nBlkSizeY[plane] - nOverlapY[plane]));
+
+                        if (outputHeight > 0) {
+                            int outputWidth = std::min(vsapi->getFrameWidth(dst, plane), nWidth_B[plane]);
+                            d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp[plane], dstTempPitch[plane], outputWidth, outputHeight, bitsPerSample);
+                        }
+
                         pDstCur[plane] += nDstPitches[plane] * (nBlkSizeY[plane] - nOverlapY[plane]);
+                    }
+
+                    // Shift the overlapping rows to the beginning of the buffer for next iteration
+                    if (by < nBlkY - 1) {
+                        for (int plane = 0; plane < num_planes; plane++) {
+                            memmove(DstTemp[plane],
+                                DstTemp[plane] + (nBlkSizeY[plane] - nOverlapY[plane]) * dstTempPitch[plane],
+                                nOverlapY[plane] * dstTempPitch[plane]);
+                        }
                     }
                 }
 
                 for (int plane = 0; plane < num_planes; plane++) {
-                    d->ToPixels(pDst[plane], nDstPitches[plane], DstTemp[plane], dstTempPitch[plane], std::min(vsapi->getFrameWidth(dst, plane), nWidth_B[plane]), std::min(vsapi->getFrameHeight(dst, plane), nHeight_B[plane]), bitsPerSample);
                     free(DstTemp[plane]);
                 }
             }
