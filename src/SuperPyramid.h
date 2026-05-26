@@ -8,18 +8,16 @@
 #include <VapourSynth4.h>
 
 enum class SharpParam {
-    Bilinear = 0,
-    Bicubic = 1,
-    Wiener = 2
+    Bilinear,
+    Bicubic,
+    Wiener
 };
 
 
 enum class RFilterParam {
-    Simple = 0,
-    Triangle = 1,
-    Bilinear = 2,
-    Quadratic = 3,
-    Cubic = 4
+    Simple,
+    Bilinear,
+    Cubic
 };
 
 int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) noexcept;
@@ -32,13 +30,13 @@ int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) noexcept;
 // FIXME, note that nPel is duplicated and weird everywhere if anything it should go in the FramePyramidLevel or something
 
 class PyramidPlane {
+    friend class FramePyramid;
 public:
     // Almost all manipulations are done on the VSFrame storage before assigning it here
     const uint8_t *pPlane[16] = {};
-    // in bytes
-    ptrdiff_t nPitch = -1;
 
-    // in bytes
+    // Both in bytes
+    ptrdiff_t nPitch = -1;
     ptrdiff_t nOffsetPadding = -1;
 
     // This is the original width and height, only used when generating planes and invalid when reonstructed from frame properties
@@ -59,21 +57,6 @@ public:
     int nVPaddingPel = -1;
 
     int nPel = 1; // 1 on all planes except the topmost where it can be 1, 2 or 4
-
-    const VSFrame *storage[16] = {};
-
-    template<typename PixelType>
-    void CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) noexcept;
-    template<typename PixelType>
-    void ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, uint8_t *tempBuffer, VSCore *core, const VSAPI *vsapi) noexcept;
-    template<typename PixelType>
-    void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) noexcept;
-    // Only unpadded pel clips supported, this differs from original MVTools
-    template<typename PixelType>
-    void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi);
-
-    void FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept;
-    void FromExternalPelPlanes(const VSFrame * const * planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept;
 
     template<typename PixelType>
     const uint8_t *GetAbsolutePelPointer(int nX, int nY) const noexcept {
@@ -126,11 +109,29 @@ public:
     }
 
 private:
+    const VSFrame *storage[16] = {};
+
+    template<typename PixelType>
+    void CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) noexcept;
+
+    template<typename PixelType>
+    void ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, uint8_t *tempBuffer, VSCore *core, const VSAPI *vsapi) noexcept;
+
+    template<typename PixelType>
+    void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) noexcept;
+
+    template<typename PixelType>
+    void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi);
+
+    void FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept;
+    void FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept;
+
     template<typename PixelType>
     void SetExtPel2(const VSFrame *pelFrame, int plane, VSCore *core, const VSAPI *vsapi);
+
     template<typename PixelType>
     void SetExtPel4(const VSFrame *pelFrame, int plane, VSCore *core, const VSAPI *vsapi);
-    // This function has the ugliest implementation and internally casts away const but nobody cares
+
     template<typename PixelType>
     void PadPlaneData(int plane) noexcept;
 };
@@ -160,13 +161,13 @@ public:
     int nHPad[3];
     int nVPad[3];
 
-    int nBlkSizePadX[3]; // amount of padding added to the right and bottom of the original frame to reach a multiple of blksize-overlap
-    int nBlkSizePadY[3]; // divide by ratiouv
+    int nBlkSizePadX[3];
+    int nBlkSizePadY[3];
 
-    int xRatioUV = 1; // Subsampling ratio for chroma planes
+    int xRatioUV = 1;
     int yRatioUV = 1;
 
-    bool chroma; // chroma has a very different meaning from the original code, here it just indicates if the input format has a single plane or not
+    bool chroma;
 
     int bitsPerSample = -1;
     int bytesPerSample = -1;
@@ -180,10 +181,13 @@ public:
 
     FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // constructor to reconstruct from frame properties
     ~FramePyramid();
-    void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) noexcept;
-    void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi);
+    void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi);
+    void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore *core, const VSAPI *vsapi);
     void ExportFrameData(VSFrame *dst, const std::string &prefix) const noexcept; // Stores all levels as frame properties of the output frame, note that each used plane is stored as a separate property
     const FramePyramidLevel &GetLevel(int level) const noexcept;
     bool IsValid() const noexcept;
     bool IsValidMetadataValid() const noexcept;
+    // FIXME, add these helper functions?
+    //static int GetMaxLevels(int width, int height, int ration, int overlapY, int levels) noexcept;
+    //static int GetMaxLevelsForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int overlapY, int levels) noexcept;
 };

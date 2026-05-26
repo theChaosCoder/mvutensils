@@ -2,6 +2,7 @@
 
 #include <VSHelper4.h>
 #include <cassert>
+#include <stdexcept>
 
 template<typename PixelType>
 void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) noexcept {
@@ -218,19 +219,11 @@ void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatio
 
     if (rFilter == RFilterParam::Simple) {
         RB2F_C<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight);
-    } else if (rFilter == RFilterParam::Triangle) {
-        assert(false);
-            //RB2Filtered<PixelType>();
     } else if (rFilter == RFilterParam::Bilinear) {
         RB2BilinearFiltered<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight, tempBuffer);
-    } else if (rFilter == RFilterParam::Quadratic) {
-        assert(false);
-            //RB2Quadratic<PixelType>();
     } else if (rFilter == RFilterParam::Cubic) {
         RB2Cubic<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight, tempBuffer);
     }
-    // FIXME, fix other filters
-    //RB2F_C<PixelType>(dstP + nOffsetPadding, src.pPlane[0] + src.nOffsetPadding, nPitch, src.nPitch, nWidth, nHeight);
 
     PadPlaneData<PixelType>(0);
 }
@@ -486,8 +479,6 @@ static void Average2(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc
 
 template<typename PixelType>
 void PyramidPlane::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) noexcept {
-    assert(pel == 2 || pel == 4);
-    assert(nPel == 1);
     nPel = pel;
 
     typedef void (*RefineFunction)(uint8_t *pDst, const uint8_t *pSrc, intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample);
@@ -658,8 +649,6 @@ void PyramidPlane::SetExtPel4(const VSFrame *pelFrame, int plane, VSCore *core, 
 
 template<typename PixelType>
 void PyramidPlane::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi) {
-    assert(pel == 2 || pel == 4);
-    assert(nPel == 1);
     nPel = pel;
 
     if (nPel == 2) {
@@ -761,9 +750,8 @@ int GetPyramidLevelForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int ov
 
 FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi)
 : core(core), vsapi(vsapi) {
-    // FIXME, calculate additional padding needed
-
-    assert(levels >= 1);
+    if (levels < 1)
+        throw std::runtime_error("Must have at least one level");
     pyramidLevels.resize(levels);
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(srcFrame);
     bitsPerSample = format->bitsPerSample;
@@ -796,7 +784,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
 
 
 
-    if (nBlkSizeX) {
+    if (nBlkSizeX > 0 && nOverlapX >= 0) {
         int nBlkX = (nRealWidth[0] - nOverlapX) / (nBlkSizeX - nOverlapX);
         int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
         if (nWidth_B < nRealWidth[0]) {
@@ -807,7 +795,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         }
     }
 
-    if (nBlkSizeY > 0) {
+    if (nBlkSizeY > 0 && nOverlapY >= 0) {
         int nBlkY = (nRealHeight[0] - nOverlapY) / (nBlkSizeY - nOverlapY);
         int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
         if (nHeight_B < nRealHeight[0]) {
@@ -908,7 +896,11 @@ FramePyramid::~FramePyramid() {
     }
 }
 
-void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) noexcept {
+void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) {
+    if (nPel > 1)
+        throw std::runtime_error("Pel planes have already been generated");
+    if (pel != 2 && pel != 4)
+        throw std::runtime_error("Pel value must be 2 or 4");
     if (bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].GeneratePelPlanes<uint8_t>(pel, sharp, core, vsapi);
@@ -919,8 +911,26 @@ void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, co
     nPel = pel;
 }
 
-void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi) {
-    // FIXME, check frame suitability
+void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore *core, const VSAPI *vsapi) {
+    if (nPel != 1)
+        throw std::runtime_error("Pel planes already set");
+    if (pel != 2 && pel != 4)
+        throw std::runtime_error("Invalid pel value");
+
+    assert(pyramidLevels[0].planes[0].storage[0]);
+
+    const VSFrame *storageFrame = pyramidLevels[0].planes[0].storage[0];
+
+    const VSVideoFormat *pelFormat = vsapi->getVideoFrameFormat(pelFrame);
+    const VSVideoFormat *format = vsapi->getVideoFrameFormat(storageFrame);
+
+    if (!vsh::isSameVideoFormat(pelFormat, format))
+        throw std::runtime_error("Pel frame format does not match source frame format");
+
+    if (vsapi->getFrameWidth(pelFrame, 0) != vsapi->getFrameWidth(storageFrame, 0) * pel ||
+        vsapi->getFrameHeight(pelFrame, 0) != vsapi->getFrameHeight(storageFrame, 0) * pel)
+        throw std::runtime_error("Pel frame dimensions are not a suitable multiple of the source frame dimensions");
+
     if (bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].SetExternalPelPlanes<uint8_t>(pelFrame, pel, plane, core, vsapi);

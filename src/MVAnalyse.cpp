@@ -12,21 +12,6 @@
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 
-template<typename T>
-struct SingleNodeData : public T {
-private:
-    const VSAPI *vsapi;
-public:
-    VSNode *node = nullptr;
-
-    explicit SingleNodeData(const VSAPI *vsapi) noexcept : T(), vsapi(vsapi) {
-    }
-
-    ~SingleNodeData() {
-        vsapi->freeNode(node);
-    }
-};
-
 
 struct MVAnalyseDataExtra {
     VSNode *node;

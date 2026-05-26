@@ -206,6 +206,7 @@ public:
     // 
     // FIXME, use this to signal state and prevent reuse
     enum class State {
+        MetadataOnly,
         ReadyForSearch,
         ReadyForRecalculate,
         AnalysisDone
