@@ -115,82 +115,82 @@ private:
     uint8_t *pSrc_temp[3] = {}; //for easy WRITE access to temp block
 private:
     template <int nLogPel, typename PixelType>
-    const uint8_t *GetRefBlock(int nVx, int nVy) const;
+    const uint8_t *GetRefBlock(int nVx, int nVy) const noexcept;
 
     template <int nLogPel, typename PixelType>
-    const uint8_t *GetRefBlockU(int nVx, int nVy) const;
+    const uint8_t *GetRefBlockU(int nVx, int nVy) const noexcept;
 
     template <int nLogPel, typename PixelType>
-    const uint8_t *GetRefBlockV(int nVx, int nVy) const;
+    const uint8_t *GetRefBlockV(int nVx, int nVy) const noexcept;
 
     template <int nLogPel, int flags, typename PixelType>
-    void CheckMV_Template(int vx, int vy, int *dir, int val);
+    void CheckMV_Template(int vx, int vy, int *dir, int val) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void CheckMV0(int vx, int vy);
+    void CheckMV0(int vx, int vy) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void CheckMV(int vx, int vy);
+    void CheckMV(int vx, int vy) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void CheckMV2(int vx, int vy, int *dir, int val);
+    void CheckMV2(int vx, int vy, int *dir, int val) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void CheckMVdir(int vx, int vy, int *dir, int val);
+    void CheckMVdir(int vx, int vy, int *dir, int val) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void DiamondSearch(int length);
+    void DiamondSearch(int length) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void ExpandingSearch(int r, int s, int mvx, int mvy);
+    void ExpandingSearch(int r, int s, int mvx, int mvy) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void Hex2Search(int i_me_range);
+    void Hex2Search(int i_me_range) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void CrossSearch(int start, int x_max, int y_max, int mvx, int mvy);
+    void CrossSearch(int start, int x_max, int y_max, int mvx, int mvy) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void UMHSearch(int i_me_range, int omx, int omy);
+    void UMHSearch(int i_me_range, int omx, int omy) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void Refine();
+    void Refine() noexcept;
 
     template <int nLogPel, typename PixelType>
-    void PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, int64_t badSAD, int badrange, bool tryMany, int &badcount);
+    void PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, int64_t badSAD, int badrange, bool tryMany, int &badcount) noexcept;
 
     template <int nLogPel, typename PixelType>
-    void doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+    void DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, int smooth, bool meander);
+        int fieldShift, int64_t thSAD, int smooth, bool meander) noexcept;
 
     template <int nLogPel, typename PixelType>
     void DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int lsad, int pnew,
         int plevel, VECTOR *globalMVec, int fieldShift,
-        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
+        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept;
 
-    bool IsVectorOK(int vx, int vy) const;
-    int MotionDistorsion(int vx, int vy) const;
-    VECTOR ClipMV(VECTOR v) const;
-    void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]);
-    void InitMotionEstimationFields(bool useSatd, bool chroma);
+    bool IsVectorOK(int vx, int vy) const noexcept;
+    int MotionDistorsion(int vx, int vy) const noexcept;
+    VECTOR ClipMV(VECTOR v) const noexcept;
+    void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept;
+    void InitMotionEstimationFields(bool useSatd, bool chroma) noexcept;
 public:
     void SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int lsad, int pnew,
         int plevel, VECTOR *globalMVec, int fieldShift, bool useSatd,
-        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
+        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept;
 
     void RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander);
+        int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) noexcept;
 
-    void EstimateGlobalMVDoubled(VECTOR &globalMVec);
-    void InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel);
+    void EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept;
+    void InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) noexcept;
 
-    bool IsSceneChange(int64_t nTh1, int nTh2) const;
+    bool IsSceneChange(int64_t nTh1, int nTh2) const noexcept;
 
-    void Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample);
+    void Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) noexcept;
 
     MotionBlockLevel() = default;
     ~MotionBlockLevel();
@@ -198,7 +198,24 @@ public:
 
 class MotionBlockPyramid {
 public:
-    bool valid = false;
+    // Note that the implementation doesn't quite handle multiple search/recalculate operations
+    // on the same object, this may be improved in the future if it's actually deemed to be useful but for
+    // now create a new object every time
+    // The initial state depends on the constructor used
+    // Note that both AnalysisDone and ReadyForRecalculate mean that there is analysis data available
+    // 
+    // FIXME, use this to signal state and prevent reuse
+    enum class State {
+        ReadyForSearch,
+        ReadyForRecalculate,
+        AnalysisDone
+    };
+
+    enum class DivideExtra {
+        No,
+        Point,
+        Median
+    };
 
     // exported
     int nBlkSizeX;
@@ -221,32 +238,31 @@ public:
     int nVPadding;
     
 private:
-    // not exported
-
-    int divideExtra = 0;
-
+    State state;
+    DivideExtra divideExtra = DivideExtra::No;
     std::vector<VECTOR> dividedVectors;
-
     std::vector<MotionBlockLevel> pyramidLevels;
 public:
-    void DivideVectorsExtra(int divideExtra);
-    // construct from 
     MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int nDeltaFrame, int bitsPerSample);
     MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // de-serialization from a frame, can choose to omit some levels by setting maxLevel, if -1 all levels are loaded, only need to pass 0 for recalculate and using motion vectors
-    void ExportFrameData(VSFrame *dst, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // serialization to a frame
+    void ExportFrameData(VSFrame *dst, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept; // serialization to a frame
 
     void SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
         int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
         int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
-        SearchType coarseSearchType, bool chroma);
+        SearchType coarseSearchType, bool chroma) noexcept;
 
     void RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         SearchType searchType, int nSearchParam, int nLambda, int pnew,
-        int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander);
+        int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) noexcept;
 
-    bool IsUsable(int64_t thscd1, int thscd2) const;
-    BlockData GetBlock(int nBlk) const;
+    void DivideVectorsExtra(DivideExtra divideExtra);
+
+    bool IsUsable(int64_t thscd1, int thscd2) const noexcept;
+    BlockData GetBlock(int nBlk) const noexcept;
     void ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const;
+    State GetState() const noexcept;
+    bool HasMotionVectors() const noexcept;
 };
 

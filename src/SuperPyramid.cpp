@@ -4,7 +4,7 @@
 #include <cassert>
 
 template<typename PixelType>
-void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) {
+void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) noexcept {
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(src);
     VSVideoFormat dstFormat = {};
     vsapi->queryVideoFormat(&dstFormat, cfGray, format->sampleType, format->bitsPerSample, 0, 0, core);
@@ -65,7 +65,7 @@ void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int 
 
 template <typename PixelType>
 static void RB2F_C(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8, ptrdiff_t nDstPitch,
-    ptrdiff_t nSrcPitch, int nWidth, int nHeight) {
+    ptrdiff_t nSrcPitch, int nWidth, int nHeight) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 
@@ -87,7 +87,7 @@ static void RB2F_C(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
 // tempBuffer must point to at least nWidth * 8 * sizeof(PixelType) bytes
 template <typename PixelType>
 static void RB2BilinearFiltered(uint8_t *pDst, const uint8_t * VS_RESTRICT pSrc, ptrdiff_t nDstPitch,
-    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t * VS_RESTRICT tempBuffer) {
+    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t * VS_RESTRICT tempBuffer) noexcept {
 
     PixelType *dst = (PixelType *)pDst;
     const PixelType *src = (const PixelType *)pSrc;
@@ -129,7 +129,7 @@ static void RB2BilinearFiltered(uint8_t *pDst, const uint8_t * VS_RESTRICT pSrc,
 // tempBuffer must point to at least nWidth * 8 * sizeof(PixelType) bytes
 template <typename PixelType>
 static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
-    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t *VS_RESTRICT tempBuffer) {
+    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t *VS_RESTRICT tempBuffer) noexcept {
 
     PixelType *dst = (PixelType *)pDst;
     const PixelType *src = (const PixelType *)pSrc;
@@ -188,12 +188,12 @@ static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
     }
 }
 
-int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) {
+int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) noexcept {
       return (pad >= ratioUV) ? ((numPixels / ratioUV + 1) / 2) * ratioUV : ((numPixels / ratioUV) / 2) * ratioUV;
 }
 
 template<typename PixelType>
-void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, uint8_t *tempBuffer, VSCore *core, const VSAPI *vsapi) {
+void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatioUV, RFilterParam rFilter, uint8_t *tempBuffer, VSCore *core, const VSAPI *vsapi) noexcept {
     nVPadding = src.nVPadding;
     nHPadding = src.nHPadding;
 
@@ -238,7 +238,7 @@ void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatio
 
 template <typename PixelType>
 static void VerticalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     (void)bitsPerSample;
 
     PixelType *pDst = (PixelType *)pDst8;
@@ -260,7 +260,7 @@ static void VerticalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTR
 
 template <typename PixelType>
 static void HorizontalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     (void)bitsPerSample;
 
     PixelType *pDst = (PixelType *)pDst8;
@@ -281,7 +281,7 @@ static void HorizontalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RES
 
 template <typename PixelType>
 static void DiagonalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     (void)bitsPerSample;
 
     PixelType *pDst = (PixelType *)pDst8;
@@ -306,7 +306,7 @@ static void DiagonalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTR
 // invarint simplified, 6 taps. Weights: (1, -5, 20, 20, -5, 1)/32 - added by Fizick
 template <typename PixelType>
 static void VerticalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 
@@ -358,7 +358,7 @@ static void VerticalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRIC
 
 template <typename PixelType>
 static void HorizontalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 
@@ -402,7 +402,7 @@ static void HorizontalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTR
 // bicubic (Catmull-Rom 4 taps interpolation)
 template <typename PixelType>
 static void VerticalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 
@@ -440,7 +440,7 @@ static void VerticalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRI
 
 template <typename PixelType>
 static void HorizontalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) {
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 
@@ -466,7 +466,7 @@ static void HorizontalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_REST
 
 template <typename PixelType>
 static void Average2(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc18, const uint8_t *VS_RESTRICT pSrc28,
-    ptrdiff_t nPitch, int nWidth, int nHeight) {
+    ptrdiff_t nPitch, int nWidth, int nHeight) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     const PixelType *pSrc1 = (const PixelType *)pSrc18;
     const PixelType *pSrc2 = (const PixelType *)pSrc28;
@@ -485,7 +485,7 @@ static void Average2(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc
 
 
 template<typename PixelType>
-void PyramidPlane::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) {
+void PyramidPlane::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) noexcept {
     assert(pel == 2 || pel == 4);
     assert(nPel == 1);
     nPel = pel;
@@ -673,7 +673,7 @@ void PyramidPlane::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int pl
 }
 
 template<typename PixelType>
-void PyramidPlane::PadPlaneData(int plane) {
+void PyramidPlane::PadPlaneData(int plane) noexcept {
     PixelType *dstP = (PixelType *)(pPlane[plane]);
     ptrdiff_t nUsedPich = nPitch / sizeof(PixelType);
 
@@ -705,7 +705,7 @@ void PyramidPlane::PadPlaneData(int plane) {
     }
 }
 
-void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) {
+void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept {
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(planeFrame);
     storage[0] = planeFrame;
     pPlane[0] = vsapi->getReadPtr(planeFrame, 0);
@@ -723,7 +723,7 @@ void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vP
     nHeight = nPaddedHeight - 2 * nVPadding;
 }
 
-void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) {
+void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept {
     assert(pel == 2 || pel == 4);
     nPel = pel;
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(planeFrames[0]);
@@ -908,7 +908,7 @@ FramePyramid::~FramePyramid() {
     }
 }
 
-void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) {
+void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) noexcept {
     if (bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].GeneratePelPlanes<uint8_t>(pel, sharp, core, vsapi);
@@ -931,7 +931,7 @@ void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int pl
     nPel = pel;
 }
 
-void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) {
+void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) const noexcept {
     VSMap *props = vsapi->getFramePropertiesRW(dst);
     for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
         assert(pyramidLevels[0].planes[plane].storage[0]);
@@ -961,7 +961,16 @@ void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) {
     vsapi->mapSetInt(props, (prefix + "SuperYRatioUV").c_str(), yRatioUV, maReplace);
 }
 
-const FramePyramidLevel &FramePyramid::GetLevel(int level) const {
+const FramePyramidLevel &FramePyramid::GetLevel(int level) const noexcept {
     assert(level >= 0 && level < static_cast<int>(pyramidLevels.size()));
     return pyramidLevels[level];
+}
+
+
+bool FramePyramid::IsValid() const noexcept {
+    return state == State::Valid;
+}
+
+bool FramePyramid::IsValidMetadataValid() const noexcept {
+    return IsValid() || state == State::ValidMetadataOnly;
 }

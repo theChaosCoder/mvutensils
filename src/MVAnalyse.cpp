@@ -139,7 +139,7 @@ static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void 
 
             if (d->divideExtra) {
                 // make extra level with divided sublocks with median (not estimated) motion
-                vectorFields.DivideVectorsExtra(d->divideExtra);
+                vectorFields.DivideVectorsExtra(d->divideExtra == 2 ? MotionBlockPyramid::DivideExtra::Median : MotionBlockPyramid::DivideExtra::Point);
             }
 
 #if defined(MVTOOLS_X86)

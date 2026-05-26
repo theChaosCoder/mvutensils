@@ -7,7 +7,7 @@
 
 ///////////////////////////////////
 
-void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) {
+void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) noexcept {
     int normFactor = 3 - nLogPel + parentLevel.nLogPel;
     int mulFactor = (normFactor < 0) ? -normFactor : 0;
     normFactor = (normFactor < 0) ? 0 : normFactor;
@@ -74,7 +74,7 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
     }
 }
 
-void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) {
+void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept {
     // estimate global motion from current plane vectors data for using on next plane - added by Fizick
     // on input globalMVec is prev estimation
     // on output globalMVec is doubled for next scale plane using
@@ -160,7 +160,7 @@ void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) {
 
 ////////////////////////////////////////////////
 
-static inline int Median3(int a, int b, int c) {
+static inline int Median3(int a, int b, int c) noexcept {
     // b a c || c a b
     if (((b <= a) && (a <= c)) || ((c <= a) && (a <= b)))
         return a;
@@ -174,7 +174,7 @@ static inline int Median3(int a, int b, int c) {
         return c;
 }
 
-static void GetMedian(int &vx, int &vy, int vx1, int vy1, int vx2, int vy2, int vx3, int vy3) { // existant median vector (not mixed)
+static void GetMedian(int &vx, int &vy, int vx1, int vy1, int vx2, int vy2, int vx3, int vy3) noexcept {
     vx = Median3(vx1, vx2, vx3);
     vy = Median3(vy1, vy2, vy3);
     if ((vx == vx1 && vy == vy1) || (vx == vx2 && vy == vy2) || (vx == vx3 && vy == vy3))
@@ -185,8 +185,17 @@ static void GetMedian(int &vx, int &vy, int vx1, int vy1, int vx2, int vy2, int 
     }
 }
 
-void MotionBlockPyramid::DivideVectorsExtra(int divideExtra) {
-    assert(dividedVectors.empty());
+void MotionBlockPyramid::DivideVectorsExtra(DivideExtra divideExtra) {
+    this->divideExtra = divideExtra;
+
+    if (divideExtra == DivideExtra::No) {
+        dividedVectors.clear();
+        return;
+    }
+
+    if (!HasMotionVectors())
+        throw std::runtime_error("DivideVectorsExtra: no vectors available to divide");
+
     dividedVectors.resize(pyramidLevels[0].nBlkCount * 4);
 
     const VECTOR *blocks_in = pyramidLevels[0].vectors.data();
@@ -230,7 +239,7 @@ void MotionBlockPyramid::DivideVectorsExtra(int divideExtra) {
             blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
             blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
 
-            if (divideExtra > 1) {
+            if (divideExtra == DivideExtra::Median) {
                 GetMedian(blocks_out[bx * 2].x, blocks_out[bx * 2].y,
                     blocks_in[bx].x, blocks_in[bx].y,
                     blocks_in[bx - 1].x, blocks_in[bx - 1].y,
@@ -293,7 +302,7 @@ void MotionBlockPyramid::DivideVectorsExtra(int divideExtra) {
 
 /* fetch the block in the reference frame, which is pointed by the vector (vx, vy) */
 template <int nLogPelT, typename PixelType>
-const uint8_t *MotionBlockLevel::GetRefBlock(int nVx, int nVy) const {
+const uint8_t *MotionBlockLevel::GetRefBlock(int nVx, int nVy) const noexcept {
     if constexpr (nLogPelT == 0)
         return pRefFrame->planes[0].GetAbsolutePointerPel1<PixelType>(x[0] + nVx, y[0] + nVy);
     else if constexpr (nLogPelT == 1)
@@ -305,7 +314,7 @@ const uint8_t *MotionBlockLevel::GetRefBlock(int nVx, int nVy) const {
 
 
 template <int nLogPelT, typename PixelType>
-const uint8_t *MotionBlockLevel::GetRefBlockU(int nVx, int nVy) const {
+const uint8_t *MotionBlockLevel::GetRefBlockU(int nVx, int nVy) const noexcept {
     int xbias = (nVx < 0) * ((1 << nLogxRatioUV) - 1);
     int ybias = (nVy < 0) * ((1 << nLogyRatioUV) - 1);
 
@@ -326,7 +335,7 @@ const uint8_t *MotionBlockLevel::GetRefBlockU(int nVx, int nVy) const {
 
 
 template <int nLogPelT, typename PixelType>
-const uint8_t *MotionBlockLevel::GetRefBlockV(int nVx, int nVy) const {
+const uint8_t *MotionBlockLevel::GetRefBlockV(int nVx, int nVy) const noexcept {
     int xbias = (nVx < 0) * ((1 << nLogxRatioUV) - 1);
     int ybias = (nVy < 0) * ((1 << nLogyRatioUV) - 1);
 
@@ -347,19 +356,19 @@ const uint8_t *MotionBlockLevel::GetRefBlockV(int nVx, int nVy) const {
 
 
 /* computes square distance between two vectors */
-static unsigned int SquareDifferenceNorm(const VECTOR &v1, const int v2x, const int v2y) {
+static unsigned int SquareDifferenceNorm(const VECTOR &v1, const int v2x, const int v2y) noexcept {
     return (v1.x - v2x) * (v1.x - v2x) + (v1.y - v2y) * (v1.y - v2y);
 }
 
 
 /* computes the cost of a vector (vx, vy) */
-int MotionBlockLevel::MotionDistorsion(int vx, int vy) const {
+int MotionBlockLevel::MotionDistorsion(int vx, int vy) const noexcept {
     int dist = SquareDifferenceNorm(predictor, vx, vy);
     return (int)((nLambda * dist) >> 8);
 }
 
 /* check if a vector is inside search boundaries */
-bool MotionBlockLevel::IsVectorOK(int vx, int vy) const {
+bool MotionBlockLevel::IsVectorOK(int vx, int vy) const noexcept {
     return ((vx >= nDxMin) &&
         (vy >= nDyMin) &&
         (vx < nDxMax) &&
@@ -372,7 +381,7 @@ bool MotionBlockLevel::IsVectorOK(int vx, int vy) const {
 #define CHECKMV_UPDATEBESTMV (1 << 3)
 
 template <int nLogPel, int flags, typename PixelType>
-void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
+void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) noexcept {
     if (IsVectorOK(vx, vy)) {
         int64_t cost = MotionDistorsion(vx, vy);
         if (cost >= nMinCost)
@@ -407,34 +416,34 @@ void MotionBlockLevel::CheckMV_Template(int vx, int vy, int *dir, int val) {
 
 /* check if the vector (vx, vy) is better than the best vector found so far without penalty new - renamed in v.2.11*/
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::CheckMV0(int vx, int vy) { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
+void MotionBlockLevel::CheckMV0(int vx, int vy) noexcept { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
     CheckMV_Template<nLogPel, CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
 }
 
 
 /* check if the vector (vx, vy) is better than the best vector found so far */
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::CheckMV(int vx, int vy) { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
+void MotionBlockLevel::CheckMV(int vx, int vy) noexcept { //here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
     CheckMV_Template<nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, 0, 0);
 }
 
 
 /* check if the vector (vx, vy) is better, and update dir accordingly */
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::CheckMV2(int vx, int vy, int *dir, int val) {
+void MotionBlockLevel::CheckMV2(int vx, int vy, int *dir, int val) noexcept {
     CheckMV_Template<nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR | CHECKMV_UPDATEBESTMV, PixelType>(vx, vy, dir, val);
 }
 
 
 /* check if the vector (vx, vy) is better, and update dir accordingly, but not bestMV.x, y */
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::CheckMVdir(int vx, int vy, int *dir, int val) {
+void MotionBlockLevel::CheckMVdir(int vx, int vy, int *dir, int val) noexcept {
     CheckMV_Template<nLogPel, CHECKMV_PENALTYNEW | CHECKMV_UPDATEDIR, PixelType>(vx, vy, dir, val);
 }
 
 
 /* clip a vector to the search boundaries */
-VECTOR MotionBlockLevel::ClipMV(VECTOR v) const {
+VECTOR MotionBlockLevel::ClipMV(VECTOR v) const noexcept {
     VECTOR v2;
     v2.x = std::min(std::max(v.x, nDxMin), nDxMax - 1);
     v2.y = std::min(std::max(v.y, nDyMin), nDyMax - 1);
@@ -449,7 +458,7 @@ static int Median(int a, int b, int c) {
 }
 
 
-void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) {
+void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) noexcept {
 
     /* constant fields */
 
@@ -493,7 +502,7 @@ MotionBlockLevel::~MotionBlockLevel() {
     vsh::vsh_aligned_free(pSrc_temp[2]);
 }
 
-void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) {
+void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept {
     // Left (or right) predictor
     if ((blkScanDir == 1 && blkx > 0) || (blkScanDir == -1 && blkx < nBlkX - 1))
         predictors[1] = ClipMV(vectors[blkidx - blkScanDir]);
@@ -541,7 +550,7 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
     predictors[4] = ClipMV(zeroMV);
 }
 
-void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) {
+void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) noexcept {
     this->chroma = chroma;
 
     // FIXME, report in a nicer way?
@@ -574,7 +583,7 @@ void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) {
 }
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::DiamondSearch(int length) {
+void MotionBlockLevel::DiamondSearch(int length) noexcept {
     enum Direction {
         Right = 1,
         Left = 2,
@@ -679,7 +688,7 @@ void MotionBlockLevel::DiamondSearch(int length) {
 
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::ExpandingSearch(int r, int s, int mvx, int mvy) {
+void MotionBlockLevel::ExpandingSearch(int r, int s, int mvx, int mvy) noexcept {
     // diameter = 2*r + 1, step=s
     // part of true enhaustive search (thin expanding square) around mvx, mvy
 
@@ -709,7 +718,7 @@ static constexpr int mod6m1[8] = { 5, 0, 1, 2, 3, 4, 5, 0 };
 static constexpr int hex2[8][2] = { { -1, -2 }, { -2, 0 }, { -1, 2 }, { 1, 2 }, { 2, 0 }, { 1, -2 }, { -1, -2 }, { -2, 0 } };
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::Hex2Search(int i_me_range) { //adopted from x264
+void MotionBlockLevel::Hex2Search(int i_me_range) noexcept { //adopted from x264
     int dir = -2;
     int bmx = bestMV.x;
     int bmy = bestMV.y;
@@ -770,7 +779,7 @@ void MotionBlockLevel::Hex2Search(int i_me_range) { //adopted from x264
 
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::CrossSearch(int start, int x_max, int y_max, int mvx, int mvy) { // part of umh  search
+void MotionBlockLevel::CrossSearch(int start, int x_max, int y_max, int mvx, int mvy) noexcept { // part of umh  search
 
     for (int i = start; i < x_max; i += 2) {
         CheckMV<nLogPel, PixelType>(mvx - i, mvy);
@@ -785,7 +794,7 @@ void MotionBlockLevel::CrossSearch(int start, int x_max, int y_max, int mvx, int
 
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::UMHSearch(int i_me_range, int omx, int omy) { // radius
+void MotionBlockLevel::UMHSearch(int i_me_range, int omx, int omy) noexcept { // radius
     // Uneven-cross Multi-Hexagon-grid Search (see x264)
     /* hexagon grid */
 
@@ -815,7 +824,7 @@ void MotionBlockLevel::UMHSearch(int i_me_range, int omx, int omy) { // radius
 
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::Refine() {
+void MotionBlockLevel::Refine() noexcept {
     // then, we refine, according to the search type
     if (searchType == SearchType::Logarithmic) {
         for (int i = nSearchParam; i > 0; i /= 2)
@@ -850,7 +859,7 @@ void MotionBlockLevel::Refine() {
 
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, int64_t badSAD, int badrange, bool tryMany, int &badcount) {
+void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, int64_t badSAD, int badrange, bool tryMany, int &badcount) noexcept {
 
     // FIXME, aren't several predictors usually the same? make sure duplicate vectors aren't tested several times
     VECTOR predictors[5]; /* set of predictors for the current block */
@@ -991,7 +1000,7 @@ template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int lsad, int pnew,
     int plevel, VECTOR *globalMVec, int fieldShift,
-    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
+    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept {
 
     badSAD = badSAD;
     badrange = badrange;
@@ -1111,7 +1120,7 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
     SearchType st, int stp, int lambda, int lsad, int pnew,
     int plevel, VECTOR *globalMVec,
     int fieldShift, bool useSatd,
-    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
+    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept {
 
     InitMotionEstimationFields(useSatd, chroma);
 
@@ -1134,9 +1143,9 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
 
 
 template <int nLogPel, typename PixelType>
-void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int pnew,
-    int fieldShift, int64_t thSAD, int smooth, bool meander) {
+    int fieldShift, int64_t thSAD, int smooth, bool meander) noexcept {
                                     
     zeroMVfieldShifted.x = 0;
     zeroMVfieldShifted.y = fieldShift;
@@ -1367,29 +1376,29 @@ void MotionBlockLevel::doRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 
 void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int pnew,
-    int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) {
+    int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) noexcept {
 
     InitMotionEstimationFields(useSatd, chroma);
 
     if (bytesPerSample == 1) {
         if (nLogPel == 0)
-            MotionBlockLevel::doRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            MotionBlockLevel::DoRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else if (nLogPel == 1)
-            MotionBlockLevel::doRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            MotionBlockLevel::DoRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else
-            MotionBlockLevel::doRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            MotionBlockLevel::DoRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
     } else {
         if (nLogPel == 0)
-            MotionBlockLevel::doRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            MotionBlockLevel::DoRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else if (nLogPel == 1)
-            MotionBlockLevel::doRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            MotionBlockLevel::DoRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else
-            MotionBlockLevel::doRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            MotionBlockLevel::DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
     }
 }
 
 
-bool MotionBlockLevel::IsSceneChange(int64_t nTh1, int nTh2) const {
+bool MotionBlockLevel::IsSceneChange(int64_t nTh1, int nTh2) const noexcept {
     int sum = 0;
     for (int i = 0; i < nBlkCount; i++)
         sum += (vectors[i].sad > nTh1) ? 1 : 0;
@@ -1443,6 +1452,8 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
 
         pyramidLevels[i].Initialize(nBlkXCurrent, nBlkYCurrent, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 1, i, smallestPlane, chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, bitsPerSample);
     }
+
+    state = State::ReadyForSearch;
 }
 
 MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) {
@@ -1481,8 +1492,6 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
     int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
     int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
 
-    valid = true;
-
     for (int i = 0; i < nLevelCount; i++) {
         int nBlkX1 = ((nWidth_B >> i) - nOverlapX) / (nBlkSizeX - nOverlapX);
         int nBlkY1 = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
@@ -1498,6 +1507,8 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
             throw std::runtime_error("Motion vector data corrupt, wrong size");
         }
     }
+
+    state = State::ReadyForRecalculate;
 }
 
 
@@ -1505,7 +1516,7 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
     int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
     int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
-    SearchType coarseSearchType, bool chroma) {
+    SearchType coarseSearchType, bool chroma) noexcept {
 
     int fieldShiftCur = (nLevelCount - 1 == 0) ? fieldShift : 0; // may be non zero for finest level only
 
@@ -1541,22 +1552,24 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
             pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
     }
 
-    valid = true;
+    state = State::AnalysisDone;
 }
 
 
 void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
     SearchType searchType, int nSearchParam, int nLambda, int pnew,
-    int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) {
+    int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) noexcept {
 
     // Search the motion vectors, for the low details interpolations first
     // Refining the search until we reach the highest detail interpolation.
     pyramidLevels[0].RecalculateMVs(pSrcGOF.GetLevel(0), pRefGOF.GetLevel(0),
         searchType, nSearchParam, nLambda, pnew,
         fieldShift, thSAD, useSatd, smooth, meander);
+
+    state = State::AnalysisDone;
 }
 
-void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix, VSCore *core, const VSAPI *vsapi) {
+void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept {
     auto props = vsapi->getFramePropertiesRW(dst);
 
     vsapi->mapSetInt(props, (prefix + "AnalysisWidth").c_str(), nWidth, maReplace);
@@ -1566,7 +1579,7 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix
     vsapi->mapSetInt(props, (prefix + "AnalysisHPad").c_str(), nHPadding, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisVPad").c_str(), nVPadding, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisPel").c_str(), nPel, maReplace);
-    vsapi->mapSetInt(props, (prefix + "AnalysisLevels").c_str(), pyramidLevels.size() + (divideExtra ? 1 : 0), maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisLevels").c_str(), pyramidLevels.size() + (divideExtra == DivideExtra::No ? 0 : 1), maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisChroma").c_str(), chroma, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisXRatioUV").c_str(), xRatioUV, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisYRatioUV").c_str(), yRatioUV, maReplace);
@@ -1583,35 +1596,36 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix
 
     vsapi->mapSetInt(props, (prefix + "AnalysisDeltaFrame").c_str(), nDeltaFrame, maReplace);
 
+    if (HasMotionVectors()) {
+        std::string vectorsProp = prefix + "AnalysisVectors";
 
-    std::string vectorsProp = prefix + "AnalysisVectors";
+        if (divideExtra != DivideExtra::No) {
+            vsapi->mapSetData(props,
+                vectorsProp.c_str(),
+                (const char *)dividedVectors.data(),
+                dividedVectors.size() * sizeof(VECTOR),
+                dtBinary,
+                maReplace);
+        }
 
-    if (divideExtra) {
-        vsapi->mapSetData(props,
-            vectorsProp.c_str(),
-            (const char *)dividedVectors.data(),
-            dividedVectors.size() * sizeof(VECTOR),
-            dtBinary,
-            maReplace);
+        for (int i = 0; i < nLevelCount; i++) {
+            const auto &plane = pyramidLevels[i];
+            vsapi->mapSetData(props,
+                vectorsProp.c_str(),
+                (const char *)plane.vectors.data(),
+                plane.vectors.size() * sizeof(VECTOR),
+                dtBinary,
+                maAppend);
+        };
     }
 
-    for (int i = 0; i < nLevelCount; i++) {
-        const auto &plane = pyramidLevels[i];
-        vsapi->mapSetData(props,
-            vectorsProp.c_str(),
-            (const char *)plane.vectors.data(),
-            plane.vectors.size() * sizeof(VECTOR),
-            dtBinary,
-            maAppend);
-    };
-
 }
 
-bool MotionBlockPyramid::IsUsable(int64_t thscd1, int thscd2) const {
-    return !pyramidLevels[0].IsSceneChange(thscd1, thscd2) && valid;
+bool MotionBlockPyramid::IsUsable(int64_t thscd1, int thscd2) const noexcept {
+    return !pyramidLevels[0].IsSceneChange(thscd1, thscd2) && HasMotionVectors();
 }
 
-BlockData MotionBlockPyramid::GetBlock(int nBlk) const {
+BlockData MotionBlockPyramid::GetBlock(int nBlk) const noexcept {
     int bY = nBlk / nBlkX;
     int bX = nBlk % nBlkX;
 
@@ -1635,4 +1649,12 @@ void MotionBlockPyramid::ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSam
     thscd1 = (int64_t)((double)thscd1 * pixelMax / 255.0 + 0.5);
 
     thscd2 = thscd2 * nBlkX * nBlkY / 256;
+}
+
+MotionBlockPyramid::State MotionBlockPyramid::GetState() const noexcept {
+    return state;
+}
+
+bool MotionBlockPyramid::HasMotionVectors() const noexcept {
+    return state == State::ReadyForRecalculate || state == State::AnalysisDone;
 }
