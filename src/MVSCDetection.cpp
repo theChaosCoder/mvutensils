@@ -104,14 +104,12 @@ static void VS_CC mvscdetectionCreate(const VSMap *in, VSMap *out, void *userDat
     d.vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
 
 
-#define ERROR_SIZE 512
     char error[ERROR_SIZE + 1] = { 0 };
     const char *filter_name = "SCDetection";
 
     adataFromVectorClip(&d.vectors_data, d.vectors, filter_name, "vectors", vsapi, error, ERROR_SIZE);
 
     scaleThSCD(&d.thscd1, &d.thscd2, &d.vectors_data, filter_name, error, ERROR_SIZE);
-#undef ERROR_SIZE
 
     if (error[0]) {
         vsapi->mapSetError(out, error);

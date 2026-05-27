@@ -30,13 +30,13 @@
 
 
 
-struct MVCompensateData {
-    VSNode *node;
+struct CompensateData {
+    VSNode *node = nullptr;
+    VSNode *super = nullptr;
+    VSNode *vectors = nullptr;
+
     VSVideoInfo vi;
     const VSVideoInfo *supervi;
-
-    VSNode *super;
-    VSNode *vectors;
 
     int scBehavior;
     int64_t thSAD;
@@ -61,12 +61,22 @@ struct MVCompensateData {
     ToPixelsFunction ToPixels;
 
     std::string prefix;
+
+    const VSAPI *vsapi;
+
+    CompensateData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~CompensateData() {
+        vsapi->freeNode(node);
+        vsapi->freeNode(super);
+        vsapi->freeNode(vectors);
+    }
 };
 
 
 template<typename PixelType>
 static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    MVCompensateData *d = (MVCompensateData *)instanceData;
+    CompensateData *d = reinterpret_cast<CompensateData *>(instanceData);
     int nref = n + d->deltaFrame;
 
     if (activationReason == arInitial) {
@@ -344,17 +354,13 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
 
 static void VS_CC compensateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    MVCompensateData *d = (MVCompensateData *)instanceData;
-
-    vsapi->freeNode(d->super);
-    vsapi->freeNode(d->vectors);
-    vsapi->freeNode(d->node);
+    CompensateData *d = reinterpret_cast<CompensateData *>(instanceData);
     delete d;
 }
 
 
 static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    std::unique_ptr<MVCompensateData> d(new MVCompensateData());
+    std::unique_ptr<CompensateData> d(new CompensateData(vsapi));
     int err;
 
     d->scBehavior = !!vsapi->mapGetInt(in, "scbehavior", 0, &err);
@@ -383,10 +389,8 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
     d->tff_exists = !err;
 
 
-    if (time < 0.0 || time > 100.0) {
-        vsapi->mapSetError(out, "Compensate: time must be between 0.0 and 100.0 (inclusive).");
-        return;
-    }
+    if (time < 0.0 || time > 100.0)
+        RETERROR("Compensate: time must be between 0.0 and 100.0");
 
     const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
     if (prefix)
@@ -396,100 +400,77 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
 
     d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-#define ERROR_SIZE 1024
     char errorMsg[ERROR_SIZE] = "Compensate: failed to retrieve first frame from super clip. Error message: ";
     size_t errorLen = strlen(errorMsg);
     const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
-#undef ERROR_SIZE
-    if (!evil) {
-        vsapi->mapSetError(out, errorMsg);
-        vsapi->freeNode(d->super);
+    if (!evil)
+        RETERROR(errorMsg);
+
+    try {
+        FramePyramid super(evil, d->prefix, core, vsapi);
+
+        d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+
+        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = *vsapi->getVideoInfo(d->node);
+
+        char error[ERROR_SIZE + 1] = {};
+        const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+        if (!evil2)
+            RETERROR(errorMsg);
+
+        MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
+
+        int64_t nSCD1_old = d->nSCD1;
+        vectors.ScaleThSCD(d->nSCD1, d->nSCD2, d->vi.format.bitsPerSample);
+
+        d->deltaFrame = vectors.nDeltaFrame;
+
+        if (d->fields && vectors.nPel < 2)
+            RETERROR("Compensate: fields option requires pel > 1");
+
+        d->thSAD = d->thSAD * d->nSCD1 / nSCD1_old; // normalize to block SAD
+
+        d->dstTempPitch = ((vectors.nWidth + 15) / 16) * 16 * d->vi.format.bytesPerSample * 2;
+        d->dstTempPitchUV = (((vectors.nWidth / vectors.xRatioUV) + 15) / 16) * 16 * d->vi.format.bytesPerSample * 2;
+
+        d->supervi = vsapi->getVideoInfo(d->super);
+
+        if (vectors.nHeight != super.nHeight[0] || vectors.nWidth != super.nWidth[0] || vectors.nRealHeight != d->vi.height || vectors.nRealWidth != d->vi.width || vectors.nPel != super.nPel)
+            RETERROR("Compensate: wrong source or super clip frame size");
+
+        if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 16 || d->vi.format.sampleType != stInteger || d->vi.format.subSamplingW > 1 || d->vi.format.subSamplingH > 1 || (d->vi.format.colorFamily != cfYUV && d->vi.format.colorFamily != cfGray))
+            RETERROR("Compensate: input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions");
+
+        d->chroma = (d->vi.format.colorFamily != cfGray);
+
+        if (vectors.nOverlapX > 0 || vectors.nOverlapY > 0) {
+            d->OverWins.Init(vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY);
+            if (d->chroma)
+                d->OverWinsUV.Init(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, vectors.nOverlapX / vectors.xRatioUV, vectors.nOverlapY / vectors.yRatioUV);
+        }
+
+        const unsigned bits = d->vi.format.bytesPerSample * 8;
+
+        if (d->vi.format.bitsPerSample == 8) {
+            d->ToPixels = ToPixels<uint16_t, uint8_t>;
+        } else {
+            d->ToPixels = ToPixels<uint32_t, uint16_t>;
+        }
+
+        d->OVERS[0] = selectOverlapsFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);
+        d->BLIT[0] = selectCopyFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);
+
+        d->OVERS[1] = d->OVERS[2] = selectOverlapsFunction(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, bits);
+        d->BLIT[1] = d->BLIT[2] = selectCopyFunction(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, bits);
+
+        d->time256 = (int)(time * 256 / 100);
+
+    } catch (std::runtime_error &e) {
+        // Note that exceptions can only happen before SearchMVs MMX code
+        vsapi->mapSetError(out, ("Compansate: " + std::string(e.what())).c_str());
         return;
     }
-
-    FramePyramid super(evil, d->prefix, core, vsapi);
-
-    d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
-
-    d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
-    d->vi = *vsapi->getVideoInfo(d->node);
-
-#define ERROR_SIZE 512
-    char error[ERROR_SIZE + 1] = {};
-
-    const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
-    MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
-
-    int64_t nSCD1_old = d->nSCD1;
-    vectors.ScaleThSCD(d->nSCD1, d->nSCD2, d->vi.format.bitsPerSample);
-#undef ERROR_SIZE
-
-    if (error[0]) {
-        vsapi->mapSetError(out, error);
-
-        vsapi->freeNode(d->super);
-        vsapi->freeNode(d->vectors);
-        vsapi->freeNode(d->node);
-        return;
-    }
-
-    d->deltaFrame = vectors.nDeltaFrame;
-
-    if (d->fields && vectors.nPel < 2) {
-        vsapi->mapSetError(out, "Compensate: fields option requires pel > 1.");
-        vsapi->freeNode(d->super);
-        vsapi->freeNode(d->vectors);
-        vsapi->freeNode(d->node);
-        return;
-    }
-
-    d->thSAD = d->thSAD * d->nSCD1 / nSCD1_old; // normalize to block SAD
-
-    d->dstTempPitch = ((vectors.nWidth + 15) / 16) * 16 * d->vi.format.bytesPerSample * 2;
-    d->dstTempPitchUV = (((vectors.nWidth / vectors.xRatioUV) + 15) / 16) * 16 * d->vi.format.bytesPerSample * 2;
-
-    d->supervi = vsapi->getVideoInfo(d->super);
-    
-    if (vectors.nHeight != super.nHeight[0] || vectors.nWidth != super.nWidth[0]  || vectors.nRealHeight != d->vi.height || vectors.nRealWidth != d->vi.width || vectors.nPel != super.nPel) {
-        vsapi->mapSetError(out, "Compensate: wrong source or super clip frame size.");
-        vsapi->freeNode(d->super);
-        vsapi->freeNode(d->vectors);
-        vsapi->freeNode(d->node);
-        return;
-    }
-
-    if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 16 || d->vi.format.sampleType != stInteger || d->vi.format.subSamplingW > 1 || d->vi.format.subSamplingH > 1 || (d->vi.format.colorFamily != cfYUV && d->vi.format.colorFamily != cfGray)) {
-        vsapi->mapSetError(out, "Compensate: input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions.");
-        vsapi->freeNode(d->super);
-        vsapi->freeNode(d->vectors);
-        vsapi->freeNode(d->node);
-        return;
-    }
-
-    d->chroma = (d->vi.format.colorFamily != cfGray);
-
-    if (vectors.nOverlapX > 0 || vectors.nOverlapY > 0) {
-        d->OverWins.Init(vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY);
-        if (d->chroma)
-            d->OverWinsUV.Init(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, vectors.nOverlapX / vectors.xRatioUV, vectors.nOverlapY / vectors.yRatioUV);
-    }
-
-    const unsigned bits = d->vi.format.bytesPerSample * 8;
-
-    if (d->vi.format.bitsPerSample == 8) {
-        d->ToPixels = ToPixels<uint16_t, uint8_t>;
-    } else {
-        d->ToPixels = ToPixels<uint32_t, uint16_t>;
-    }
-
-    d->OVERS[0] = selectOverlapsFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);
-    d->BLIT[0] = selectCopyFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);
-
-    d->OVERS[1] = d->OVERS[2] = selectOverlapsFunction(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, bits);
-    d->BLIT[1] = d->BLIT[2] = selectCopyFunction(vectors.nBlkSizeX / vectors.xRatioUV, vectors.nBlkSizeY / vectors.yRatioUV, bits);
-
-    d->time256 = (int)(time * 256 / 100);
-
 
     VSFilterDependency deps[3] = { 
         {d->node, rpStrictSpatial},

@@ -254,19 +254,14 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
     else
         d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-    if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical) {
-        vsapi->mapSetError(out, "Analyse: search must be between 0 and 5");
-        return;
-    }
+    if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
+        RETERROR("Analyse: search must be between 0 and 5");
 
-    if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical) {
-        vsapi->mapSetError(out, "Analyse: search_coarse must be between 0 and 5");
-        return;
-    }
+    if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical)
+        RETERROR("Analyse: search_coarse must be between 0 and 5");
 
     if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
         RETERROR("Analyse: satd cannot work with 16x2 blocks");
-
 
     if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && d->divideExtra != MotionBlockPyramid::DivideExtra::Point && d->divideExtra != MotionBlockPyramid::DivideExtra::Median)
         RETERROR("Analyse: divide must be between 0 and 2");
@@ -287,40 +282,24 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         RETERROR("Analyse: the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64 or 128x128");
 
 
-    if (d->plevel < 0 || d->plevel > 2) {
-        vsapi->mapSetError(out, "Analyse: plevel must be between 0 and 2");
-        return;
-    }
+    if (d->plevel < 0 || d->plevel > 2)
+        RETERROR("Analyse: plevel must be between 0 and 2");
 
+    if (d->pnew < 0 || d->pnew > 256)
+        RETERROR("Analyse: pnew must be between 0 and 256");
 
-    if (d->pnew < 0 || d->pnew > 256) {
-        vsapi->mapSetError(out, "Analyse: pnew must be between 0 and 256");
-        return;
-    }
+    if (d->pzero < 0 || d->pzero > 256)
+        RETERROR("Analyse: pzero must be between 0 and 256");
 
-
-    if (d->pzero < 0 || d->pzero > 256) {
-        vsapi->mapSetError(out, "Analyse: pzero must be between 0 and 256");
-        return;
-    }
-
-
-    if (d->pglobal < 0 || d->pglobal > 256) {
-        vsapi->mapSetError(out, "Analyse: pglobal must be between 0 and 256");
-        return;
-    }
-
+    if (d->pglobal < 0 || d->pglobal > 256)
+        RETERROR("Analyse: pglobal must be between 0 and 256");
 
     if (d->nOverlapX < 0 || d->nOverlapX > d->nBlkSizeX / 2 ||
-        d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2) {
-        vsapi->mapSetError(out, "Analyse: overlap must be at most half of blksize, overlapv must be at most half of blksizev, and they both need to be at least 0.");
-        return;
-    }
+        d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2)
+        RETERROR("Analyse: overlaph must be at most half of blksizeh, overlapv must be at most half of blksizev, and they both need to be at least 0");
 
-    if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8)) {
-        vsapi->mapSetError(out, "Analyse: blksize and blksizev must be at least 8 when divide=True.");
-        return;
-    }
+    if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8))
+        RETERROR("Analyse: blksize and blksizev must be at least 8 when divide=True");
 
 
     d->nSearchParam = std::max(d->searchparam, 1);
@@ -330,10 +309,8 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
     d->supervi = vsapi->getVideoInfo(d->node);
     d->vi = d->supervi;
 
-    if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray)) {
-        vsapi->mapSetError(out, "Analyse: Input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant format and dimensions");
-        return;
-    }
+    if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray))
+        RETERROR("Analyse: Input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant format and dimensions");
 
     if (d->vi->format.colorFamily == cfGray)
         d->chroma = false;
@@ -348,8 +325,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
     if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
         d->nOverlapY % (1 << d->vi->format.subSamplingH)) {
-        vsapi->mapSetError(out, "Analyse: The requested overlap is incompatible with the super clip's subsampling");
-        return;
+        RETERROR("Analyse: The requested overlap is incompatible with the super clip's subsampling");
     }
 
     if ((d->divideExtra != MotionBlockPyramid::DivideExtra::No) && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
@@ -359,15 +335,12 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
     if (d->deltaFrame == 0)
         RETERROR("Analyse: delta can't be 0");
 
-#define ERROR_SIZE 1024
     char errorMsg[ERROR_SIZE] = "Analyse: failed to retrieve first frame from super clip. Error message: ";
     size_t errorLen = strlen(errorMsg);
     const VSFrame *evil = vsapi->getFrame(0, d->node, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
-#undef ERROR_SIZE
-    if (!evil) {
-        vsapi->mapSetError(out, errorMsg);
-        return;
-    }
+    if (!evil)
+        RETERROR(errorMsg);
+
     try {
 
         FramePyramid super(evil, d->prefix, core, vsapi);

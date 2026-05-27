@@ -2,6 +2,11 @@
 #define __COMMON_M__
 
 #include <vector>
+#include <stdexcept>
+
+class MVUtensilsError : public std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 template<typename T, size_t U>
 constexpr int ARRAY_SIZE(const T (&arr)[U]) {
@@ -11,6 +16,8 @@ constexpr int ARRAY_SIZE(const T (&arr)[U]) {
 // FIXME, probably should be called something else
 
 #define RETERROR(x) do { vsapi->mapSetError(out, (x)); return; } while (0)
+
+constexpr int ERROR_SIZE = 1024;
 
 constexpr char DEFAULT_MVUTENSILS_PREFIX[] = "MVUtensils";
 
