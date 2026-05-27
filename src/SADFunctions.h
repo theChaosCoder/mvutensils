@@ -1,3 +1,5 @@
+#pragma once
+
 // Functions that computes distances between blocks
 
 // See legal notice in Copying.txt for more information
@@ -17,10 +19,6 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
-#ifndef SADFUNCTIONS_H
-#define SADFUNCTIONS_H
-
-
 #include <cstdint>
 
 
@@ -35,7 +33,4 @@ SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits);
 
 #if defined(MVTOOLS_X86)
 SADFunction selectSADFunctionAVX2(unsigned width, unsigned height, unsigned bits);
-#endif
-
-
 #endif

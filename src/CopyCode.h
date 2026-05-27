@@ -1,6 +1,4 @@
-#ifndef COPYCODE_H
-#define COPYCODE_H
-
+#pragma once
 
 #include <cstdint>
 #include <cstddef>
@@ -11,6 +9,3 @@ typedef void (*COPYFunction)(uint8_t *pDst, ptrdiff_t nDstPitch,
 
 
 COPYFunction selectCopyFunction(unsigned width, unsigned height, unsigned bits);
-
-
-#endif // COPYCODE_H

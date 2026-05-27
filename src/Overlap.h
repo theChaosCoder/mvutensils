@@ -1,6 +1,4 @@
-#ifndef OVERLAP_H
-#define OVERLAP_H
-
+#pragma once
 
 #include <cstdint>
 #include <algorithm>
@@ -77,6 +75,3 @@ OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigne
 #if defined(MVTOOLS_X86)
 OverlapsFunction selectOverlapsFunctionAVX2(unsigned width, unsigned height, unsigned bits);
 #endif
-
-
-#endif // OVERLAP_H

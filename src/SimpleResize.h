@@ -1,3 +1,5 @@
+#pragma once
+
 // See legal notice in Copying.txt for more information
 
 // This program is free software; you can redistribute it and/or modify
@@ -16,9 +18,6 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 // I (Fizick) borrow code from Tom Barry's SimpleResize here
-
-#ifndef SIMPLERESIZE_H
-#define SIMPLERESIZE_H
 
 #include <cstdint>
 #include <cstddef>
@@ -70,6 +69,3 @@ typedef struct SimpleResize {
 
 void simpleInit(SimpleResize *simple, int dst_width, int dst_height, int src_width, int src_height, int limit_width, int limit_height, int pel, int opt);
 void simpleDeinit(SimpleResize *simple);
-
-
-#endif // SIMPLERESIZE_H

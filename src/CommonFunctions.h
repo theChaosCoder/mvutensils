@@ -1,5 +1,4 @@
-#ifndef __COMMON_F__
-#define __COMMON_F__
+#pragma once
 
 #include <cstdint>
 
@@ -64,5 +63,3 @@ inline static int64_t gcd(int64_t u, int64_t v) {
 
     return u << shift;
 }
-
-#endif

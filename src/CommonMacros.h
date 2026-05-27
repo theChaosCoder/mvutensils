@@ -1,5 +1,4 @@
-#ifndef __COMMON_M__
-#define __COMMON_M__
+#pragma once
 
 #include <vector>
 #include <stdexcept>
@@ -18,6 +17,9 @@ constexpr int ARRAY_SIZE(const T (&arr)[U]) {
 #define RETERROR(x) do { vsapi->mapSetError(out, (x)); return; } while (0)
 
 constexpr int ERROR_SIZE = 1024;
+
+static constexpr const int MV_DEFAULT_SCD1 = 400;
+static constexpr const int MV_DEFAULT_SCD2 = 130;
 
 constexpr char DEFAULT_MVUTENSILS_PREFIX[] = "MVUtensils";
 
@@ -68,5 +70,3 @@ public:
             vsapi->freeNode(iter);
     }
 };
-
-#endif // __COMMON_M__

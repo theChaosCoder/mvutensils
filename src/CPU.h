@@ -1,6 +1,4 @@
-#ifndef MVT_CPU_H
-#define MVT_CPU_H
-
+#pragma once
 
 #include <cstdint>
 
@@ -61,5 +59,3 @@ enum {
 };
 
 extern uint32_t g_cpuinfo;
-
-#endif // MVT_CPU_H

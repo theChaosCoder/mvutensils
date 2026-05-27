@@ -1,5 +1,4 @@
-#ifndef MVDEGRAINS_H
-#define MVDEGRAINS_H
+#pragma once
 
 #include <cstdint>
 #include <cstring>
@@ -222,6 +221,3 @@ static inline void normaliseWeights(int &WSrc, int *WRefs) {
         WSrc -= WRefs[r];
     }
 }
-
-
-#endif // MVDEGRAINS_H

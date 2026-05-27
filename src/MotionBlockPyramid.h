@@ -37,9 +37,6 @@ enum class SearchType {
 };
 
 
-static constexpr const int MV_DEFAULT_SCD1 = 400;
-static constexpr const int MV_DEFAULT_SCD2 = 130;
-
 static constexpr const VECTOR zeroMV = { 0, 0, -1 };
 
 

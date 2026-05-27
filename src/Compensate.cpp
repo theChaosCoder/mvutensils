@@ -468,7 +468,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
 
     } catch (std::runtime_error &e) {
         // Note that exceptions can only happen before SearchMVs MMX code
-        vsapi->mapSetError(out, ("Compansate: " + std::string(e.what())).c_str());
+        vsapi->mapSetError(out, ("Compensate: " + std::string(e.what())).c_str());
         return;
     }
 

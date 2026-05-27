@@ -1509,7 +1509,7 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
         }
     }
 
-    if (state != State::MetadataOnly)
+    if (state == State::MetadataOnly)
         state = State::ReadyForRecalculate;
 }
 

@@ -1,3 +1,5 @@
+#pragma once
+
 // Create an overlay mask with the motion vectors
 
 // See legal notice in Copying.txt for more information
@@ -16,9 +18,6 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
-
-#ifndef MASKFUN_H
-#define MASKFUN_H
 
 #include <cstdint>
 #include <cstddef>
