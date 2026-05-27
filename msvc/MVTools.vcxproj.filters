@@ -104,7 +104,7 @@
     <ClCompile Include="..\src\Overlap_AVX2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVSCDetection.cpp">
+    <ClCompile Include="..\src\SCDetection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Super.cpp">

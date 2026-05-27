@@ -457,6 +457,14 @@ static int Median(int a, int b, int c) {
 }
 
 
+inline static int satz(int a) {
+    return ~(a >> (sizeof(int) * 8 - 1)) & a;
+}
+
+inline static int iexp2(int i) {
+    return 1 << satz(i);
+}
+
 void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) noexcept {
 
     /* constant fields */

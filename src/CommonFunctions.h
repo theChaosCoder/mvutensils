@@ -2,12 +2,7 @@
 
 #include <cstdint>
 
-
-// returns a > 0 ? a : 0
-inline static int satz(int a) {
-    return ~(a >> (sizeof(int) * 8 - 1)) & a;
-}
-
+// FIXME, onlt widely used function in this file
 /* returns the biggest integer x such as 2^x <= i */
 inline static int ilog2(int i) {
     int result = 0;
@@ -18,14 +13,7 @@ inline static int ilog2(int i) {
     return result;
 }
 
-/* computes 2^i */
-inline static int iexp2(int i) {
-    return 1 << satz(i);
-    //     int result = 1;
-    //     while ( i > 0 ) { result *= 2; i--; }
-    //     return result;
-}
-
+// FIXME, reducerational in vshelper can replace it
 // general common divisor (from wikipedia)
 inline static int64_t gcd(int64_t u, int64_t v) {
     int shift;
