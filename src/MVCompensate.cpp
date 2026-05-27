@@ -18,21 +18,19 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
-#include <climits>
 #include <memory>
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
 #include "CopyCode.h"
 #include "Overlap.h"
-//#include "MaskFun.h"
 #include "CommonMacros.h"
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 
 
 
-typedef struct MVCompensateData {
+struct MVCompensateData {
     VSNode *node;
     VSVideoInfo vi;
     const VSVideoInfo *supervi;
@@ -61,11 +59,13 @@ typedef struct MVCompensateData {
     OverlapsFunction OVERS[3];
     COPYFunction BLIT[3];
     ToPixelsFunction ToPixels;
-} MVCompensateData;
+
+    std::string prefix;
+};
 
 
 template<typename PixelType>
-static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     MVCompensateData *d = (MVCompensateData *)instanceData;
     int nref = n + d->deltaFrame;
 
@@ -89,7 +89,7 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
         ptrdiff_t nSrcPitches[3] = {};
 
         const VSFrame *mvn = vsapi->getFrameFilter(n, d->vectors, frameCtx);
-        MotionBlockPyramid vectors(mvn, 0, "MVUtensils", core, vsapi);
+        MotionBlockPyramid vectors(mvn, 0, d->prefix, core, vsapi);
         vsapi->freeFrame(mvn);
 
         const int xRatioUV = vectors.xRatioUV;
@@ -126,12 +126,12 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
         VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, realSrc, core);
         vsapi->freeFrame(realSrc);
         const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
-        FramePyramid pSrcGOF(src, "MVUtensils", core, vsapi);
+        FramePyramid pSrcGOF(src, d->prefix, core, vsapi);
         const auto &pSrcPlanes = pSrcGOF.GetLevel(0).planes;
 
         if (nref >= 0 && nref < d->vi.numFrames && vectors.IsUsable(d->nSCD1, d->nSCD2)) {
             const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-            FramePyramid pRefGOF(ref, "MVUtensils", core, vsapi);
+            FramePyramid pRefGOF(ref, d->prefix, core, vsapi);
             const auto &pRefPlanes = pRefGOF.GetLevel(0).planes;
 
             for (int i = 0; i < d->supervi->format.numPlanes; i++) {
@@ -151,23 +151,19 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                 int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
                 if (err && !d->tff_exists) {
                     vsapi->setFilterError("Compensate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                    vsapi->freeFrame(src);
                     vsapi->freeFrame(dst);
-                    vsapi->freeFrame(ref);
-                    return NULL;
+                    return nullptr;
                 }
 
                 if (d->tff_exists)
                     src_top_field = d->tff ^ (n % 2);
 
                 props = vsapi->getFramePropertiesRO(ref);
-                int ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
+                bool ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
                 if (err && !d->tff_exists) {
                     vsapi->setFilterError("Compensate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                    vsapi->freeFrame(src);
                     vsapi->freeFrame(dst);
-                    vsapi->freeFrame(ref);
-                    return NULL;
+                    return nullptr;
                 }
 
                 if (d->tff_exists)
@@ -333,17 +329,12 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
                               nWidth[plane] * sizeof(PixelType), nHeight[plane] - nHeight_B[plane]);
                 }
             }
-
-
-            vsapi->freeFrame(ref);
         } else {
            // FIXME, maybe return original frame without copy
             // Copy image
             for (int plane = 0; plane < num_planes; plane++)
                 vsh::bitblt(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), pSrcPlanes[plane].GetPointer<PixelType>(0, 0), pSrcPlanes[plane].nPitch, vsapi->getFrameWidth(dst, plane) * sizeof(PixelType), vsapi->getFrameHeight(dst, plane));
         }
-
-        vsapi->freeFrame(src);
 
         return dst;
     }
@@ -352,7 +343,7 @@ static const VSFrame *VS_CC mvcompensateGetFrame(int n, int activationReason, vo
 }
 
 
-static void VS_CC mvcompensateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC compensateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
     MVCompensateData *d = (MVCompensateData *)instanceData;
 
     vsapi->freeNode(d->super);
@@ -362,7 +353,7 @@ static void VS_CC mvcompensateFree(void *instanceData, VSCore *core, const VSAPI
 }
 
 
-static void VS_CC mvcompensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<MVCompensateData> d(new MVCompensateData());
     int err;
 
@@ -397,8 +388,13 @@ static void VS_CC mvcompensateCreate(const VSMap *in, VSMap *out, void *userData
         return;
     }
 
+    const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+    if (prefix)
+        d->prefix = prefix;
+    else
+        d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-    d->super = vsapi->mapGetNode(in, "super", 0, NULL);
+    d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
 #define ERROR_SIZE 1024
     char errorMsg[ERROR_SIZE] = "Compensate: failed to retrieve first frame from super clip. Error message: ";
@@ -411,21 +407,18 @@ static void VS_CC mvcompensateCreate(const VSMap *in, VSMap *out, void *userData
         return;
     }
 
-    FramePyramid super(evil, "MVUtensils", core, vsapi);
+    FramePyramid super(evil, d->prefix, core, vsapi);
 
-    // Note that this invalidates all data pointers in super
-    vsapi->freeFrame(evil);
+    d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
-    d->vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
-
-    d->node = vsapi->mapGetNode(in, "clip", 0, 0);
+    d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
     d->vi = *vsapi->getVideoInfo(d->node);
 
 #define ERROR_SIZE 512
-    char error[ERROR_SIZE + 1] = { 0 };
+    char error[ERROR_SIZE + 1] = {};
 
     const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
-    MotionBlockPyramid vectors(evil2, 0, "MVUtensils", core, vsapi);
+    MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
 
     int64_t nSCD1_old = d->nSCD1;
     vectors.ScaleThSCD(d->nSCD1, d->nSCD2, d->vi.format.bitsPerSample);
@@ -504,12 +497,12 @@ static void VS_CC mvcompensateCreate(const VSMap *in, VSMap *out, void *userData
         {d->vectors, rpNoFrameReuse},
     };
 
-    vsapi->createVideoFilter(out, "Compensate", &d->vi, d->vi.format.bytesPerSample == 1 ? mvcompensateGetFrame<uint8_t> : mvcompensateGetFrame<uint16_t>, mvcompensateFree, fmParallel, deps,  ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "Compensate", &d->vi, d->vi.format.bytesPerSample == 1 ? compensateGetFrame<uint8_t> : compensateGetFrame<uint16_t>, compensateFree, fmParallel, deps,  ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 
 
-void mvcompensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void compensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("Compensate",
                  "clip:vnode;"
                  "super:vnode;"
@@ -520,7 +513,8 @@ void mvcompensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "time:float:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"
-                 "tff:int:opt;",
+                 "tff:int:opt;"
+                 "prefix:data:opt;",
                  "clip:vnode;",
-                 mvcompensateCreate, 0, plugin);
+                 compensateCreate, nullptr, plugin);
 }

@@ -33,7 +33,7 @@ struct SuperDataExtra {
 typedef DualNodeData<SuperDataExtra> SuperData;
 
 
-static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     SuperData *d = reinterpret_cast<SuperData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -54,8 +54,9 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
         }
 
         VSFrame *dst = vsapi->copyFrame(src, core);
-        pyramid.ExportFrameData(dst, d->prefix);
         vsapi->freeFrame(src);
+
+        pyramid.ExportFrameData(dst, d->prefix);
 
         return dst;
     }
@@ -64,13 +65,13 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
 }
 
 
-static void VS_CC superFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC superFree(void *instanceData, VSCore *core, const VSAPI *vsapi) noexcept {
     SuperData *d = reinterpret_cast<SuperData *>(instanceData);
     delete d;
 }
 
 
-static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<SuperData> d(new SuperData(vsapi));
 
     int err;
@@ -185,7 +186,7 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
 }
 
 
-void mvsuperRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void superRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("Super", 
                  "clip:vnode;"
                  "hpad:int:opt;"
@@ -201,5 +202,5 @@ void mvsuperRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "pelclip:vnode:opt;"
                  "prefix:data:opt;",
                  "clip:vnode;",
-                 superCreate, 0, plugin);
+                 superCreate, nullptr, plugin);
 }

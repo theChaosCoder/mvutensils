@@ -3,7 +3,6 @@
 #include <VSHelper4.h>
 #include "CommonFunctions.h"
 #include <functional>
-#include <stdexcept>
 
 ///////////////////////////////////
 
@@ -194,7 +193,7 @@ void MotionBlockPyramid::DivideVectorsExtra(DivideExtra divideExtra) {
     }
 
     if (!HasMotionVectors())
-        throw std::runtime_error("DivideVectorsExtra: no vectors available to divide");
+        throw MotionBlockPyramidError("DivideVectorsExtra: no vectors available to divide");
 
     dividedVectors.resize(pyramidLevels[0].nBlkCount * 4);
 
@@ -1434,7 +1433,7 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
     int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
 
     if (nWidth_B < nRealWidth || nHeight_B < nRealHeight)
-        throw std::runtime_error("The chosen block size will leave some pixels unprocessed. Derive a new super clip with appropriate options!");
+        throw MotionBlockPyramidError("The chosen block size will leave some pixels unprocessed. Derive a new super clip with appropriate options!");
 
     // calculate valid levels
     int nLevelsMax = 0;
@@ -1500,13 +1499,13 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
         if (size == nBlkX1 * nBlkY1 * sizeof(VECTOR)) {
             const char *data = vsapi->mapGetData(props, vectorsProp.c_str(), i, &err);
             if (!data)
-                throw std::runtime_error("Motion vector data corrupt, missing");
+                throw MotionBlockPyramidError("Motion vector data corrupt, missing");
             pyramidLevels[i].vectors.resize(nBlkX1 * nBlkY1);
             std::memcpy(pyramidLevels[i].vectors.data(), data, size);
         } else if (size == -1) {
             state = State::MetadataOnly;
         } else {
-            throw std::runtime_error("Motion vector data corrupt, wrong size");
+            throw MotionBlockPyramidError("Motion vector data corrupt, wrong size");
         }
     }
 
@@ -1640,7 +1639,7 @@ void MotionBlockPyramid::ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSam
     int maxSAD = 8 * 8 * 255;
 
     if (thscd1 > maxSAD)
-        throw std::runtime_error("thscd1 can be at most " + std::to_string(maxSAD));
+        throw MotionBlockPyramidError("thscd1 can be at most " + std::to_string(maxSAD));
 
     // SCD thresholds
     int referenceBlockSize = 8 * 8;

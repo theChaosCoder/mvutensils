@@ -2,7 +2,6 @@
 
 #include <VSHelper4.h>
 #include <cassert>
-#include <stdexcept>
 
 template<typename PixelType>
 void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) noexcept {
@@ -712,7 +711,7 @@ void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vP
     nHeight = nPaddedHeight - 2 * nVPadding;
 }
 
-void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept {
+void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) {
     assert(pel == 2 || pel == 4);
     nPel = pel;
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(planeFrames[0]);
@@ -723,6 +722,8 @@ void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int 
     nVPaddingPel = nVPadding * pel;
 
     nOffsetPadding = nPitch * nVPadding + nHPadding * format->bytesPerSample;
+
+    // FIXME, check so everything is the same format and dimensions
 
     for (int i = 0; i < pel * pel; i++) {
         storage[i] = planeFrames[i];
@@ -750,8 +751,15 @@ int GetPyramidLevelForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int ov
 
 FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi)
 : core(core), vsapi(vsapi) {
+    if (!srcFrame)
+        throw SuperPyramidError("Invalid source frame");
     if (levels < 1)
-        throw std::runtime_error("Must have at least one level");
+        throw SuperPyramidError("Must have at least one level");
+    if (hPad <= 0)
+        throw SuperPyramidError("Horizontal padding must be positive");
+    if (vPad <= 0)
+        throw SuperPyramidError("Vertical padding must be positive");
+
     pyramidLevels.resize(levels);
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(srcFrame);
     bitsPerSample = format->bitsPerSample;
@@ -832,7 +840,8 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
 FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
 : core(core), vsapi(vsapi) {
 
-    // FIXME, error check things
+    if (!srcFrame)
+        throw SuperPyramidError("Invalid source frame");
 
     const VSMap *props = vsapi->getFramePropertiesRO(srcFrame);
     int err;
@@ -849,6 +858,9 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
     int levels = vsapi->mapGetIntSaturated(props, (prefix + "SuperLevels").c_str(), 0, &err);
     chroma = !!vsapi->mapGetInt(props, (prefix + "SuperChroma").c_str(), 0, &err );
 
+    if (xRatioUV < 1 || yRatioUV < 1 || xRatioUV > 2 || yRatioUV > 2 || nRealWidth[0] > nWidth[0] || nRealHeight[0] > nHeight[0] || nVPad[0] < 0 || nHPad[0] < 0 || nRealHeight[0] < 1 || nRealWidth[0] < 1 || levels < 1 || (nPel != 1 && nPel != 2 && nPel != 4))
+        throw SuperPyramidError("Invalid super frame metadata");
+
     if (chroma) {
         nWidth[1] = nWidth[0] / xRatioUV;
         nWidth[2] = nWidth[0] / xRatioUV;
@@ -863,30 +875,46 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
         nVPad[1] = nVPad[0] / yRatioUV;
         nVPad[2] = nVPad[0] / yRatioUV;
     }
+    try {
 
-    pyramidLevels.resize(levels);
+        pyramidLevels.resize(levels);
 
-    if (nPel > 1) {
-        std::string propStr = prefix + "SuperLevel0";
-        for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
-            const VSFrame *pelPlanes[16] = {};
-            int idxOffset = plane * nPel * nPel;
-            for (int i = 0; i < nPel * nPel; i++)
-                pelPlanes[i] = vsapi->mapGetFrame(props, propStr.c_str(), idxOffset + i, &err);
-            pyramidLevels[0].planes[plane].FromExternalPelPlanes(pelPlanes, nPel, nHPad[plane], nVPad[plane], core, vsapi);
+        if (nPel > 1) {
+            std::string propStr = prefix + "SuperLevel0";
+            for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
+                const VSFrame *pelPlanes[16] = {};
+                int idxOffset = plane * nPel * nPel;
+                for (int i = 0; i < nPel * nPel; i++) {
+                    const VSFrame *frame = vsapi->mapGetFrame(props, propStr.c_str(), idxOffset + i, &err);
+                    if (!frame)
+                        throw SuperPyramidError("Plane data missing in super frame metadata");
+                    pelPlanes[i] = frame;
+                }
+                pyramidLevels[0].planes[plane].FromExternalPelPlanes(pelPlanes, nPel, nHPad[plane], nVPad[plane], core, vsapi);
+            }
         }
-    }
 
-    for (int level = (nPel > 1) ? 1 : 0; level < levels; level++) {
-        std::string propStr = prefix + "SuperLevel" + std::to_string(level);
-        for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
-            pyramidLevels[level].planes[plane].FromExternalPlane(vsapi->mapGetFrame(props, propStr.c_str(), plane, &err), nHPad[plane], nVPad[plane], core, vsapi);
+        for (int level = (nPel > 1) ? 1 : 0; level < levels; level++) {
+            std::string propStr = prefix + "SuperLevel" + std::to_string(level);
+            for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
+                const VSFrame *frame = vsapi->mapGetFrame(props, propStr.c_str(), plane, &err);
+                if (!frame)
+                    throw SuperPyramidError("Plane data missing in super frame metadata");
+                pyramidLevels[level].planes[plane].FromExternalPlane(frame, nHPad[plane], nVPad[plane], core, vsapi);
+            }
+        }
+
+        // FIXME, check so all levels match the declared metadata sizes
+
+        serializedData = srcFrame;
+
+    } catch (...) {
+        FreeFrames();
+        throw;
     }
 }
 
-
-// FIXME, this should probably be per plane or level
-FramePyramid::~FramePyramid() {
+void FramePyramid::FreeFrames() noexcept {
     for (auto &level : pyramidLevels) {
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 16; j++) {
@@ -894,13 +922,20 @@ FramePyramid::~FramePyramid() {
             }
         }
     }
+
+    vsapi->freeFrame(serializedData);
+}
+
+// FIXME, this should probably be per level if switched to one frame per level instead of one frame per plane
+FramePyramid::~FramePyramid() {
+    FreeFrames();
 }
 
 void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi) {
     if (nPel > 1)
-        throw std::runtime_error("Pel planes have already been generated");
+        throw SuperPyramidError("Pel planes have already been generated");
     if (pel != 2 && pel != 4)
-        throw std::runtime_error("Pel value must be 2 or 4");
+        throw SuperPyramidError("Pel value must be 2 or 4");
     if (bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].GeneratePelPlanes<uint8_t>(pel, sharp, core, vsapi);
@@ -913,9 +948,9 @@ void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, co
 
 void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore *core, const VSAPI *vsapi) {
     if (nPel != 1)
-        throw std::runtime_error("Pel planes already set");
+        throw SuperPyramidError("Pel planes already set");
     if (pel != 2 && pel != 4)
-        throw std::runtime_error("Invalid pel value");
+        throw SuperPyramidError("Invalid pel value");
 
     assert(pyramidLevels[0].planes[0].storage[0]);
 
@@ -925,11 +960,11 @@ void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(storageFrame);
 
     if (!vsh::isSameVideoFormat(pelFormat, format))
-        throw std::runtime_error("Pel frame format does not match source frame format");
+        throw SuperPyramidError("Pel frame format does not match source frame format");
 
     if (vsapi->getFrameWidth(pelFrame, 0) != vsapi->getFrameWidth(storageFrame, 0) * pel ||
         vsapi->getFrameHeight(pelFrame, 0) != vsapi->getFrameHeight(storageFrame, 0) * pel)
-        throw std::runtime_error("Pel frame dimensions are not a suitable multiple of the source frame dimensions");
+        throw SuperPyramidError("Pel frame dimensions are not a suitable multiple of the source frame dimensions");
 
     if (bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)

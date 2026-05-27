@@ -7,10 +7,10 @@
 // Extra indirection to keep the parameter lists with the respective filters.
 
 
-void mvsuperRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
-void mvanalyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
+void superRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
+void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvdegrainsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
-void mvcompensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
+void compensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvrecalculateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvmaskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvfinestRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
@@ -31,10 +31,10 @@ VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
 
     vspapi->configPlugin("com.vapoursynth.mvutensils", "mvu", "MVUtensils v" PACKAGE_VERSION, VS_MAKE_VERSION(packageVersion, 0), VAPOURSYNTH_API_VERSION, 0, plugin);
 
-    mvsuperRegister(plugin, vspapi);
-    mvanalyseRegister(plugin, vspapi);
+    superRegister(plugin, vspapi);
+    analyseRegister(plugin, vspapi);
     //mvdegrainsRegister(plugin, vspapi);
-    mvcompensateRegister(plugin, vspapi);
+    compensateRegister(plugin, vspapi);
     //mvrecalculateRegister(plugin, vspapi);
     //mvmaskRegister(plugin, vspapi);
     //mvfinestRegister(plugin, vspapi);

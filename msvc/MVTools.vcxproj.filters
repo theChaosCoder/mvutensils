@@ -107,7 +107,7 @@
     <ClCompile Include="..\src\MVSCDetection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVSuper.cpp">
+    <ClCompile Include="..\src\Super.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\MVMask.cpp">
@@ -125,7 +125,7 @@
     <ClCompile Include="..\src\CPU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVAnalyse.cpp">
+    <ClCompile Include="..\src\Analyse.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\MVBlockFPS.cpp">

@@ -5,10 +5,15 @@
 #include <cstddef>
 #include <string>
 #include <cassert>
+#include <stdexcept>
 #include <VapourSynth4.h>
 #include "SuperPyramid.h"
 #include "CopyCode.h"
 #include "SADFunctions.h"
+
+class MotionBlockPyramidError : public std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 struct VECTOR {
     int x;
@@ -23,12 +28,12 @@ struct BlockData {
 };
 
 enum class SearchType {
-    Logarithmic = 2,
-    Exhaustive = 3,
-    Hex2 = 4,
-    UnevenMultiHexagon = 5,
-    Horizontal = 6,
-    Vertical = 7
+    Logarithmic,
+    Exhaustive,
+    Hex2,
+    UnevenMultiHexagon,
+    Horizontal,
+    Vertical
 };
 
 
@@ -192,7 +197,6 @@ public:
 
     void Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) noexcept;
 
-    MotionBlockLevel() = default;
     ~MotionBlockLevel();
 };
 

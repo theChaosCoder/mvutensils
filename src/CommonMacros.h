@@ -3,7 +3,10 @@
 
 #include <vector>
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*arr))
+template<typename T, size_t U>
+constexpr int ARRAY_SIZE(const T (&arr)[U]) {
+    return static_cast<int>(U);
+}
 
 // FIXME, probably should be called something else
 

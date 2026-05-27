@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
@@ -13,8 +14,7 @@
 #include "MotionBlockPyramid.h"
 
 
-struct MVAnalyseDataExtra {
-    VSNode *node;
+struct AnalyseDataExtra {
     const VSVideoInfo *vi;
     const VSVideoInfo *supervi;
 
@@ -39,7 +39,6 @@ struct MVAnalyseDataExtra {
     bool global;     // use global motion predictor
     int pglobal;     // penalty factor for global motion predictor
     int pzero;       // penalty factor for zero vector
-    int divideExtra; // divide blocks on sublocks with median motion
     int64_t badSAD;  //  SAD threshold to make more wide search for bad vectors
     int badrange;    // range (radius) of wide search
     bool meander;    //meander (alternate) scan blocks (even row left to right, odd row right to left
@@ -52,14 +51,19 @@ struct MVAnalyseDataExtra {
     bool truemotion;
 
     bool fields;
-    int tff;
+    bool tff;
     bool tff_exists;
+
+    MotionBlockPyramid::DivideExtra divideExtra;
+
+    std::string prefix;
 };
 
-typedef SingleNodeData<MVAnalyseDataExtra> MVAnalyseData;
+typedef SingleNodeData<AnalyseDataExtra> AnalyseData;
 
-static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    MVAnalyseData *d = (MVAnalyseData *)instanceData;
+static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+    AnalyseData *d = reinterpret_cast<AnalyseData *>(instanceData);
+
     int nref = n + d->deltaFrame;
 
     if (activationReason == arInitial) {
@@ -75,88 +79,85 @@ static const VSFrame *VS_CC mvanalyseGetFrame(int n, int activationReason, void 
             vsapi->requestFrameFilter(n, d->node, frameCtx);
         }
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
-        const VSMap *srcprops = vsapi->getFramePropertiesRO(src);
-        int err;
+        try {
+            const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
+            FramePyramid srcFramePyramid(src, d->prefix, core, vsapi);
 
-        int src_top_field = !!vsapi->mapGetInt(srcprops, "_Field", 0, &err);
-        if (err && d->fields && !d->tff_exists) {
-            vsapi->setFilterError("Analyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-            vsapi->freeFrame(src);
-            return NULL;
-        }
+            const VSMap *srcProps = vsapi->getFramePropertiesRO(src);
+            int err;
 
-        // if tff was passed, it overrides _Field.
-        if (d->tff_exists)
-            src_top_field = d->tff ^ (n % 2);
-
-        FramePyramid pSrcGOF(src, "MVUtensils", core, vsapi);
-        MotionBlockPyramid vectorFields(pSrcGOF, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame, d->supervi->format.bitsPerSample);
-
-        if (nref >= 0 && nref < d->vi->numFrames) {
-            const VSFrame *ref = vsapi->getFrameFilter(nref, d->node, frameCtx);
-            const VSMap *refprops = vsapi->getFramePropertiesRO(ref);
-
-            int ref_top_field = !!vsapi->mapGetInt(refprops, "_Field", 0, &err);
+            bool src_top_field = !!vsapi->mapGetInt(srcProps, "_Field", 0, &err);
             if (err && d->fields && !d->tff_exists) {
                 vsapi->setFilterError("Analyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                vsapi->freeFrame(src);
-                vsapi->freeFrame(ref);
-                return NULL;
+                return nullptr;
             }
 
             // if tff was passed, it overrides _Field.
             if (d->tff_exists)
-                ref_top_field = d->tff ^ (nref % 2);
+                src_top_field = d->tff ^ (n % 2);
 
-            FramePyramid pRefGOF(ref, "MVUtensils", core, vsapi);
+            MotionBlockPyramid vectorFields(srcFramePyramid, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame, d->supervi->format.bitsPerSample);
 
-            int fieldShift = 0;
-            if (d->fields && pSrcGOF.nPel > 1 && (d->deltaFrame % 2)) {
-                fieldShift = (src_top_field && !ref_top_field) ? pSrcGOF.nPel / 2 : ((ref_top_field && !src_top_field) ? -(pSrcGOF.nPel / 2) : 0);
-                // vertical shift of fields for fieldbased video at finest level pel2
-            }
+            if (nref >= 0 && nref < d->vi->numFrames) {
+                const VSFrame *ref = vsapi->getFrameFilter(nref, d->node, frameCtx);
+                FramePyramid refFramePyramid(ref, d->prefix, core, vsapi);
 
-            // FIXME, chroma has a different meaning here? this one controls if chroma is used for ME
-            vectorFields.SearchMVs(pSrcGOF, pRefGOF, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse, d->chroma);
+                const VSMap *refProps = vsapi->getFramePropertiesRO(ref);
 
-            vsapi->freeFrame(ref);
+                bool ref_top_field = !!vsapi->mapGetInt(refProps, "_Field", 0, &err);
+                if (err && d->fields && !d->tff_exists) {
+                    vsapi->setFilterError("Analyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
+                    return nullptr;
+                }
 
-            if (d->divideExtra) {
-                // make extra level with divided sublocks with median (not estimated) motion
-                vectorFields.DivideVectorsExtra(d->divideExtra == 2 ? MotionBlockPyramid::DivideExtra::Median : MotionBlockPyramid::DivideExtra::Point);
-            }
+                // if tff was passed, it overrides _Field.
+                if (d->tff_exists)
+                    ref_top_field = d->tff ^ (nref % 2);
+
+                int fieldShift = 0;
+                if (d->fields && srcFramePyramid.nPel > 1 && (d->deltaFrame % 2)) {
+                    fieldShift = (src_top_field && !ref_top_field) ? srcFramePyramid.nPel / 2 : ((ref_top_field && !src_top_field) ? -(srcFramePyramid.nPel / 2) : 0);
+                    // vertical shift of fields for fieldbased video at finest level pel2
+                }
+
+                vectorFields.SearchMVs(srcFramePyramid, refFramePyramid, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse, d->chroma);
 
 #if defined(MVTOOLS_X86)
-            // FIXME: Get rid of all mmx shit.
-            mvtools_cpu_emms();
+                // FIXME: Get rid of all mmx shit or put emms at the end of searchmv/recalculatemv
+                mvtools_cpu_emms();
 #endif
+
+                vectorFields.DivideVectorsExtra(d->divideExtra);
+            }
+
+            VSFrame *dst = vsapi->copyFrame(src, core);
+            vectorFields.ExportFrameData(dst, d->prefix, core, vsapi);
+
+            return dst;
+
+        } catch (std::runtime_error &e) {
+            // Note that exceptions can only happen before SearchMVs MMX code
+            vsapi->setFilterError(("Analyse: " + std::string(e.what())).c_str(), frameCtx);
+            return nullptr;
         }
-
-        VSFrame *dst = vsapi->copyFrame(src, core);
-        vectorFields.ExportFrameData(dst, "MVUtensils", core, vsapi);
-        vsapi->freeFrame(src);
-
-        return dst;
     }
 
     return nullptr;
 }
 
 
-static void VS_CC mvanalyseFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    MVAnalyseData *d = (MVAnalyseData *)instanceData;
+static void VS_CC analyseFree(void *instanceData, VSCore *core, const VSAPI *vsapi) noexcept {
+    AnalyseData *d = reinterpret_cast<AnalyseData *>(instanceData);
     delete d;
 }
 
 
-static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
+static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+    std::unique_ptr<AnalyseData> d(new AnalyseData(vsapi));
 
-    std::unique_ptr<MVAnalyseData> d(new MVAnalyseData(vsapi));
     int err;
 
-    d->nBlkSizeX = vsapi->mapGetIntSaturated(in, "blksize", 0, &err);
+    d->nBlkSizeX = vsapi->mapGetIntSaturated(in, "blksizeh", 0, &err);
     if (err)
         d->nBlkSizeX = 8;
 
@@ -166,11 +167,11 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d->levels = vsapi->mapGetIntSaturated(in, "levels", 0, &err);
 
-    d->searchType = (SearchType)(vsapi->mapGetIntSaturated(in, "search", 0, &err));
+    d->searchType = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search", 0, &err));
     if (err)
         d->searchType = SearchType::Hex2;
 
-    d->searchTypeCoarse = (SearchType)(vsapi->mapGetIntSaturated(in, "search_coarse", 0, &err));
+    d->searchTypeCoarse = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search_coarse", 0, &err));
     if (err)
         d->searchTypeCoarse = SearchType::Exhaustive;
 
@@ -184,9 +185,8 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     if (err)
         d->chroma = true;
 
-    // FIXME, check so deltaframe isn't 0 in a good way
     d->deltaFrame = vsapi->mapGetIntSaturated(in, "delta", 0, &err);
-    if (err || !d->deltaFrame)
+    if (err)
         d->deltaFrame = 1;
 
     d->truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
@@ -219,7 +219,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d->pglobal = vsapi->mapGetIntSaturated(in, "pglobal", 0, &err);
 
-    d->nOverlapX = vsapi->mapGetIntSaturated(in, "overlap", 0, &err);
+    d->nOverlapX = vsapi->mapGetIntSaturated(in, "overlaph", 0, &err);
 
     d->nOverlapY = vsapi->mapGetIntSaturated(in, "overlapv", 0, &err);
     if (err)
@@ -227,7 +227,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
 
-    d->divideExtra = vsapi->mapGetIntSaturated(in, "divide", 0, &err);
+    d->divideExtra = static_cast<MotionBlockPyramid::DivideExtra>(vsapi->mapGetIntSaturated(in, "divide", 0, &err));
 
     d->badSAD = vsapi->mapGetIntSaturated(in, "badsad", 0, &err);
     if (err)
@@ -248,25 +248,28 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
     d->tff_exists = !err;
 
-    if (d->searchType < SearchType::Logarithmic || d->searchType > SearchType::Vertical) {
-        vsapi->mapSetError(out, "Analyse: search must be between 0 and 7 (inclusive).");
+    const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+    if (prefix)
+        d->prefix = prefix;
+    else
+        d->prefix = DEFAULT_MVUTENSILS_PREFIX;
+
+    if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical) {
+        vsapi->mapSetError(out, "Analyse: search must be between 0 and 5");
         return;
     }
 
-    if (d->searchTypeCoarse < SearchType::Logarithmic || d->searchTypeCoarse > SearchType::Vertical) {
-        vsapi->mapSetError(out, "Analyse: search_coarse must be between 0 and 7 (inclusive).");
+    if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical) {
+        vsapi->mapSetError(out, "Analyse: search_coarse must be between 0 and 5");
         return;
     }
 
-    if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2) {
-        vsapi->mapSetError(out, "Analyse: satd cannot work with 16x2 blocks.");
-        return;
-    }
+    if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
+        RETERROR("Analyse: satd cannot work with 16x2 blocks");
 
-    if (d->divideExtra < 0 || d->divideExtra > 2) {
-        vsapi->mapSetError(out, "Analyse: divide must be between 0 and 2 (inclusive).");
-        return;
-    }
+
+    if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && d->divideExtra != MotionBlockPyramid::DivideExtra::Point && d->divideExtra != MotionBlockPyramid::DivideExtra::Median)
+        RETERROR("Analyse: divide must be between 0 and 2");
 
 
     if ((d->nBlkSizeX != 4 || d->nBlkSizeY != 4) &&
@@ -280,33 +283,30 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
         (d->nBlkSizeX != 64 || d->nBlkSizeY != 32) &&
         (d->nBlkSizeX != 64 || d->nBlkSizeY != 64) &&
         (d->nBlkSizeX != 128 || d->nBlkSizeY != 64) &&
-        (d->nBlkSizeX != 128 || d->nBlkSizeY != 128)) {
-
-        vsapi->mapSetError(out, "Analyse: the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64, or 128x128.");
-        return;
-    }
+        (d->nBlkSizeX != 128 || d->nBlkSizeY != 128))
+        RETERROR("Analyse: the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64 or 128x128");
 
 
     if (d->plevel < 0 || d->plevel > 2) {
-        vsapi->mapSetError(out, "Analyse: plevel must be between 0 and 2 (inclusive).");
+        vsapi->mapSetError(out, "Analyse: plevel must be between 0 and 2");
         return;
     }
 
 
     if (d->pnew < 0 || d->pnew > 256) {
-        vsapi->mapSetError(out, "Analyse: pnew must be between 0 and 256 (inclusive).");
+        vsapi->mapSetError(out, "Analyse: pnew must be between 0 and 256");
         return;
     }
 
 
     if (d->pzero < 0 || d->pzero > 256) {
-        vsapi->mapSetError(out, "Analyse: pzero must be between 0 and 256 (inclusive).");
+        vsapi->mapSetError(out, "Analyse: pzero must be between 0 and 256");
         return;
     }
 
 
     if (d->pglobal < 0 || d->pglobal > 256) {
-        vsapi->mapSetError(out, "Analyse: pglobal must be between 0 and 256 (inclusive).");
+        vsapi->mapSetError(out, "Analyse: pglobal must be between 0 and 256");
         return;
     }
 
@@ -317,7 +317,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
         return;
     }
 
-    if (d->divideExtra && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8)) {
+    if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8)) {
         vsapi->mapSetError(out, "Analyse: blksize and blksizev must be at least 8 when divide=True.");
         return;
     }
@@ -331,7 +331,7 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
     d->vi = d->supervi;
 
     if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray)) {
-        vsapi->mapSetError(out, "Analyse: Input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant format and dimensions.");
+        vsapi->mapSetError(out, "Analyse: Input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant format and dimensions");
         return;
     }
 
@@ -348,15 +348,16 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
 
     if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
         d->nOverlapY % (1 << d->vi->format.subSamplingH)) {
-        vsapi->mapSetError(out, "Analyse: The requested overlap is incompatible with the super clip's subsampling.");
+        vsapi->mapSetError(out, "Analyse: The requested overlap is incompatible with the super clip's subsampling");
         return;
     }
 
-    if (d->divideExtra && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
-                          d->nOverlapY % (2 << d->vi->format.subSamplingH))) { // subsampling times 2
-        vsapi->mapSetError(out, "Analyse: overlap and overlapv must be multiples of 2 or 4 when divide=True, depending on the super clip's subsampling.");
-        return;
-    }
+    if ((d->divideExtra != MotionBlockPyramid::DivideExtra::No) && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
+                          d->nOverlapY % (2 << d->vi->format.subSamplingH)))
+        RETERROR("Analyse: overlaph and overlapv must be multiples of 2 or 4 when divide > 0, depending on the super clip's subsampling");
+
+    if (d->deltaFrame == 0)
+        RETERROR("Analyse: delta can't be 0");
 
 #define ERROR_SIZE 1024
     char errorMsg[ERROR_SIZE] = "Analyse: failed to retrieve first frame from super clip. Error message: ";
@@ -367,31 +368,33 @@ static void VS_CC mvanalyseCreate(const VSMap *in, VSMap *out, void *userData, V
         vsapi->mapSetError(out, errorMsg);
         return;
     }
+    try {
 
-    FramePyramid super(evil, "MVUtensils", core, vsapi);
+        FramePyramid super(evil, d->prefix, core, vsapi);
 
-    // Note that this invalidates all data pointers in super
-    vsapi->freeFrame(evil);
+        if (d->nPelSearch <= 0)
+            d->nPelSearch = super.nPel;
 
-    // fill in missing fields
-    if (d->nPelSearch <= 0)
-        d->nPelSearch = super.nPel; // not below value of 0 at finest level //x
+        MotionBlockPyramid DryRun(super, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame, d->supervi->format.bitsPerSample);
 
-    MotionBlockPyramid DryRun(super, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame, d->supervi->format.bitsPerSample);
+    } catch (std::runtime_error &e) {
+        vsapi->mapSetError(out, ("Analyse: " + std::string(e.what())).c_str());
+        return;
+    }
 
     VSFilterDependency deps[1] = { 
-        {d->node, rpGeneral} //super
+        {d->node, rpGeneral}
     };
 
-    vsapi->createVideoFilter(out, "Analyse", d->vi, mvanalyseGetFrame, mvanalyseFree, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "Analyse", d->vi, analyseGetFrame, analyseFree, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 
 
-void mvanalyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("Analyse",
                  "super:vnode;"
-                 "blksize:int:opt;"
+                 "blksizeh:int:opt;"
                  "blksizev:int:opt;"
                  "levels:int:opt;"
                  "search:int:opt;"
@@ -407,7 +410,7 @@ void mvanalyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "pnew:int:opt;"
                  "pzero:int:opt;"
                  "pglobal:int:opt;"
-                 "overlap:int:opt;"
+                 "overlaph:int:opt;"
                  "overlapv:int:opt;"
                  "divide:int:opt;"
                  "badsad:int:opt;"
@@ -417,7 +420,8 @@ void mvanalyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "fields:int:opt;"
                  "tff:int:opt;"
                  "search_coarse:int:opt;"
-                 "satd:int:opt;",
+                 "satd:int:opt;"
+                 "prefix:data:opt;",
                  "clip:vnode;",
-                 mvanalyseCreate, 0, plugin);
+                 analyseCreate, nullptr, plugin);
 }

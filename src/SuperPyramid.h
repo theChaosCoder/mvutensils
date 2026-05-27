@@ -5,14 +5,18 @@
 #include <cstddef>
 #include <string>
 #include <cassert>
+#include <stdexcept>
 #include <VapourSynth4.h>
+
+class SuperPyramidError : public std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 enum class SharpParam {
     Bilinear,
     Bicubic,
     Wiener
 };
-
 
 enum class RFilterParam {
     Simple,
@@ -124,7 +128,7 @@ private:
     void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi);
 
     void FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept;
-    void FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept;
+    void FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi);
 
     template<typename PixelType>
     void SetExtPel2(const VSFrame *pelFrame, int plane, VSCore *core, const VSAPI *vsapi);
@@ -174,12 +178,14 @@ public:
 
 private:
     State state = State::Invalid;
+    const VSFrame *serializedData = nullptr;
     VSCore *core;
     const VSAPI *vsapi;
+    void FreeFrames() noexcept;
 public:
     FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi); // constructor to build from source frames
 
-    FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // constructor to reconstruct from frame properties
+    FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // constructor to reconstruct from frame properties, takes ownership of srcFrame
     ~FramePyramid();
     void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi);
     void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore *core, const VSAPI *vsapi);
