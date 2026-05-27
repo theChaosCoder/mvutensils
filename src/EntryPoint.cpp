@@ -9,7 +9,7 @@
 
 void superRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
-void mvdegrainsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
+void degrainsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void compensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvrecalculateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvmaskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
@@ -33,7 +33,7 @@ VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
 
     superRegister(plugin, vspapi);
     analyseRegister(plugin, vspapi);
-    //mvdegrainsRegister(plugin, vspapi);
+    degrainsRegister(plugin, vspapi);
     compensateRegister(plugin, vspapi);
     //mvrecalculateRegister(plugin, vspapi);
     //mvmaskRegister(plugin, vspapi);

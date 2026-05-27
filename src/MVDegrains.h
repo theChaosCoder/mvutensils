@@ -2,10 +2,12 @@
 
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
-#include "Fakery.h"
-#include "MVFrame.h"
 #include <VSHelper4.h>
+
+#include "SuperPyramid.h"
+#include "MotionBlockPyramid.h"
 
 enum VectorOrder {
     Backward1 = 0,
@@ -188,15 +190,15 @@ static inline int DegrainWeight(int64_t thSAD, int64_t blockSAD) {
     return int((thSAD - blockSAD) * (thSAD + blockSAD) * 256 / (double)(thSAD * thSAD + blockSAD * blockSAD));
 }
 
-
-static inline void useBlock(const uint8_t *&p, ptrdiff_t &np, int &WRef, int isUsable, const FakeGroupOfPlanes *fgop, int i, MVPlane * const *pPlane, const uint8_t **pSrcCur, int xx, const ptrdiff_t *nSrcPitch, int nLogPel, int plane, int xSubUV, int ySubUV, const int64_t *thSAD) {
+template<typename PixelType>
+static inline void useBlock(const uint8_t *&p, ptrdiff_t &np, int &WRef, int isUsable, const std::optional<MotionBlockPyramid> &blocks, int i, const FramePyramidLevel *pPlane, const uint8_t **pSrcCur, int xx, const ptrdiff_t *nSrcPitch, int nLogPel, int plane, int xSubUV, int ySubUV, const int64_t *thSAD) {
     if (isUsable) {
-        const FakeBlockData *block = fgopGetBlock(fgop, 0, i);
-        int blx = (block->x << nLogPel) + block->vector.x;
-        int bly = (block->y << nLogPel) + block->vector.y;
-        p = mvpGetPointer(pPlane[plane], plane ? blx >> xSubUV : blx, plane ? bly >> ySubUV : bly);
-        np = pPlane[plane]->nPitch;
-        int64_t blockSAD = block->vector.sad;
+        const BlockData block = blocks->GetBlock(i);
+        int blx = (block.x << nLogPel) + block.vector.x;
+        int bly = (block.y << nLogPel) + block.vector.y;
+        p = pPlane->planes[plane].GetPointer<PixelType>(plane ? blx >> xSubUV : blx, plane ? bly >> ySubUV : bly);
+        np = pPlane->planes[plane].nPitch;
+        int64_t blockSAD = block.vector.sad;
         WRef = DegrainWeight(thSAD[plane], blockSAD);
     } else {
         p = pSrcCur[plane] + xx;

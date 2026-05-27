@@ -202,11 +202,9 @@ public:
     // Note that the implementation doesn't quite handle multiple search/recalculate operations
     // on the same object, this may be improved in the future if it's actually deemed to be useful but for
     // now create a new object every time
-    // The initial state depends on the constructor used
-    // Note that both AnalysisDone and ReadyForRecalculate mean that there is analysis data available
-    // 
-    // FIXME, use this to signal state and prevent reuse
+
     enum class State {
+        Invalid,
         MetadataOnly,
         ReadyForSearch,
         ReadyForRecalculate,
@@ -240,7 +238,7 @@ public:
     int nVPadding;
     
 private:
-    State state;
+    State state = State::Invalid;
     DivideExtra divideExtra = DivideExtra::No;
     std::vector<VECTOR> dividedVectors;
     std::vector<MotionBlockLevel> pyramidLevels;
@@ -266,5 +264,6 @@ public:
     void ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const;
     State GetState() const noexcept;
     bool HasMotionVectors() const noexcept;
+    bool IsCompatible(const MotionBlockPyramid &other) const noexcept;
 };
 

@@ -74,12 +74,7 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
 }
 
 void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept {
-    // estimate global motion from current plane vectors data for using on next plane - added by Fizick
-    // on input globalMVec is prev estimation
-    // on output globalMVec is doubled for next scale plane using
-
-    // use very simple but robust method
-    // more advanced method (like MVDepan) can be implemented later
+    // FIXME, implement a better algorithm that doesn't need a ridiculously large temporary array
 
     // find most frequent x
     std::vector<int> freqArray;
@@ -1512,12 +1507,13 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
             std::memcpy(pyramidLevels[i].vectors.data(), data, size);
         } else if (size == -1) {
             state = State::MetadataOnly;
+            break;
         } else {
             throw MotionBlockPyramidError("Motion vector data corrupt, wrong size");
         }
     }
 
-    if (state == State::MetadataOnly)
+    if (state != State::MetadataOnly)
         state = State::ReadyForRecalculate;
 }
 
@@ -1667,4 +1663,24 @@ MotionBlockPyramid::State MotionBlockPyramid::GetState() const noexcept {
 
 bool MotionBlockPyramid::HasMotionVectors() const noexcept {
     return state == State::ReadyForRecalculate || state == State::AnalysisDone;
+}
+
+bool MotionBlockPyramid::IsCompatible(const MotionBlockPyramid &other) const noexcept {
+    if (nWidth != other.nWidth || nHeight != other.nHeight || nRealWidth != other.nRealWidth || nRealHeight != other.nRealHeight)
+        return false;
+
+    if (nBlkSizeX != other.nBlkSizeX || nBlkSizeY != other.nBlkSizeY || nOverlapX != other.nOverlapX || nOverlapY != other.nOverlapY)
+        return false;
+
+    if (nPel != other.nPel)
+        return false;
+
+    if (xRatioUV != other.xRatioUV || yRatioUV != other.yRatioUV)
+        return false;
+
+    // FIXME, is this check needed?
+    //if (bitsPerSample != other.bitsPerSample)
+    //    return false;
+
+    return true;
 }
