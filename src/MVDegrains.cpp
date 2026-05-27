@@ -17,7 +17,6 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
-#include <limits.h>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -25,9 +24,6 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "CPU.h"
-#include "Fakery.h"
-#include "MVAnalysisData.h"
 #include "MVDegrains.h"
 #include "MVFrame.h"
 #include "Overlap.h"

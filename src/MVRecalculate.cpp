@@ -6,7 +6,6 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "CPU.h"
 #include "Fakery.h"
 #include "GroupOfPlanes.h"
 #include "MVAnalysisData.h"

@@ -3,7 +3,6 @@
 #include <unordered_map>
 
 #include "CopyCode.h"
-#include "CPU.h"
 
 template <unsigned width, unsigned height>
 void copyBlock(uint8_t * __restrict pDst, ptrdiff_t nDstPitch, const uint8_t * __restrict pSrc, ptrdiff_t nSrcPitch) {
