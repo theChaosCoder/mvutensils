@@ -86,8 +86,7 @@ struct DegrainData {
     }
 };
 
-typedef uint8_t PixelType;
-template<int radius>
+template<int radius, typename PixelType>
 static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     DegrainData<radius> *d = reinterpret_cast<DegrainData<radius> *>(instanceData);
 
@@ -116,7 +115,9 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
 
         int bitsPerSample = d->vi->format.bitsPerSample;
-        int bytesPerSample = d->vi->format.bytesPerSample;
+
+        
+        constexpr int bytesPerSample = sizeof(PixelType);
 
         uint8_t *pDst[3] = {};
         uint8_t *pDstCur[3] = {};
@@ -713,8 +714,8 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         {d->vectors[radius >= 6 ? 10 : 0], rpStrictSpatial},
         {d->vectors[radius >= 6 ? 11 : 0], rpStrictSpatial},
     };
-
-    vsapi->createVideoFilter(out, filter.c_str(), d->vi, degrainGetFrame<radius>, degrainFree<radius>, fmParallel, deps, numDeps, d.get(), core);
+    
+    vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, degrainFree<radius>, fmParallel, deps, numDeps, d.get(), core);
     d.release();
 }
 
