@@ -140,12 +140,6 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
 }
 
 
-static void VS_CC analyseFree(void *instanceData, VSCore *core, const VSAPI *vsapi) noexcept {
-    AnalyseData *d = reinterpret_cast<AnalyseData *>(instanceData);
-    delete d;
-}
-
-
 static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<AnalyseData> d(new AnalyseData(vsapi));
 
@@ -353,7 +347,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         {d->node, rpGeneral}
     };
 
-    vsapi->createVideoFilter(out, "Analyse", d->vi, analyseGetFrame, analyseFree, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "Analyse", d->vi, analyseGetFrame, filterFree<AnalyseData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 

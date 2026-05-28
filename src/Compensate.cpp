@@ -363,12 +363,6 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 }
 
 
-static void VS_CC compensateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    CompensateData *d = reinterpret_cast<CompensateData *>(instanceData);
-    delete d;
-}
-
-
 static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<CompensateData> d(new CompensateData(vsapi));
     int err;
@@ -490,7 +484,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
         {d->vectors, rpNoFrameReuse},
     };
 
-    vsapi->createVideoFilter(out, "Compensate", d->vi, d->vi->format.bytesPerSample == 1 ? compensateGetFrame<uint8_t> : compensateGetFrame<uint16_t>, compensateFree, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "Compensate", d->vi, d->vi->format.bytesPerSample == 1 ? compensateGetFrame<uint8_t> : compensateGetFrame<uint16_t>, filterFree<CompensateData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 

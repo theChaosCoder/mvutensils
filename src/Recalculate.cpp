@@ -120,12 +120,6 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
 }
 
 
-static void VS_CC recalculateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) noexcept {
-    RecalculateData *d = reinterpret_cast<RecalculateData *>(instanceData);
-    delete d;
-}
-
-
 static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<RecalculateData> d(new RecalculateData(vsapi));
 
@@ -293,7 +287,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         {d->node2, rpStrictSpatial},
     };
 
-    vsapi->createVideoFilter(out, "Recalculate", d->vi, recalculateGetFrame, recalculateFree, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "Recalculate", d->vi, recalculateGetFrame, filterFree<RecalculateData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 

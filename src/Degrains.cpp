@@ -346,13 +346,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 }
 
 
-template <int radius>
-static void VS_CC degrainFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    DegrainData<radius> *d = reinterpret_cast<DegrainData<radius> *>(instanceData);
-    delete d;
-}
-
-
 // opt can fit in four bits, if the width and height need more than eight bits each.
 #define KEY(width, height, bits, opt) (unsigned)(width) << 24 | (height) << 16 | (bits) << 8 | (opt)
 
@@ -725,7 +718,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         assert(numDeps == deps.size());
 
-        vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, degrainFree<radius>, fmParallel, deps.data(), numDeps, d.get(), core);
+        vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, filterFree<DegrainData<radius>>, fmParallel, deps.data(), numDeps, d.get(), core);
         d.release();
 
     } catch (std::runtime_error &e) {

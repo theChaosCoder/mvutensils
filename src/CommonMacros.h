@@ -13,17 +13,12 @@ constexpr int ARRAY_SIZE(const T (&arr)[U]) {
     return static_cast<int>(U);
 }
 
-/*
-* FIXME, maybe introduce soemthing like this
 template<typename T>
 static void VS_CC filterFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
     delete reinterpret_cast<T *>(instanceData);
 }
-*/
 
 // FIXME, probably should be called something else
-
-#define RETERROR(x) do { vsapi->mapSetError(out, (x)); return; } while (0)
 
 constexpr int ERROR_SIZE = 1024;
 
