@@ -837,7 +837,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
 }
 
 
-FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
+FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
 : core(core), vsapi(vsapi) {
 
     if (!srcFrame)
@@ -880,11 +880,13 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
 
     // FIXME, check so all levels match the declared metadata sizes
 
+    int loadLevels = (maxLevel < 0) ? levels : std::min(maxLevel, levels);
+
     try {
 
         pyramidLevels.resize(levels);
 
-        if (nPel > 1) {
+        if (nPel > 1 && loadLevels > 0) {
             std::string propStr = prefix + "SuperLevel0";
             for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
                 const VSFrame *pelPlanes[16] = {};
@@ -899,7 +901,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
             }
         }
 
-        for (int level = (nPel > 1) ? 1 : 0; level < levels; level++) {
+        for (int level = (nPel > 1) ? 1 : 0; level < loadLevels; level++) {
             std::string propStr = prefix + "SuperLevel" + std::to_string(level);
             for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
                 const VSFrame *frame = vsapi->mapGetFrame(props, propStr.c_str(), plane, &err);

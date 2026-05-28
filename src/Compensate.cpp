@@ -136,12 +136,12 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
         VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, realSrc, core);
         vsapi->freeFrame(realSrc);
         const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
-        FramePyramid pSrcGOF(src, d->prefix, core, vsapi);
+        FramePyramid pSrcGOF(src, 1, d->prefix, core, vsapi);
         const auto &pSrcPlanes = pSrcGOF.GetLevel(0).planes;
 
         if (nref >= 0 && nref < d->vi.numFrames && vectors.IsUsable(d->nSCD1, d->nSCD2)) {
             const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-            FramePyramid pRefGOF(ref, d->prefix, core, vsapi);
+            FramePyramid pRefGOF(ref, 1, d->prefix, core, vsapi);
             const auto &pRefPlanes = pRefGOF.GetLevel(0).planes;
 
             for (int i = 0; i < d->supervi->format.numPlanes; i++) {
@@ -407,7 +407,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
         RETERROR(errorMsg);
 
     try {
-        FramePyramid super(evil, d->prefix, core, vsapi);
+        FramePyramid super(evil, 0, d->prefix, core, vsapi);
 
         d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 

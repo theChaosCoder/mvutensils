@@ -5,6 +5,11 @@
 #include <functional>
 #include <algorithm>
 
+// Only for emms
+#ifdef MVTOOLS_X86
+#include "CPU.h"
+#endif
+
 
 ///////////////////////////////////
 
@@ -1198,11 +1203,14 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
         else
             DoSearchMVs<2, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
     }
+
+    mvtools_cpu_emms();
 }
 
 
 template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
     SearchType st, int stp, int lambda, int pnew,
     int fieldShift, int64_t thSAD, int smooth, bool meander) noexcept {
                                     
@@ -1227,6 +1235,12 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     std::vector<VECTOR> oldVectors;
     std::swap(oldVectors, vectors);
     
+    this->nBlkSizeX = nBlkSizeX;
+    this->nBlkSizeY = nBlkSizeY;
+    this->nOverlapX = nOverlapX;
+    this->nOverlapY = nOverlapY;
+    this->nPel = nPel;
+
     // FIXME, needs more adjustment? how to pass changed blocksize/overlap?
     nBlkX = (pSrcFrame.planes[0].nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
     nBlkY = (pSrcFrame.planes[0].nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
@@ -1434,6 +1448,7 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 }
 
 void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
     SearchType st, int stp, int lambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) noexcept {
 
@@ -1441,19 +1456,21 @@ void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const 
 
     if (bytesPerSample == 1) {
         if (nLogPel == 0)
-            MotionBlockLevel::DoRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else if (nLogPel == 1)
-            MotionBlockLevel::DoRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else
-            MotionBlockLevel::DoRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
     } else {
         if (nLogPel == 0)
-            MotionBlockLevel::DoRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else if (nLogPel == 1)
-            MotionBlockLevel::DoRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else
-            MotionBlockLevel::DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
     }
+
+    mvtools_cpu_emms();
 }
 
 
@@ -1515,8 +1532,9 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
     state = State::ReadyForSearch;
 }
 
-MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) {
-    // FIXME, add error checking
+MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept {
+    if (!src)
+        return;
 
     const VSVideoFormat *vi = vsapi->getVideoFrameFormat(src);
     auto props = vsapi->getFramePropertiesRO(src);
@@ -1544,7 +1562,10 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
 
     nDeltaFrame = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisDeltaFrame").c_str(), 0, &err);
 
-    pyramidLevels.resize(nLevelCount);
+    if (xRatioUV < 1 || yRatioUV < 1 || xRatioUV > 2 || yRatioUV > 2 || nRealWidth > nWidth || nRealHeight > nHeight || nVPadding < 0 || nHPadding < 0
+        || nRealHeight < 1 || nRealWidth < 1 || nBlkSizeX < 2 || nBlkSizeY < 2 || nOverlapX < 0 || nOverlapY < 0
+        || nOverlapX > nBlkSizeX / 2 || nOverlapY > nBlkSizeY / 2 || nLevelCount < 1 || (nPel != 1 && nPel != 2 && nPel != 4))
+        return;
 
     std::string vectorsProp = prefix + "AnalysisVectors";
 
@@ -1553,27 +1574,38 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
 
     int loadLevels = (maxLevel < 0) ? nLevelCount : std::min(maxLevel, nLevelCount);
 
-    for (int i = 0; i < loadLevels; i++) {
-        int nBlkX1 = ((nWidth_B >> i) - nOverlapX) / (nBlkSizeX - nOverlapX);
-        int nBlkY1 = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
-        int size = vsapi->mapGetDataSize(props, vectorsProp.c_str(), i, &err);
-        pyramidLevels[i].Initialize(nBlkX1, nBlkY1, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 1, i, (i == loadLevels - 1), chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, vi->bitsPerSample);
-        if (size == nBlkX1 * nBlkY1 * sizeof(VECTOR)) {
-            const char *data = vsapi->mapGetData(props, vectorsProp.c_str(), i, &err);
-            if (!data)
-                throw MotionBlockPyramidError("Motion vector data corrupt, missing");
-            pyramidLevels[i].vectors.resize(nBlkX1 * nBlkY1);
-            std::memcpy(pyramidLevels[i].vectors.data(), data, size);
-        } else if (size == -1) {
-            state = State::MetadataOnly;
-            break;
-        } else {
-            throw MotionBlockPyramidError("Motion vector data corrupt, wrong size");
-        }
-    }
 
-    if (state != State::MetadataOnly)
-        state = State::ReadyForRecalculate;
+    if (loadLevels > 0) {
+        pyramidLevels.resize(loadLevels);
+
+        for (int i = 0; i < loadLevels; i++) {
+            int nBlkX1 = ((nWidth_B >> i) - nOverlapX) / (nBlkSizeX - nOverlapX);
+            int nBlkY1 = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
+            int size = vsapi->mapGetDataSize(props, vectorsProp.c_str(), i, &err);
+            pyramidLevels[i].Initialize(nBlkX1, nBlkY1, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 1, i, (i == loadLevels - 1), chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, vi->bitsPerSample);
+            if (size == nBlkX1 * nBlkY1 * sizeof(VECTOR)) {
+                const char *data = vsapi->mapGetData(props, vectorsProp.c_str(), i, &err);
+                if (!data) {
+                    pyramidLevels.clear();
+                    state = State::MetadataOnly;
+                    break;
+                }
+                pyramidLevels[i].vectors.resize(nBlkX1 * nBlkY1);
+                std::memcpy(pyramidLevels[i].vectors.data(), data, size);
+            } else {
+                // shouldn't happen
+                assert(size == -1);
+                pyramidLevels.clear();
+                state = State::MetadataOnly;
+                break;
+            }
+        }
+
+        if (state != State::MetadataOnly)
+            state = State::ReadyForRecalculate;
+    } else {
+        state = State::MetadataOnly;
+    }
 }
 
 
@@ -1622,12 +1654,14 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
 
 
 void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
+    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
     SearchType searchType, int nSearchParam, int nLambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) noexcept {
 
     // Search the motion vectors, for the low details interpolations first
     // Refining the search until we reach the highest detail interpolation.
     pyramidLevels[0].RecalculateMVs(pSrcGOF.GetLevel(0), pRefGOF.GetLevel(0),
+        nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel,
         searchType, nSearchParam, nLambda, pnew,
         fieldShift, thSAD, useSatd, smooth, meander);
 

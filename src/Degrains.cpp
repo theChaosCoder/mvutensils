@@ -184,7 +184,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         std::optional<FramePyramid> pRefGOF[radius * 2];
         for (int r = 0; r < radius * 2; r++)
             if (isUsable[r])
-                pRefGOF[r].emplace(refFrames[r], d->prefix, core, vsapi);
+                pRefGOF[r].emplace(refFrames[r], 1, d->prefix, core, vsapi);
 
         OverlapWindows *OverWins[3] = { &d->OverWins[0], &d->OverWins[1], &d->OverWins[2] };
         uint8_t *DstTemp = nullptr;
@@ -566,7 +566,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (!evil)
             throw std::runtime_error("failed to retrieve first frame from super clip.Error message : " + std::string(errorMsg));
 
-        FramePyramid evilPyramid(evil, d->prefix, core, vsapi);
+        FramePyramid evilPyramid(evil, 0, d->prefix, core, vsapi);
 
         int numVectors = vsapi->mapNumElements(in, "vectors");
         if (numVectors != radius * 2)

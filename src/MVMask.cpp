@@ -136,6 +136,8 @@ static const VSFrame *VS_CC mvmaskGetFrame(int n, int activationReason, void *in
             uint8_t *smallMask = (uint8_t *)malloc(nBlkX * nBlkY);
             uint8_t *smallMaskV = (uint8_t *)malloc(nBlkX * nBlkY);
 
+            // FIXME, only kind 0..2 seem useful and should probably be separated into different filters
+
             if (kind == 0) { // vector length mask
                 for (int j = 0; j < nBlkCount; j++)
                     smallMask[j] = mvmaskLength(fgopGetBlock(&fgop, 0, j)->vector, nPel, fMaskNormFactor2, fHalfGamma);

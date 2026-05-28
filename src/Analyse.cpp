@@ -8,7 +8,6 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "CPU.h"
 #include "CommonMacros.h"
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
@@ -81,7 +80,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
     } else if (activationReason == arAllFramesReady) {
         try {
             const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
-            FramePyramid srcFramePyramid(src, d->prefix, core, vsapi);
+            FramePyramid srcFramePyramid(src, -1, d->prefix, core, vsapi);
 
             const VSMap *srcProps = vsapi->getFramePropertiesRO(src);
             int err;
@@ -100,7 +99,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
 
             if (nref >= 0 && nref < d->vi->numFrames) {
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->node, frameCtx);
-                FramePyramid refFramePyramid(ref, d->prefix, core, vsapi);
+                FramePyramid refFramePyramid(ref, -1, d->prefix, core, vsapi);
 
                 const VSMap *refProps = vsapi->getFramePropertiesRO(ref);
 
@@ -121,11 +120,6 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
                 }
 
                 vectorFields.SearchMVs(srcFramePyramid, refFramePyramid, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse, d->chroma);
-
-#if defined(MVTOOLS_X86)
-                // FIXME: Get rid of all mmx shit or put emms at the end of searchmv/recalculatemv
-                mvtools_cpu_emms();
-#endif
 
                 vectorFields.DivideVectorsExtra(d->divideExtra);
             }
@@ -343,7 +337,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
     try {
 
-        FramePyramid super(evil, d->prefix, core, vsapi);
+        FramePyramid super(evil, -1, d->prefix, core, vsapi);
 
         if (d->nPelSearch <= 0)
             d->nPelSearch = super.nPel;

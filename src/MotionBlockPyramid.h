@@ -163,6 +163,7 @@ private:
 
     template <int nLogPel, typename PixelType>
     void DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
         SearchType st, int stp, int lambda, int pnew,
         int fieldShift, int64_t thSAD, int smooth, bool meander) noexcept;
 
@@ -185,6 +186,7 @@ public:
         int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept;
 
     void RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
+        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
         SearchType st, int stp, int lambda, int pnew,
         int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) noexcept;
 
@@ -245,19 +247,23 @@ private:
     std::vector<MotionBlockLevel> pyramidLevels;
 public:
     MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int nDeltaFrame, int bitsPerSample);
-    // FIXME, implement this fully
     // de-serialization from a frame, can choose to omit some levels by setting maxLevel, if -1 all levels are loaded, 0 means only metadata and no vectors are loaded,
     // positive numbers mean that many levels are loaded. When loading from clips passing 1 is usually enough.
-    MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
+
+    // Object can be in an invalid or limited state after this constructor
+    MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept;
     void ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept; // serialization to a frame, oneLevel means that only the finest level is exported, otherwise all levels are exported as separate properties
 
+    // FIXME, check state before running
     void SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
         int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
         int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
         SearchType coarseSearchType, bool chroma) noexcept;
 
+    // FIXME, check state before running
     void RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
+        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
         SearchType searchType, int nSearchParam, int nLambda, int pnew,
         int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) noexcept;
 
