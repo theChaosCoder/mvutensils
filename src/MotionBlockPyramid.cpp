@@ -3,6 +3,8 @@
 #include <VSHelper4.h>
 #include "CommonFunctions.h"
 #include <functional>
+#include <algorithm>
+
 
 ///////////////////////////////////
 
@@ -73,73 +75,67 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
     }
 }
 
-void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept {
-    // FIXME, implement a better algorithm that doesn't need a ridiculously large temporary array
+void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept{
+    constexpr int MAX_DISTINCT_MOTION_VALUES = 64;
 
-    // find most frequent x
-    std::vector<int> freqArray;
-    freqArray.resize(8192 * nPel * 2);
+    struct ValCount { int val, count; };
 
-    size_t indmin = freqArray.size() - 1;
-    size_t indmax = 0;
-    for (int i = 0; i < nBlkCount; i++) {
-        size_t ind = (freqArray.size() >> 1) + vectors[i].x;
-        if (ind >= 0 && ind < freqArray.size()) {
-            freqArray[ind] += 1;
-            if (ind > indmax)
-                indmax = ind;
-            if (ind < indmin)
-                indmin = ind;
+    auto findMode = [](const ValCount *pairs, int numPairs) {
+        int bestVal = pairs[0].val, bestCount = pairs[0].count;
+        for (int i = 1; i < numPairs; i++) {
+            if (pairs[i].count > bestCount) {
+                bestCount = pairs[i].count;
+                bestVal = pairs[i].val;
+            }
         }
-    }
-    int count = freqArray[indmin];
-    size_t index = indmin;
-    for (size_t i = indmin + 1; i <= indmax; i++) {
-        if (freqArray[i] > count) {
-            count = freqArray[i];
-            index = i;
-        }
-    }
-    int medianx = (index - (freqArray.size() >> 1)); // most frequent value
+        return bestVal;
+        };
 
-    // find most frequent y
-    std::fill(freqArray.begin(), freqArray.end(), 0);
-    indmin = freqArray.size() - 1;
-    indmax = 0;
-    for (size_t i = 0; i < nBlkCount; i++) {
-        size_t ind = (freqArray.size() >> 1) + vectors[i].y;
-        if (ind >= 0 && ind < freqArray.size()) {
-            freqArray[ind] += 1;
-            if (ind > indmax)
-                indmax = ind;
-            if (ind < indmin)
-                indmin = ind;
+    auto accumulate = [this](ValCount *pairs, int &numPairs, auto getMV) {
+        numPairs = 0;
+        for (int i = 0; i < nBlkCount; i++) {
+            int v = getMV(vectors[i]);
+            // Search existing pairs
+            bool found = false;
+            for (int j = 0; j < numPairs; j++) {
+                if (pairs[j].val == v) {
+                    pairs[j].count++;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                if (numPairs >= MAX_DISTINCT_MOTION_VALUES)
+                    return false;
+                pairs[numPairs++] = { v, 1 };
+            }
         }
-    }
-    count = freqArray[indmin];
-    index = indmin;
-    for (size_t i = indmin + 1; i <= indmax; i++) {
-        if (freqArray[i] > count) {
-            count = freqArray[i];
-            index = i;
-        }
-    }
-    int mediany = (index - (freqArray.size() >> 1)); // most frequent value
+        return true;
+        };
 
+    ValCount pairsX[MAX_DISTINCT_MOTION_VALUES];
+    ValCount pairsY[MAX_DISTINCT_MOTION_VALUES];
+    int numX = 0, numY = 0;
 
-    // iteration to increase precision
-    int meanvx = 0;
-    int meanvy = 0;
-    int num = 0;
+    if (!accumulate(pairsX, numX, [](const VECTOR &v) { return v.x; }) || !accumulate(pairsY, numY, [](const VECTOR &v) { return v.y; })) {
+        EstimateGlobalMVDoubledFallback(globalMVec);
+        return;
+    }
+
+    int medianx = findMode(pairsX, numX);
+    int mediany = findMode(pairsY, numY);
+
+    // Refinement: average vectors near the mode
+    int meanvx = 0, meanvy = 0, num = 0;
     for (int i = 0; i < nBlkCount; i++) {
         if (abs(vectors[i].x - medianx) < 6 && abs(vectors[i].y - mediany) < 6) {
             meanvx += vectors[i].x;
             meanvy += vectors[i].y;
-            num += 1;
+            num++;
         }
     }
 
-    // output vectors must be doubled for next (finer) scale level
+    // Output vectors must be doubled for next (finer) scale level
     if (num > 0) {
         globalMVec.x = 2 * meanvx / num;
         globalMVec.y = 2 * meanvy / num;
@@ -147,8 +143,69 @@ void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcep
         globalMVec.x = 2 * medianx;
         globalMVec.y = 2 * mediany;
     }
+}
 
-    freqArray.clear();
+void MotionBlockLevel::EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const noexcept {
+    // Find mode of x and y components by sorting and finding the longest run.
+    // This uses O(nBlkCount) memory instead of O(nPel * 16384).
+    // It's a slower fallback for the unlikely case when motion vectors have many distinct values
+
+    std::vector<int> vals(nBlkCount);
+
+    // Find mode of x
+    for (int i = 0; i < nBlkCount; i++)
+        vals[i] = vectors[i].x;
+    std::sort(vals.begin(), vals.end());
+
+    int medianx = vals[0];
+    int bestCount = 1, curCount = 1;
+    for (int i = 1; i < nBlkCount; i++) {
+        if (vals[i] == vals[i - 1]) {
+            if (++curCount > bestCount) {
+                bestCount = curCount;
+                medianx = vals[i];
+            }
+        } else {
+            curCount = 1;
+        }
+    }
+
+    // Find mode of y, reuse the buffer
+    for (int i = 0; i < nBlkCount; i++)
+        vals[i] = vectors[i].y;
+    std::sort(vals.begin(), vals.end());
+
+    int mediany = vals[0];
+    bestCount = 1; curCount = 1;
+    for (int i = 1; i < nBlkCount; i++) {
+        if (vals[i] == vals[i - 1]) {
+            if (++curCount > bestCount) {
+                bestCount = curCount;
+                mediany = vals[i];
+            }
+        } else {
+            curCount = 1;
+        }
+    }
+
+    // Refinement: average vectors near the mode
+    int meanvx = 0, meanvy = 0, num = 0;
+    for (int i = 0; i < nBlkCount; i++) {
+        if (abs(vectors[i].x - medianx) < 6 && abs(vectors[i].y - mediany) < 6) {
+            meanvx += vectors[i].x;
+            meanvy += vectors[i].y;
+            num++;
+        }
+    }
+
+    // Output vectors must be doubled for next (finer) scale level
+    if (num > 0) {
+        globalMVec.x = 2 * meanvx / num;
+        globalMVec.y = 2 * meanvy / num;
+    } else {
+        globalMVec.x = 2 * medianx;
+        globalMVec.y = 2 * mediany;
+    }
 }
 
 

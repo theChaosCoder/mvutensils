@@ -177,6 +177,7 @@ private:
     VECTOR ClipMV(VECTOR v) const noexcept;
     void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept;
     void InitMotionEstimationFields(bool useSatd, bool chroma) noexcept;
+    void EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const noexcept;
 public:
     void SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int lsad, int pnew,
