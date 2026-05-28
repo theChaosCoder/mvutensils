@@ -1,7 +1,7 @@
 #include <stdexcept>
 #include <unordered_map>
 
-#include "MVDegrains.h"
+#include "Degrains.h"
 
 enum InstructionSets {
     Scalar,

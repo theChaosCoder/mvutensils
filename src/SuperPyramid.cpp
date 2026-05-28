@@ -843,6 +843,8 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
     if (!srcFrame)
         throw SuperPyramidError("Invalid source frame");
 
+    serializedData = srcFrame;
+
     const VSMap *props = vsapi->getFramePropertiesRO(srcFrame);
     int err;
     xRatioUV = vsapi->mapGetIntSaturated(props, (prefix + "SuperXRatioUV").c_str(), 0, &err);
@@ -875,6 +877,9 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
         nVPad[1] = nVPad[0] / yRatioUV;
         nVPad[2] = nVPad[0] / yRatioUV;
     }
+
+    // FIXME, check so all levels match the declared metadata sizes
+
     try {
 
         pyramidLevels.resize(levels);
@@ -903,10 +908,6 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, const std::string &prefix, V
                 pyramidLevels[level].planes[plane].FromExternalPlane(frame, nHPad[plane], nVPad[plane], core, vsapi);
             }
         }
-
-        // FIXME, check so all levels match the declared metadata sizes
-
-        serializedData = srcFrame;
 
     } catch (...) {
         FreeFrames();

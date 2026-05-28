@@ -25,7 +25,7 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "MVDegrains.h"
+#include "Degrains.h"
 #include "Overlap.h"
 #include "CommonMacros.h"
 #include "CPU.h"
@@ -446,7 +446,6 @@ static const std::unordered_map<uint32_t, DenoiseFunction> degrain_functions_sse
 static DenoiseFunction selectDegrainFunction(unsigned radius, unsigned width, unsigned height, unsigned bits) {
     DenoiseFunction degrain = degrain_functions[radius - 1].at(KEY(width, height, bits, MVOPT_SCALAR));
 
-    /*
 #if defined(MVTOOLS_X86) || defined(MVTOOLS_ARM)
     try {
         degrain = degrain_functions_sse2[radius - 1].at(KEY(width, height, bits, MVOPT_SSE2));
@@ -459,7 +458,6 @@ static DenoiseFunction selectDegrainFunction(unsigned radius, unsigned width, un
     }
 #endif
 #endif
-*/
 
     return degrain;
 }
@@ -502,6 +500,28 @@ static void selectFunctions(DegrainData<radius> &d, const MotionBlockPyramid &ve
 }
 
 
+// FIXME, maybe move to shared header
+static inline void getProcessPlanesArg(const VSMap *in, bool process[3], const VSAPI *vsapi) {
+    int m = vsapi->mapNumElements(in, "planes");
+
+    for (int i = 0; i < 3; i++)
+        process[i] = (m <= 0);
+
+    for (int i = 0; i < m; i++) {
+        int64_t o = vsapi->mapGetInt(in, "planes", i, nullptr);
+
+        if (o < 0 || o >= 3)
+            throw std::runtime_error("plane index out of range");
+
+
+        if (process[o])
+            throw std::runtime_error("plane specified twice");
+
+        process[o] = true;
+    }
+}
+
+
 template <int radius>
 static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<DegrainData<radius>> d(new DegrainData<radius>(vsapi));
@@ -519,11 +539,6 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
     if (err)
         d->thSAD[1] = d->thSAD[2] = d->thSAD[0];
 
-    // FIXME
-    int plane = vsapi->mapGetIntSaturated(in, "plane", 0, &err);
-    if (err)
-        plane = 4;
-
     d->nSCD1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
     if (err)
         d->nSCD1 = MV_DEFAULT_SCD1;
@@ -540,192 +555,177 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
     else
         d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-    char errorMsg[ERROR_SIZE + 1] = {};
-    const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
-    if (!evil)
-        throw std::runtime_error(filter + ": failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
+    try {
+        getProcessPlanesArg(in, d->process, vsapi);
 
-        // try FIXME
+        char errorMsg[ERROR_SIZE + 1] = {};
+        const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
+        if (!evil)
+            throw std::runtime_error("failed to retrieve first frame from super clip.Error message : " + std::string(errorMsg));
 
-    FramePyramid evilPyramid(evil, d->prefix, core, vsapi);
+        FramePyramid evilPyramid(evil, d->prefix, core, vsapi);
 
-    int numVectors = vsapi->mapNumElements(in, "vectors");
-    if (numVectors != radius * 2)
-        throw std::runtime_error("the number of vector clips must be exactly " + std::to_string(radius * 2));
+        int numVectors = vsapi->mapNumElements(in, "vectors");
+        if (numVectors != radius * 2)
+            throw std::runtime_error("the number of vector clips must be exactly " + std::to_string(radius * 2));
 
-    std::optional<MotionBlockPyramid> evilVectors[radius * 2];
+        std::optional<MotionBlockPyramid> evilVectors[radius * 2];
 
-    for (int r = 0; r < radius * 2; r++) {
-        d->vectors[r] = vsapi->mapGetNode(in, "vectors", r, nullptr);
-        
-        if (vsapi->getNodeType(d->vectors[r]) != mtVideo)
-            throw std::runtime_error("invalid vector clip type");
+        for (int r = 0; r < radius * 2; r++) {
+            d->vectors[r] = vsapi->mapGetNode(in, "vectors", r, nullptr);
 
-        const VSFrame *vecFrame = vsapi->getFrame(0, d->vectors[r], errorMsg, ERROR_SIZE);
-        if (!vecFrame)
-            throw std::runtime_error("Failed to retrieve first frame from vector clip " + std::to_string(r) + ": " + std::string(errorMsg));
+            if (vsapi->getNodeType(d->vectors[r]) != mtVideo)
+                throw std::runtime_error("invalid vector clip type");
 
-        // FIXME, free frame if throwing
-        evilVectors[r].emplace(vecFrame, 1, d->prefix, core, vsapi);
+            const VSFrame *vecFrame = vsapi->getFrame(0, d->vectors[r], errorMsg, ERROR_SIZE);
+            if (!vecFrame)
+                throw std::runtime_error("Failed to retrieve first frame from vector clip " + std::to_string(r) + ": " + std::string(errorMsg));
 
-        vsapi->freeFrame(vecFrame);
+            try {
+                evilVectors[r].emplace(vecFrame, 1, d->prefix, core, vsapi);
+            } catch (...) {
+                vsapi->freeFrame(vecFrame);
+                throw;
+            }
 
-        if (r > 0 && !evilVectors[r]->IsCompatible(*evilVectors[r - 1]))
-            throw std::runtime_error("Incompatible vector formats");
+            if (r > 0 && !evilVectors[r]->IsCompatible(*evilVectors[r - 1]))
+                throw std::runtime_error("Incompatible vector formats");
 
-        d->deltaFrame[r] = evilVectors[r]->nDeltaFrame;
-    }
-
-    d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
-    d->vi = vsapi->getVideoInfo(d->node);
-
-    int64_t nSCD1_old = d->nSCD1;
-    evilVectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
-
-
-    // bw1, fw1, bw2, fw2, ...
-
-    /*
-
-    for (int r = 0; r < radius * 2; r++)
-
-#define CHECK_VECTORS(rThreshold, backwardN, forwardN, backwardP, forwardP, mvbwN, mvfwN, mvbwP, mvfwP)\
-    if (radius > rThreshold) {\
-        if (!d->vectors_data[backwardN].isBackward)\
-            snprintf(error, ERROR_SIZE, "%s", "mvbw must be generated with isb=True.");\
-        if (d->vectors_data[forwardN].isBackward)\
-            snprintf(error, ERROR_SIZE, "%s", "mvfw must be generated with isb=False.");\
-        if (d->vectors_data[backwardN].nDeltaFrame <= d->vectors_data[backwardP].nDeltaFrame)\
-            snprintf(error, ERROR_SIZE, "%s", "mvbwN must have greater delta than mvbwP.");\
-        if (d->vectors_data[forwardN].nDeltaFrame <= d->vectors_data[forwardP].nDeltaFrame)\
-            snprintf(error, ERROR_SIZE, "%s", "mvfwN must have greater delta than mvfwP.");\
-    }
-
-    // Make sure the motion vector clips are correct.
-    if (!d->vectors_data[Backward1].isBackward)
-        snprintf(error, ERROR_SIZE, "%s", "mvbw must be generated with isb=True.");
-    if (d->vectors_data[Forward1].isBackward)
-        snprintf(error, ERROR_SIZE, "%s", "mvfw must be generated with isb=False.");
-
-    CHECK_VECTORS(1, Backward2, Forward2, Backward1, Forward1, mvbw2, mvfw2, mvbw, mvfw)
-    CHECK_VECTORS(2, Backward3, Forward3, Backward2, Forward2, mvbw3, mvfw3, mvbw2, mvfw2)
-    CHECK_VECTORS(3, Backward4, Forward4, Backward3, Forward3, mvbw4, mvfw4, mvbw3, mvfw3)
-    CHECK_VECTORS(4, Backward5, Forward5, Backward4, Forward4, mvbw5, mvfw5, mvbw4, mvfw4)
-    CHECK_VECTORS(5, Backward6, Forward6, Backward5, Forward5, mvbw6, mvfw6, mvbw5, mvfw5)
-
-#undef CHECK_VECTORS
-
-*/
-    d->thSAD[0] = d->thSAD[0] * d->nSCD1 / nSCD1_old;              // normalize to block SAD
-    d->thSAD[1] = d->thSAD[2] = d->thSAD[1] * d->nSCD1 / nSCD1_old; // chroma threshold, normalized to block SAD
-
-    if (d->thSAD[0] >= INT_MAX || d->thSAD[1] >= INT_MAX) {
-        int64_t maximum = INT_MAX * nSCD1_old / d->nSCD1;
-
-        bool c = d->thSAD[0] < INT_MAX;
-
-        vsapi->mapSetError(out, (filter + ": with this block size and video format, thsad" + (c ? "c" : "") + " must not exceed " + std::to_string(maximum) + " or some calculations would overflow").c_str());
-
-        return;
-    }
-
-
-
-
-    const VSVideoInfo *supervi = vsapi->getVideoInfo(d->super);
-    int nSuperWidth = supervi->width;
-
-    if (evilVectors[0]->nHeight != evilPyramid.nHeight[0] || evilVectors[0]->nRealHeight != d->vi->height || evilVectors[0]->nWidth != evilPyramid.nWidth[0] || evilVectors[0]->nRealWidth != d->vi->width || evilVectors[0]->nPel != evilPyramid.nPel) {
-        vsapi->mapSetError(out, (filter + ": wrong source or super clip frame size").c_str());
-        return;
-    }
-
-    if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray)) {
-        vsapi->mapSetError(out, (filter + ": input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions").c_str());
-        return;
-    }
-
-    int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
-
-    d->nLimit[0] = vsapi->mapGetIntSaturated(in, "limit", 0, &err);
-    if (err)
-        d->nLimit[0] = pixelMax;
-
-    d->nLimit[1] = d->nLimit[2] = vsapi->mapGetIntSaturated(in, "limitc", 0, &err);
-    if (err)
-        d->nLimit[1] = d->nLimit[2] = d->nLimit[0];
-
-    if (d->nLimit[0] < 0 || d->nLimit[0] > pixelMax) {
-        vsapi->mapSetError(out, (filter + ": limit must be between 0 and " + std::to_string(pixelMax)).c_str());
-        return;
-    }
-
-    if (d->nLimit[1] < 0 || d->nLimit[1] > pixelMax) {
-        vsapi->mapSetError(out, (filter + ": limitc must be between 0 and " + std::to_string(pixelMax)).c_str());
-        return;
-    }
-
-
-    d->dstTempPitch = ((evilVectors[0]->nWidth + 15) / 16) * 16 * d->vi->format.bytesPerSample * 2;
-
-
-    // FIXME, take planes argument into account
-    d->process[0] = true;
-    d->process[1] = true;
-    d->process[2] = true;
-
-    d->xSubUV = d->vi->format.subSamplingW;
-    d->ySubUV = d->vi->format.subSamplingH;
-
-    d->nWidth[0] = evilVectors[0]->nWidth;
-    d->nWidth[1] = d->nWidth[2] = d->nWidth[0] >> d->xSubUV;
-
-    d->nHeight[0] = evilVectors[0]->nHeight;
-    d->nHeight[1] = d->nHeight[2] = d->nHeight[0] >> d->ySubUV;
-
-    d->nOverlapX[0] = evilVectors[0]->nOverlapX;
-    d->nOverlapX[1] = d->nOverlapX[2] = d->nOverlapX[0] >> d->xSubUV;
-
-    d->nOverlapY[0] = evilVectors[0]->nOverlapY;
-    d->nOverlapY[1] = d->nOverlapY[2] = d->nOverlapY[0] >> d->ySubUV;
-
-    d->nBlkSizeX[0] = evilVectors[0]->nBlkSizeX;
-    d->nBlkSizeX[1] = d->nBlkSizeX[2] = d->nBlkSizeX[0] >> d->xSubUV;
-
-    d->nBlkSizeY[0] = evilVectors[0]->nBlkSizeY;
-    d->nBlkSizeY[1] = d->nBlkSizeY[2] = d->nBlkSizeY[0] >> d->ySubUV;
-
-    d->nWidth_B[0] = evilVectors[0]->nBlkX * (d->nBlkSizeX[0] - d->nOverlapX[0]) + d->nOverlapX[0];
-    d->nWidth_B[1] = d->nWidth_B[2] = d->nWidth_B[0] >> d->xSubUV;
-
-    d->nHeight_B[0] = evilVectors[0]->nBlkY * (d->nBlkSizeY[0] - d->nOverlapY[0]) + d->nOverlapY[0];
-    d->nHeight_B[1] = d->nHeight_B[2] = d->nHeight_B[0] >> d->ySubUV;
-
-    if (d->nOverlapX[0] || d->nOverlapY[0]) {
-        d->OverWins[0].Init(d->nBlkSizeX[0], d->nBlkSizeY[0], d->nOverlapX[0], d->nOverlapY[0]);
-
-        if (d->vi->format.colorFamily != cfGray) {
-            d->OverWins[1].Init(d->nBlkSizeX[1], d->nBlkSizeY[1], d->nOverlapX[1], d->nOverlapY[1]);
-            d->OverWins[2].Init(d->nBlkSizeX[2], d->nBlkSizeY[2], d->nOverlapX[2], d->nOverlapY[2]);
+            d->deltaFrame[r] = evilVectors[r]->nDeltaFrame;
         }
+
+        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = vsapi->getVideoInfo(d->node);
+
+        int64_t nSCD1_old = d->nSCD1;
+        evilVectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
+
+        // FIXME, more checks? better checks?
+        // bw1, fw1, bw2, fw2, ...
+
+        /*
+
+        for (int r = 0; r < radius * 2; r++)
+
+    #define CHECK_VECTORS(rThreshold, backwardN, forwardN, backwardP, forwardP, mvbwN, mvfwN, mvbwP, mvfwP)\
+        if (radius > rThreshold) {\
+            if (!d->vectors_data[backwardN].isBackward)\
+                snprintf(error, ERROR_SIZE, "%s", "mvbw must be generated with isb=True.");\
+            if (d->vectors_data[forwardN].isBackward)\
+                snprintf(error, ERROR_SIZE, "%s", "mvfw must be generated with isb=False.");\
+            if (d->vectors_data[backwardN].nDeltaFrame <= d->vectors_data[backwardP].nDeltaFrame)\
+                snprintf(error, ERROR_SIZE, "%s", "mvbwN must have greater delta than mvbwP.");\
+            if (d->vectors_data[forwardN].nDeltaFrame <= d->vectors_data[forwardP].nDeltaFrame)\
+                snprintf(error, ERROR_SIZE, "%s", "mvfwN must have greater delta than mvfwP.");\
+        }
+
+        // Make sure the motion vector clips are correct.
+        if (!d->vectors_data[Backward1].isBackward)
+            snprintf(error, ERROR_SIZE, "%s", "mvbw must be generated with isb=True.");
+        if (d->vectors_data[Forward1].isBackward)
+            snprintf(error, ERROR_SIZE, "%s", "mvfw must be generated with isb=False.");
+
+        CHECK_VECTORS(1, Backward2, Forward2, Backward1, Forward1, mvbw2, mvfw2, mvbw, mvfw)
+        CHECK_VECTORS(2, Backward3, Forward3, Backward2, Forward2, mvbw3, mvfw3, mvbw2, mvfw2)
+        CHECK_VECTORS(3, Backward4, Forward4, Backward3, Forward3, mvbw4, mvfw4, mvbw3, mvfw3)
+        CHECK_VECTORS(4, Backward5, Forward5, Backward4, Forward4, mvbw5, mvfw5, mvbw4, mvfw4)
+        CHECK_VECTORS(5, Backward6, Forward6, Backward5, Forward5, mvbw6, mvfw6, mvbw5, mvfw5)
+
+    #undef CHECK_VECTORS
+
+    */
+        d->thSAD[0] = d->thSAD[0] * d->nSCD1 / nSCD1_old;              // normalize to block SAD
+        d->thSAD[1] = d->thSAD[2] = d->thSAD[1] * d->nSCD1 / nSCD1_old; // chroma threshold, normalized to block SAD
+
+        if (d->thSAD[0] >= INT_MAX || d->thSAD[1] >= INT_MAX) {
+            int64_t maximum = INT_MAX * nSCD1_old / d->nSCD1;
+
+            bool c = d->thSAD[0] < INT_MAX;
+
+            throw std::runtime_error("with this block size and video format, thsad" + std::string(c ? "c" : "") + " must not exceed " + std::to_string(maximum) + " or some calculations would overflow");
+        }
+
+        const VSVideoInfo *supervi = vsapi->getVideoInfo(d->super);
+        int nSuperWidth = supervi->width;
+
+        if (evilVectors[0]->nHeight != evilPyramid.nHeight[0] || evilVectors[0]->nRealHeight != d->vi->height || evilVectors[0]->nWidth != evilPyramid.nWidth[0] || evilVectors[0]->nRealWidth != d->vi->width || evilVectors[0]->nPel != evilPyramid.nPel)
+            throw std::runtime_error("wrong source or super clip frame size");
+
+        if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray))
+            throw std::runtime_error("input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions");
+
+        int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
+
+        d->nLimit[0] = vsapi->mapGetIntSaturated(in, "limit", 0, &err);
+        if (err)
+            d->nLimit[0] = pixelMax;
+
+        d->nLimit[1] = d->nLimit[2] = vsapi->mapGetIntSaturated(in, "limitc", 0, &err);
+        if (err)
+            d->nLimit[1] = d->nLimit[2] = d->nLimit[0];
+
+        if (d->nLimit[0] < 0 || d->nLimit[0] > pixelMax)
+            throw std::runtime_error("limit must be between 0 and " + std::to_string(pixelMax));
+
+        if (d->nLimit[1] < 0 || d->nLimit[1] > pixelMax)
+            throw std::runtime_error("limitc must be between 0 and " + std::to_string(pixelMax));
+
+        d->dstTempPitch = ((evilVectors[0]->nWidth + 15) / 16) * 16 * d->vi->format.bytesPerSample * 2;
+
+        d->xSubUV = d->vi->format.subSamplingW;
+        d->ySubUV = d->vi->format.subSamplingH;
+
+        d->nWidth[0] = evilVectors[0]->nWidth;
+        d->nWidth[1] = d->nWidth[2] = d->nWidth[0] >> d->xSubUV;
+
+        d->nHeight[0] = evilVectors[0]->nHeight;
+        d->nHeight[1] = d->nHeight[2] = d->nHeight[0] >> d->ySubUV;
+
+        d->nOverlapX[0] = evilVectors[0]->nOverlapX;
+        d->nOverlapX[1] = d->nOverlapX[2] = d->nOverlapX[0] >> d->xSubUV;
+
+        d->nOverlapY[0] = evilVectors[0]->nOverlapY;
+        d->nOverlapY[1] = d->nOverlapY[2] = d->nOverlapY[0] >> d->ySubUV;
+
+        d->nBlkSizeX[0] = evilVectors[0]->nBlkSizeX;
+        d->nBlkSizeX[1] = d->nBlkSizeX[2] = d->nBlkSizeX[0] >> d->xSubUV;
+
+        d->nBlkSizeY[0] = evilVectors[0]->nBlkSizeY;
+        d->nBlkSizeY[1] = d->nBlkSizeY[2] = d->nBlkSizeY[0] >> d->ySubUV;
+
+        d->nWidth_B[0] = evilVectors[0]->nBlkX * (d->nBlkSizeX[0] - d->nOverlapX[0]) + d->nOverlapX[0];
+        d->nWidth_B[1] = d->nWidth_B[2] = d->nWidth_B[0] >> d->xSubUV;
+
+        d->nHeight_B[0] = evilVectors[0]->nBlkY * (d->nBlkSizeY[0] - d->nOverlapY[0]) + d->nOverlapY[0];
+        d->nHeight_B[1] = d->nHeight_B[2] = d->nHeight_B[0] >> d->ySubUV;
+
+        if (d->nOverlapX[0] || d->nOverlapY[0]) {
+            d->OverWins[0].Init(d->nBlkSizeX[0], d->nBlkSizeY[0], d->nOverlapX[0], d->nOverlapY[0]);
+
+            if (d->vi->format.colorFamily != cfGray) {
+                d->OverWins[1].Init(d->nBlkSizeX[1], d->nBlkSizeY[1], d->nOverlapX[1], d->nOverlapY[1]);
+                d->OverWins[2].Init(d->nBlkSizeX[2], d->nBlkSizeY[2], d->nOverlapX[2], d->nOverlapY[2]);
+            }
+        }
+
+        selectFunctions<radius>(*d, *evilVectors[0]);
+
+        const int numDeps = 2 + radius * 2; // input clip, super, and corresponding backward and forward vectors.
+        std::vector<VSFilterDependency> deps;
+        deps.reserve(numDeps);
+        deps.push_back({ d->node, rpStrictSpatial });
+        deps.push_back({ d->super, rpGeneral });
+        for (int r = 0; r < radius * 2; r++)
+            deps.push_back({ d->vectors[r], rpStrictSpatial });
+
+        assert(numDeps == deps.size());
+
+        vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, degrainFree<radius>, fmParallel, deps.data(), numDeps, d.get(), core);
+        d.release();
+
+    } catch (std::runtime_error &e) {
+        vsapi->mapSetError(out, (filter + ": " + e.what()).c_str());
     }
-
-    // FIXME, use reference
-    selectFunctions<radius>(*d, *evilVectors[0]);
-
-    // FIXME, what happens when not enough vectors?
-    const int numDeps = 2 + radius * 2; // input clip, super, and corresponding backward and forward vectors.
-    std::vector<VSFilterDependency> deps;
-    deps.reserve(numDeps);
-    deps.push_back({ d->node, rpStrictSpatial });
-    deps.push_back({ d->super, rpGeneral });
-    for (int r = 0; r < radius * 2; r++)
-        deps.push_back({ d->vectors[r], rpStrictSpatial });
-
-    assert(numDeps == deps.size());
-    
-    vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, degrainFree<radius>, fmParallel, deps.data(), numDeps, d.get(), core);
-    d.release();
 }
 
 constexpr const char *degrain_args =

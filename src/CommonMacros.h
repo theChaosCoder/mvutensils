@@ -3,6 +3,7 @@
 #include <vector>
 #include <stdexcept>
 
+
 class MVUtensilsError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -11,6 +12,14 @@ template<typename T, size_t U>
 constexpr int ARRAY_SIZE(const T (&arr)[U]) {
     return static_cast<int>(U);
 }
+
+/*
+* FIXME, maybe introduce soemthing like this
+template<typename T>
+static void VS_CC filterFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
+    delete reinterpret_cast<T *>(instanceData);
+}
+*/
 
 // FIXME, probably should be called something else
 

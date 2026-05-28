@@ -183,9 +183,9 @@ private:
     const VSAPI *vsapi;
     void FreeFrames() noexcept;
 public:
-    FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi); // constructor to build from source frames
+    FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi); // constructor to build from source frames, does not take ownership of srcFrame
 
-    FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // constructor to reconstruct from frame properties, takes ownership of srcFrame
+    FramePyramid(const VSFrame *srcFrame, const std::string &prefix, VSCore *core, const VSAPI *vsapi); // constructor to reconstruct from frame properties, takes ownership of srcFrame even if the constructor throws
     ~FramePyramid();
     void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi);
     void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore *core, const VSAPI *vsapi);
@@ -193,7 +193,7 @@ public:
     const FramePyramidLevel &GetLevel(int level) const noexcept;
     bool IsValid() const noexcept;
     bool IsValidMetadataValid() const noexcept;
-    // FIXME, add these helper functions?
+    // FIXME, add these helper functions and create fewer levels when possible?
     //static int GetMaxLevels(int width, int height, int ration, int overlapY, int levels) noexcept;
     //static int GetMaxLevelsForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int overlapY, int levels) noexcept;
 };
