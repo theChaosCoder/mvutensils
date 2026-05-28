@@ -156,8 +156,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
         const int xSubUV = d->xSubUV;
         const int ySubUV = d->ySubUV;
-        const int xRatioUV = fgops[0]->xRatioUV;
-        const int yRatioUV = fgops[0]->yRatioUV;
         const int nBlkX = fgops[0]->nBlkX;
         const int nBlkY = fgops[0]->nBlkY;
         const ptrdiff_t dstTempPitch = d->dstTempPitch;
