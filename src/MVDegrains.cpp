@@ -698,24 +698,16 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
     // FIXME, what happens when not enough vectors?
     const int numDeps = 2 + radius * 2; // input clip, super, and corresponding backward and forward vectors.
-    VSFilterDependency deps[14] = { 
-        {d->node, rpStrictSpatial},
-        {d->super, rpGeneral},
-        {d->vectors[0], rpStrictSpatial},
-        {d->vectors[1], rpStrictSpatial},
-        {d->vectors[radius >= 2 ? 2 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 2 ? 3 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 3 ? 4 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 3 ? 5 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 4 ? 6 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 4 ? 7 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 5 ? 8 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 5 ? 9 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 6 ? 10 : 0], rpStrictSpatial},
-        {d->vectors[radius >= 6 ? 11 : 0], rpStrictSpatial},
-    };
+    std::vector<VSFilterDependency> deps;
+    deps.reserve(numDeps);
+    deps.push_back({ d->node, rpStrictSpatial });
+    deps.push_back({ d->super, rpGeneral });
+    for (int r = 0; r < radius * 2; r++)
+        deps.push_back({ d->vectors[r], rpStrictSpatial });
+
+    assert(numDeps == deps.size());
     
-    vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, degrainFree<radius>, fmParallel, deps, numDeps, d.get(), core);
+    vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, degrainFree<radius>, fmParallel, deps.data(), numDeps, d.get(), core);
     d.release();
 }
 
