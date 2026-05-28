@@ -123,9 +123,9 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         uint8_t *pDstCur[3] = {};
         const uint8_t *pSrcCur[3] = {};
         const uint8_t *pSrc[3] = {};
-        ptrdiff_t nDstPitches[3] = { 0 };
-        ptrdiff_t nSrcPitches[3] = { 0 };
-        bool isUsable[radius * 2];
+        ptrdiff_t nDstPitches[3] = {};
+        ptrdiff_t nSrcPitches[3] = {};
+        bool isUsable[radius * 2] = {};
 
         std::optional<MotionBlockPyramid> fgops[radius * 2];
         
@@ -181,7 +181,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         int tmpBlockPitch = nBlkSizeX[0] * bytesPerSample;
         uint8_t *tmpBlock = nullptr;
         if (nOverlapX[0] > 0 || nOverlapY[0] > 0) {
-            DstTemp = new uint8_t[dstTempPitch * nHeight[0]];
+            DstTemp = new uint8_t[dstTempPitch * nBlkSizeY[0]];
             tmpBlock = new uint8_t[tmpBlockPitch * nBlkSizeY[0]];
         }
 
@@ -242,17 +242,25 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                                   pSrcCur[plane], nSrcPitches[plane],
                                   nWidth[plane] * bytesPerSample, nHeight[plane] - nHeight_B[plane]);
                 }
-            } else { // overlap
-                uint8_t *pDstTemp = DstTemp;
-                memset(pDstTemp, 0, dstTempPitch * nHeight_B[0]);
+            } else { // overlap - sliding window
+                const int stepY = nBlkSizeY[plane] - nOverlapY[plane];
+
+                // Clear the whole buffer for the first block row
+                memset(DstTemp, 0, dstTempPitch * nBlkSizeY[plane]);
 
                 for (int by = 0; by < nBlkY; by++) {
                     int wby = ((by + nBlkY - 3) / (nBlkY - 2)) * 3;
                     int wbx = 0;
                     int xx = 0;
+
+                    // For subsequent rows only clear the new (non-overlap) region;
+                    // the top nOverlapY rows were preserved by the memmove below
+                    if (by > 0)
+                        memset(DstTemp + nOverlapY[plane] * dstTempPitch, 0, dstTempPitch * stepY);
+
                     for (int bx = 0; bx < nBlkX; bx++) {
                         // select window
-                        wbx = bx == nBlkX - 1 ? 2 : wbx; //(bx + nBlkX - 3) / (nBlkX - 2);
+                        wbx = bx == nBlkX - 1 ? 2 : wbx;
                         const int16_t *winOver = OverWins[plane]->GetWindow(wby + wbx);
 
                         int i = by * nBlkX + bx;
@@ -263,35 +271,42 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                         int WSrc, WRefs[radius * 2];
 
                         for (int r = 0; r < radius * 2; r++)
-                            useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], *fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
+                            useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
 
                         normaliseWeights<radius>(WSrc, WRefs);
 
                         d->DEGRAIN[plane](tmpBlock, tmpBlockPitch, pSrcCur[plane] + xx, nSrcPitches[plane],
-                                          pointers, strides,
-                                          WSrc, WRefs);
-                        d->OVERS[plane](pDstTemp + xx * 2, dstTempPitch, tmpBlock, tmpBlockPitch, winOver, nBlkSizeX[plane]);
+                            pointers, strides,
+                            WSrc, WRefs);
+                        d->OVERS[plane](DstTemp + xx * 2, dstTempPitch, tmpBlock, tmpBlockPitch, winOver, nBlkSizeX[plane]);
 
                         xx += (nBlkSizeX[plane] - nOverlapX[plane]) * bytesPerSample;
                         wbx = 1;
                     }
-                    pSrcCur[plane] += (nBlkSizeY[plane] - nOverlapY[plane]) * nSrcPitches[plane];
-                    pDstTemp += (nBlkSizeY[plane] - nOverlapY[plane]) * dstTempPitch;
+
+                    // Last block row outputs all nBlkSizeY rows; others output only stepY
+                    int rowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : stepY;
+
+                    d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp, dstTempPitch,
+                        nWidth_B[plane], rowsToOutput, bitsPerSample);
+
+                    pDstCur[plane] += nDstPitches[plane] * rowsToOutput;
+                    pSrcCur[plane] += stepY * nSrcPitches[plane];
+
+                    // Slide: preserve the overlap rows at the top for the next block row
+                    if (by < nBlkY - 1)
+                        memmove(DstTemp, DstTemp + stepY * dstTempPitch, nOverlapY[plane] * dstTempPitch);
                 }
 
-                d->ToPixels(pDst[plane], nDstPitches[plane], DstTemp, dstTempPitch, nWidth_B[plane], nHeight_B[plane], bitsPerSample);
-
-                
                 if (nWidth_B[0] < nWidth[0])
                     vsh::bitblt(pDst[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
-                              pSrc[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
-                              (nWidth[plane] - nWidth_B[plane]) * bytesPerSample, nHeight_B[plane]);
+                        pSrc[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
+                        (nWidth[plane] - nWidth_B[plane]) * bytesPerSample, nHeight_B[plane]);
 
                 if (nHeight_B[0] < nHeight[0]) // bottom noncovered region
                     vsh::bitblt(pDst[plane] + nDstPitches[plane] * nHeight_B[plane], nDstPitches[plane],
-                              pSrc[plane] + nSrcPitches[plane] * nHeight_B[plane], nSrcPitches[plane],
-                              nWidth[plane] * bytesPerSample, nHeight[plane] - nHeight_B[plane]);
-
+                        pSrc[plane] + nSrcPitches[plane] * nHeight_B[plane], nSrcPitches[plane],
+                        nWidth[plane] * bytesPerSample, nHeight[plane] - nHeight_B[plane]);
             }
 
             int pixelMax = (1 << bitsPerSample) - 1;
