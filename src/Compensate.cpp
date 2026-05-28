@@ -99,7 +99,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
         ptrdiff_t nSrcPitches[3] = {};
 
         const VSFrame *mvn = vsapi->getFrameFilter(n, d->vectors, frameCtx);
-        MotionBlockPyramid vectors(mvn, 0, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
         vsapi->freeFrame(mvn);
 
         const int xRatioUV = vectors.xRatioUV;

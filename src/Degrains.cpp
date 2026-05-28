@@ -143,7 +143,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
         for (int r = 0; r < radius * 2; r++) {
             const VSFrame *frame = vsapi->getFrameFilter(n, d->vectors[r], frameCtx);
-            fgops[r].emplace(frame, 0, d->prefix, core, vsapi);
+            fgops[r].emplace(frame, 1, d->prefix, core, vsapi);
             isUsable[r] = fgops[r]->IsUsable(d->nSCD1, d->nSCD2);
             vsapi->freeFrame(frame);
 
@@ -585,7 +585,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
                 throw std::runtime_error("Failed to retrieve first frame from vector clip " + std::to_string(r) + ": " + std::string(errorMsg));
 
             try {
-                evilVectors[r].emplace(vecFrame, 1, d->prefix, core, vsapi);
+                evilVectors[r].emplace(vecFrame, 0, d->prefix, core, vsapi);
             } catch (...) {
                 vsapi->freeFrame(vecFrame);
                 throw;

@@ -1551,11 +1551,13 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
     int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
     int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
 
-    for (int i = 0; i < nLevelCount; i++) {
+    int loadLevels = (maxLevel < 0) ? nLevelCount : std::min(maxLevel, nLevelCount);
+
+    for (int i = 0; i < loadLevels; i++) {
         int nBlkX1 = ((nWidth_B >> i) - nOverlapX) / (nBlkSizeX - nOverlapX);
         int nBlkY1 = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
         int size = vsapi->mapGetDataSize(props, vectorsProp.c_str(), i, &err);
-        pyramidLevels[i].Initialize(nBlkX1, nBlkY1, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 1, i, (i == nLevelCount - 1), chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, vi->bitsPerSample);
+        pyramidLevels[i].Initialize(nBlkX1, nBlkY1, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 1, i, (i == loadLevels - 1), chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, vi->bitsPerSample);
         if (size == nBlkX1 * nBlkY1 * sizeof(VECTOR)) {
             const char *data = vsapi->mapGetData(props, vectorsProp.c_str(), i, &err);
             if (!data)

@@ -20,6 +20,7 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 #include <memory>
+#include <stdexcept>
 
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
@@ -52,10 +53,9 @@ static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, voi
 
         try {
             const VSFrame *mvn = vsapi->getFrameFilter(n, d->node2, frameCtx);
-            MotionBlockPyramid vectors(mvn, 0, d->prefix, core, vsapi);
+            MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
             vsapi->freeFrame(mvn);
 
-            // FIXME, verify that delta and prop name is handled correctly
             constexpr const char *propNames[2] = { "_SceneChangePrev", "_SceneChangeNext" };
             VSMap *props = vsapi->getFramePropertiesRW(dst);
             vsapi->mapSetInt(props, propNames[vectors.nDeltaFrame > 0], !vectors.IsUsable(d->thscd1, d->thscd2), maReplace);
@@ -107,7 +107,7 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData,
         char errorMsg[ERROR_SIZE + 1] = {};
         const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg, ERROR_SIZE);
         if (!evil2)
-            RETERROR(errorMsg);
+            throw std::runtime_error(errorMsg);
 
         MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
 
