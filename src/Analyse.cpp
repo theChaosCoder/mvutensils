@@ -95,7 +95,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
             if (d->tff_exists)
                 src_top_field = d->tff ^ (n % 2);
 
-            MotionBlockPyramid vectorFields(srcFramePyramid, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame, d->supervi->format.bitsPerSample);
+            MotionBlockPyramid vectorFields(srcFramePyramid, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame);
 
             if (nref >= 0 && nref < d->vi->numFrames) {
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->node, frameCtx);
@@ -248,101 +248,101 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
     else
         d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-    if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
-        RETERROR("Analyse: search must be between 0 and 5");
-
-    if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical)
-        RETERROR("Analyse: search_coarse must be between 0 and 5");
-
-    if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
-        RETERROR("Analyse: satd cannot work with 16x2 blocks");
-
-    if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && d->divideExtra != MotionBlockPyramid::DivideExtra::Point && d->divideExtra != MotionBlockPyramid::DivideExtra::Median)
-        RETERROR("Analyse: divide must be between 0 and 2");
-
-
-    if ((d->nBlkSizeX != 4 || d->nBlkSizeY != 4) &&
-        (d->nBlkSizeX != 8 || d->nBlkSizeY != 4) &&
-        (d->nBlkSizeX != 8 || d->nBlkSizeY != 8) &&
-        (d->nBlkSizeX != 16 || d->nBlkSizeY != 2) &&
-        (d->nBlkSizeX != 16 || d->nBlkSizeY != 8) &&
-        (d->nBlkSizeX != 16 || d->nBlkSizeY != 16) &&
-        (d->nBlkSizeX != 32 || d->nBlkSizeY != 16) &&
-        (d->nBlkSizeX != 32 || d->nBlkSizeY != 32) &&
-        (d->nBlkSizeX != 64 || d->nBlkSizeY != 32) &&
-        (d->nBlkSizeX != 64 || d->nBlkSizeY != 64) &&
-        (d->nBlkSizeX != 128 || d->nBlkSizeY != 64) &&
-        (d->nBlkSizeX != 128 || d->nBlkSizeY != 128))
-        RETERROR("Analyse: the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64 or 128x128");
-
-
-    if (d->plevel < 0 || d->plevel > 2)
-        RETERROR("Analyse: plevel must be between 0 and 2");
-
-    if (d->pnew < 0 || d->pnew > 256)
-        RETERROR("Analyse: pnew must be between 0 and 256");
-
-    if (d->pzero < 0 || d->pzero > 256)
-        RETERROR("Analyse: pzero must be between 0 and 256");
-
-    if (d->pglobal < 0 || d->pglobal > 256)
-        RETERROR("Analyse: pglobal must be between 0 and 256");
-
-    if (d->nOverlapX < 0 || d->nOverlapX > d->nBlkSizeX / 2 ||
-        d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2)
-        RETERROR("Analyse: overlaph must be at most half of blksizeh, overlapv must be at most half of blksizev, and they both need to be at least 0");
-
-    if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8))
-        RETERROR("Analyse: blksize and blksizev must be at least 8 when divide=True");
-
-
-    d->nSearchParam = std::max(d->searchparam, 1);
-
-
-    d->node = vsapi->mapGetNode(in, "super", 0, 0);
-    d->supervi = vsapi->getVideoInfo(d->node);
-    d->vi = d->supervi;
-
-    if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray))
-        RETERROR("Analyse: Input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant format and dimensions");
-
-    if (d->vi->format.colorFamily == cfGray)
-        d->chroma = false;
-
-    int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
-    d->lsad = (int)((double)d->lsad * pixelMax / 255.0 + 0.5);
-    d->badSAD = (int)((double)d->badSAD * pixelMax / 255.0 + 0.5);
-    d->nLambda = (int)((double)d->nLambda * pixelMax / 255.0 + 0.5);
-
-    d->lsad = (int64_t)d->lsad * (d->nBlkSizeX * d->nBlkSizeY) / 64;
-    d->badSAD = d->badSAD * (d->nBlkSizeX * d->nBlkSizeY) / 64;
-
-    if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
-        d->nOverlapY % (1 << d->vi->format.subSamplingH)) {
-        RETERROR("Analyse: The requested overlap is incompatible with the super clip's subsampling");
-    }
-
-    if ((d->divideExtra != MotionBlockPyramid::DivideExtra::No) && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
-                          d->nOverlapY % (2 << d->vi->format.subSamplingH)))
-        RETERROR("Analyse: overlaph and overlapv must be multiples of 2 or 4 when divide > 0, depending on the super clip's subsampling");
-
-    if (d->deltaFrame == 0)
-        RETERROR("Analyse: delta can't be 0");
-
-    char errorMsg[ERROR_SIZE] = "Analyse: failed to retrieve first frame from super clip. Error message: ";
-    size_t errorLen = strlen(errorMsg);
-    const VSFrame *evil = vsapi->getFrame(0, d->node, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
-    if (!evil)
-        RETERROR(errorMsg);
-
     try {
+
+        if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
+            throw std::runtime_error("search must be between 0 and 5");
+
+        if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical)
+            throw std::runtime_error("search_coarse must be between 0 and 5");
+
+        if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
+            throw std::runtime_error("satd cannot work with 16x2 blocks");
+
+        if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && d->divideExtra != MotionBlockPyramid::DivideExtra::Point && d->divideExtra != MotionBlockPyramid::DivideExtra::Median)
+            throw std::runtime_error("divide must be between 0 and 2");
+
+
+        if ((d->nBlkSizeX != 4 || d->nBlkSizeY != 4) &&
+            (d->nBlkSizeX != 8 || d->nBlkSizeY != 4) &&
+            (d->nBlkSizeX != 8 || d->nBlkSizeY != 8) &&
+            (d->nBlkSizeX != 16 || d->nBlkSizeY != 2) &&
+            (d->nBlkSizeX != 16 || d->nBlkSizeY != 8) &&
+            (d->nBlkSizeX != 16 || d->nBlkSizeY != 16) &&
+            (d->nBlkSizeX != 32 || d->nBlkSizeY != 16) &&
+            (d->nBlkSizeX != 32 || d->nBlkSizeY != 32) &&
+            (d->nBlkSizeX != 64 || d->nBlkSizeY != 32) &&
+            (d->nBlkSizeX != 64 || d->nBlkSizeY != 64) &&
+            (d->nBlkSizeX != 128 || d->nBlkSizeY != 64) &&
+            (d->nBlkSizeX != 128 || d->nBlkSizeY != 128))
+            throw std::runtime_error("the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64 or 128x128");
+
+
+        if (d->plevel < 0 || d->plevel > 2)
+            throw std::runtime_error("plevel must be between 0 and 2");
+
+        if (d->pnew < 0 || d->pnew > 256)
+            throw std::runtime_error("pnew must be between 0 and 256");
+
+        if (d->pzero < 0 || d->pzero > 256)
+            throw std::runtime_error("pzero must be between 0 and 256");
+
+        if (d->pglobal < 0 || d->pglobal > 256)
+            throw std::runtime_error("pglobal must be between 0 and 256");
+
+        if (d->nOverlapX < 0 || d->nOverlapX > d->nBlkSizeX / 2 ||
+            d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2)
+            throw std::runtime_error("overlaph must be at most half of blksizeh, overlapv must be at most half of blksizev, and they both need to be at least 0");
+
+        if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8))
+            throw std::runtime_error("blksize and blksizev must be at least 8 when divide>0");
+
+
+        d->nSearchParam = std::max(d->searchparam, 1);
+
+
+        d->node = vsapi->mapGetNode(in, "super", 0, 0);
+        d->supervi = vsapi->getVideoInfo(d->node);
+        d->vi = d->supervi;
+
+        if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray))
+            throw std::runtime_error("Input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant format and dimensions");
+
+        if (d->vi->format.colorFamily == cfGray)
+            d->chroma = false;
+
+        int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
+        d->lsad = (int)((double)d->lsad * pixelMax / 255.0 + 0.5);
+        d->badSAD = (int)((double)d->badSAD * pixelMax / 255.0 + 0.5);
+        d->nLambda = (int)((double)d->nLambda * pixelMax / 255.0 + 0.5);
+
+        d->lsad = (int64_t)d->lsad * (d->nBlkSizeX * d->nBlkSizeY) / 64;
+        d->badSAD = d->badSAD * (d->nBlkSizeX * d->nBlkSizeY) / 64;
+
+        if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
+            d->nOverlapY % (1 << d->vi->format.subSamplingH))
+            throw std::runtime_error("The requested overlap is incompatible with the super clip's subsampling");
+       
+
+        if ((d->divideExtra != MotionBlockPyramid::DivideExtra::No) && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
+                              d->nOverlapY % (2 << d->vi->format.subSamplingH)))
+            throw std::runtime_error("overlaph and overlapv must be multiples of 2 or 4 when divide > 0, depending on the super clip's subsampling");
+
+        if (d->deltaFrame == 0)
+            throw std::runtime_error("delta can't be 0");
+
+        char errorMsg[ERROR_SIZE] = "failed to retrieve first frame from super clip. Error message: ";
+        size_t errorLen = strlen(errorMsg);
+        const VSFrame *evil = vsapi->getFrame(0, d->node, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+        if (!evil)
+            throw std::runtime_error(errorMsg);
 
         FramePyramid super(evil, -1, d->prefix, core, vsapi);
 
         if (d->nPelSearch <= 0)
             d->nPelSearch = super.nPel;
 
-        MotionBlockPyramid DryRun(super, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame, d->supervi->format.bitsPerSample);
+        MotionBlockPyramid DryRun(super, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame);
 
     } catch (std::runtime_error &e) {
         vsapi->mapSetError(out, ("Analyse: " + std::string(e.what())).c_str());

@@ -163,7 +163,7 @@ private:
 
     template <int nLogPel, typename PixelType>
     void DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
+        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType st, int stp, int lambda, int pnew,
         int fieldShift, int64_t thSAD, int smooth, bool meander) noexcept;
 
@@ -177,18 +177,18 @@ private:
     int MotionDistorsion(int vx, int vy) const noexcept;
     VECTOR ClipMV(VECTOR v) const noexcept;
     void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept;
-    void InitMotionEstimationFields(bool useSatd, bool chroma) noexcept;
+    void InitMotionEstimationFields(bool useSatd, bool chroma);
     void EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const noexcept;
 public:
     void SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int lsad, int pnew,
         int plevel, VECTOR *globalMVec, int fieldShift, bool useSatd,
-        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept;
+        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
 
     void RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
+        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) noexcept;
+        int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander);
 
     void EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept;
     void InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) noexcept;
@@ -239,17 +239,18 @@ public:
     int nBlkY;
     int nHPadding;
     int nVPadding;
-    
+
+    int bitsPerSample;
 private:
     State state = State::Invalid;
     DivideExtra divideExtra = DivideExtra::No;
     std::vector<VECTOR> dividedVectors;
     std::vector<MotionBlockLevel> pyramidLevels;
 public:
-    MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int nDeltaFrame, int bitsPerSample);
+    MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int deltaFrame);
+
     // de-serialization from a frame, can choose to omit some levels by setting maxLevel, if -1 all levels are loaded, 0 means only metadata and no vectors are loaded,
     // positive numbers mean that many levels are loaded. When loading from clips passing 1 is usually enough.
-
     // Object can be in an invalid or limited state after this constructor
     MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept;
     void ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept; // serialization to a frame, oneLevel means that only the finest level is exported, otherwise all levels are exported as separate properties
@@ -259,13 +260,14 @@ public:
         SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
         int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
         int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
-        SearchType coarseSearchType, bool chroma) noexcept;
+        SearchType coarseSearchType, bool chroma);
 
     // FIXME, check state before running
+    // FIXME, copy pSrcGOF fields to parameters
     void RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
-        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
+        int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType searchType, int nSearchParam, int nLambda, int pnew,
-        int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) noexcept;
+        int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander);
 
     void DivideVectorsExtra(DivideExtra divideExtra);
 
@@ -275,5 +277,6 @@ public:
     State GetState() const noexcept;
     bool HasMotionVectors() const noexcept;
     bool IsCompatible(const MotionBlockPyramid &other) const noexcept;
+    bool IsCompatible(const FramePyramid &other) const noexcept;
 };
 

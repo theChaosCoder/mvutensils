@@ -614,11 +614,11 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
     predictors[4] = ClipMV(zeroMV);
 }
 
-void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) noexcept {
+void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) {
     this->chroma = chroma;
 
-    // FIXME, report in a nicer way?
-    assert(!useSatd || (nBlkSizeX != 16 && nBlkSizeY != 2));
+    if (useSatd || (nBlkSizeX == 16 && nBlkSizeY == 2))
+        throw MotionBlockPyramidError("Unsupported block size");
 
     /* function pointers initialization */
     if (useSatd)
@@ -1184,7 +1184,7 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
     SearchType st, int stp, int lambda, int lsad, int pnew,
     int plevel, VECTOR *globalMVec,
     int fieldShift, bool useSatd,
-    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept {
+    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
 
     InitMotionEstimationFields(useSatd, chroma);
 
@@ -1210,7 +1210,7 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
 
 template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
+    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
     SearchType st, int stp, int lambda, int pnew,
     int fieldShift, int64_t thSAD, int smooth, bool meander) noexcept {
                                     
@@ -1239,11 +1239,16 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     this->nBlkSizeY = nBlkSizeY;
     this->nOverlapX = nOverlapX;
     this->nOverlapY = nOverlapY;
-    this->nPel = nPel;
+
+    // FIXME, set pSrcFrame attributes like in the normal constructor
+
+    this->chroma = chroma;
 
     // FIXME, needs more adjustment? how to pass changed blocksize/overlap?
     nBlkX = (pSrcFrame.planes[0].nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
     nBlkY = (pSrcFrame.planes[0].nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
+
+    // FIXME, check if larger or equal to realX and smaller or equal to X
 
     vectors.resize(nBlkX * nBlkY);
 
@@ -1448,26 +1453,26 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 }
 
 void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
+    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
     SearchType st, int stp, int lambda, int pnew,
-    int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) noexcept {
+    int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander) {
 
     InitMotionEstimationFields(useSatd, chroma);
 
     if (bytesPerSample == 1) {
         if (nLogPel == 0)
-            DoRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else if (nLogPel == 1)
-            DoRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else
-            DoRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
     } else {
         if (nLogPel == 0)
-            DoRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else if (nLogPel == 1)
-            DoRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
         else
-            DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
     }
 
     mvtools_cpu_emms();
@@ -1487,12 +1492,12 @@ bool MotionBlockLevel::IsSceneChange(int64_t nTh1, int nTh2) const noexcept {
 
 // FIXME, how should the levels modifier work? how did it work?
 // levels > 0 means use that many levels, levels < 0 means use all valid levels except abs(levels) from the end, levels = 0 means use all valid levels
-MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int nDeltaFrame, int bitsPerSample) {
+MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int deltaFrame) {
     this->nBlkSizeX = nBlkSizeX;
     this->nBlkSizeY = nBlkSizeY;
     this->nOverlapX = nOverlapX;
     this->nOverlapY = nOverlapY;
-    this->nDeltaFrame = nDeltaFrame;
+    this->nDeltaFrame = deltaFrame;
     xRatioUV = src.xRatioUV;
     yRatioUV = src.yRatioUV;
     this->chroma = src.chroma && chroma;
@@ -1505,6 +1510,7 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
     nPel = src.nPel;
     nBlkX = (nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
     nBlkY = (nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
+    bitsPerSample = src.bitsPerSample;
 
     int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
     int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
@@ -1562,9 +1568,12 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
 
     nDeltaFrame = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisDeltaFrame").c_str(), 0, &err);
 
+    bitsPerSample = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisBitsPerSample").c_str(), 0, &err);
+
     if (xRatioUV < 1 || yRatioUV < 1 || xRatioUV > 2 || yRatioUV > 2 || nRealWidth > nWidth || nRealHeight > nHeight || nVPadding < 0 || nHPadding < 0
         || nRealHeight < 1 || nRealWidth < 1 || nBlkSizeX < 2 || nBlkSizeY < 2 || nOverlapX < 0 || nOverlapY < 0
-        || nOverlapX > nBlkSizeX / 2 || nOverlapY > nBlkSizeY / 2 || nLevelCount < 1 || (nPel != 1 && nPel != 2 && nPel != 4))
+        || nOverlapX > nBlkSizeX / 2 || nOverlapY > nBlkSizeY / 2 || nLevelCount < 1 || (nPel != 1 && nPel != 2 && nPel != 4)
+        || bitsPerSample < 8 || bitsPerSample > 16)
         return;
 
     std::string vectorsProp = prefix + "AnalysisVectors";
@@ -1613,7 +1622,7 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
     int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
     int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
-    SearchType coarseSearchType, bool chroma) noexcept {
+    SearchType coarseSearchType, bool chroma) {
 
     int fieldShiftCur = (nLevelCount - 1 == 0) ? fieldShift : 0; // may be non zero for finest level only
 
@@ -1654,14 +1663,14 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
 
 
 void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
-    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nPel,
+    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
     SearchType searchType, int nSearchParam, int nLambda, int pnew,
-    int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) noexcept {
+    int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) {
 
     // Search the motion vectors, for the low details interpolations first
     // Refining the search until we reach the highest detail interpolation.
     pyramidLevels[0].RecalculateMVs(pSrcGOF.GetLevel(0), pRefGOF.GetLevel(0),
-        nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, nPel,
+        nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma,
         searchType, nSearchParam, nLambda, pnew,
         fieldShift, thSAD, useSatd, smooth, meander);
 
@@ -1695,6 +1704,8 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std:
 
     vsapi->mapSetInt(props, (prefix + "AnalysisDeltaFrame").c_str(), nDeltaFrame, maReplace);
 
+    vsapi->mapSetInt(props, (prefix + "AnalysisBitsPerSample").c_str(), bitsPerSample, maReplace);
+
     if (HasMotionVectors()) {
         std::string vectorsProp = prefix + "AnalysisVectors";
 
@@ -1725,7 +1736,7 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std:
 }
 
 bool MotionBlockPyramid::IsUsable(int64_t thscd1, int thscd2) const noexcept {
-    return !pyramidLevels[0].IsSceneChange(thscd1, thscd2) && HasMotionVectors();
+    return HasMotionVectors() && !pyramidLevels[0].IsSceneChange(thscd1, thscd2);
 }
 
 BlockData MotionBlockPyramid::GetBlock(int nBlk) const noexcept {
@@ -1775,9 +1786,32 @@ bool MotionBlockPyramid::IsCompatible(const MotionBlockPyramid &other) const noe
     if (xRatioUV != other.xRatioUV || yRatioUV != other.yRatioUV)
         return false;
 
-    // FIXME, is this check needed?
-    //if (bitsPerSample != other.bitsPerSample)
-    //    return false;
+    if (nHPadding != other.nHPadding || nVPadding != other.nVPadding)
+        return false;
+
+    if (bitsPerSample != other.bitsPerSample)
+        return false;
+
+    return true;
+}
+
+bool MotionBlockPyramid::IsCompatible(const FramePyramid &other) const noexcept {
+    // FIXME, does realwidth/height really matter?
+    // FIXME, is bits per sample relevant or even loaded?
+    if (nWidth != other.nWidth[0] || nHeight != other.nHeight[0] || nRealWidth != other.nRealWidth[0] || nRealHeight != other.nRealHeight[0])
+        return false;
+
+    if (xRatioUV != other.xRatioUV || yRatioUV != other.yRatioUV)
+        return false;
+
+    if (nHPadding != other.nHPad[0] || nVPadding != other.nVPad[0])
+        return false;
+
+    if (nPel != other.nPel)
+        return false;
+
+    if (bitsPerSample != other.bitsPerSample)
+        return false;
 
     return true;
 }

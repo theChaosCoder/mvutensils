@@ -174,7 +174,6 @@ public:
     bool chroma;
 
     int bitsPerSample = -1;
-    int bytesPerSample = -1;
 
 private:
     State state = State::Invalid;
@@ -193,8 +192,9 @@ public:
     void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore *core, const VSAPI *vsapi);
     void ExportFrameData(VSFrame *dst, const std::string &prefix) const noexcept; // Stores all levels as frame properties of the output frame, note that each used plane is stored as a separate property
     const FramePyramidLevel &GetLevel(int level) const noexcept;
-    bool IsValid() const noexcept;
-    bool IsValidMetadataValid() const noexcept;
+    bool IsCompatible(const FramePyramid &other) const noexcept;
+    bool IsCompatibleWithSource(const VSVideoInfo *vi) const noexcept;
+
     // FIXME, add these helper functions and create fewer levels when possible?
     //static int GetMaxLevels(int width, int height, int ration, int overlapY, int levels) noexcept;
     //static int GetMaxLevelsForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int overlapY, int levels) noexcept;

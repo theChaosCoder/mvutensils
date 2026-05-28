@@ -761,17 +761,15 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         throw SuperPyramidError("Vertical padding must be positive");
 
     pyramidLevels.resize(levels);
-    const VSVideoFormat *format = vsapi->getVideoFrameFormat(srcFrame);
-    bitsPerSample = format->bitsPerSample;
-    bytesPerSample = format->bytesPerSample;
-    chroma = (format->colorFamily != cfGray);
 
-    // This works because we only support one level of subsampling
     const VSVideoFormat *srcFormat = vsapi->getVideoFrameFormat(srcFrame);
+    chroma = (srcFormat->colorFamily != cfGray);
+    bitsPerSample = srcFormat->bitsPerSample;
+
     assert(srcFormat->subSamplingW <= 1 && srcFormat->subSamplingH <= 1);
     if (chroma) {
-        xRatioUV = srcFormat->subSamplingW + 1;
-        yRatioUV = srcFormat->subSamplingH + 1;
+        xRatioUV = 1 << (srcFormat->subSamplingW);
+        yRatioUV = 1 << (srcFormat->subSamplingH);
     }
 
     nHPad[0] = hPad;
@@ -782,7 +780,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
     nVPad[1] = vPad / yRatioUV;
     nVPad[2] = vPad / yRatioUV;
 
-    for (int plane = 0; plane < format->numPlanes; plane++) {
+    for (int plane = 0; plane < srcFormat->numPlanes; plane++) {
         nRealWidth[plane] = vsapi->getFrameWidth(srcFrame, plane);
         nRealHeight[plane] = vsapi->getFrameHeight(srcFrame, plane);
 
@@ -814,12 +812,12 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         }
     }
 
-    size_t tempBufferSize = (nWidth[0] * format->bytesPerSample * 8); // FIXME, roud up nicer?
+    size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8); // FIXME, roud up nicer?
 
     uint8_t *tempBuffer = vsh::vsh_aligned_malloc<uint8_t>(tempBufferSize, 32);
 
     // FIXME, also limit the number of levels generated based on blksize to save memory
-    if (format->bytesPerSample == 1) {
+    if (srcFormat->bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
             pyramidLevels[0].planes[plane].CopyAndPadPlane<uint8_t>(srcFrame, plane, nHPad[plane], nVPad[plane], nWidth[plane] - nRealWidth[plane], nHeight[plane] - nRealHeight[plane], core, vsapi);
             for (int i = 1; i < levels; i++)
@@ -855,12 +853,16 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
     nRealHeight[0] = vsapi->mapGetIntSaturated(props, (prefix + "SuperRealHeight").c_str(), 0, &err);
     nHPad[0] = vsapi->mapGetIntSaturated(props, (prefix + "SuperHPad").c_str(), 0, &err);
     nVPad[0] = vsapi->mapGetIntSaturated(props, (prefix + "SuperVPad").c_str(), 0, &err);
+    bitsPerSample = vsapi->mapGetIntSaturated(props, (prefix + "SuperBitsPerSample").c_str(), 0, &err);
+
 
     nPel = vsapi->mapGetIntSaturated(props, (prefix + "SuperPel").c_str(), 0, &err);
     int levels = vsapi->mapGetIntSaturated(props, (prefix + "SuperLevels").c_str(), 0, &err);
     chroma = !!vsapi->mapGetInt(props, (prefix + "SuperChroma").c_str(), 0, &err );
 
-    if (xRatioUV < 1 || yRatioUV < 1 || xRatioUV > 2 || yRatioUV > 2 || nRealWidth[0] > nWidth[0] || nRealHeight[0] > nHeight[0] || nVPad[0] < 0 || nHPad[0] < 0 || nRealHeight[0] < 1 || nRealWidth[0] < 1 || levels < 1 || (nPel != 1 && nPel != 2 && nPel != 4))
+    if (xRatioUV < 1 || yRatioUV < 1 || xRatioUV > 2 || yRatioUV > 2 || nRealWidth[0] > nWidth[0] || nRealHeight[0] > nHeight[0]
+        || nVPad[0] < 0 || nHPad[0] < 0 || nRealHeight[0] < 1 || nRealWidth[0] < 1 || levels < 1 || (nPel != 1 && nPel != 2 && nPel != 4)
+        || bitsPerSample < 8 || bitsPerSample > 16)
         throw SuperPyramidError("Invalid super frame metadata");
 
     if (chroma) {
@@ -877,6 +879,8 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
         nVPad[1] = nVPad[0] / yRatioUV;
         nVPad[2] = nVPad[0] / yRatioUV;
     }
+
+    bitsPerSample = vsapi->getVideoFrameFormat(srcFrame)->bitsPerSample;
 
     // FIXME, check so all levels match the declared metadata sizes
 
@@ -939,7 +943,7 @@ void FramePyramid::GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, co
         throw SuperPyramidError("Pel planes have already been generated");
     if (pel != 2 && pel != 4)
         throw SuperPyramidError("Pel value must be 2 or 4");
-    if (bytesPerSample == 1) {
+    if (bitsPerSample == 8) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].GeneratePelPlanes<uint8_t>(pel, sharp, core, vsapi);
     } else {
@@ -969,7 +973,7 @@ void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore
         vsapi->getFrameHeight(pelFrame, 0) != vsapi->getFrameHeight(storageFrame, 0) * pel)
         throw SuperPyramidError("Pel frame dimensions are not a suitable multiple of the source frame dimensions");
 
-    if (bytesPerSample == 1) {
+    if (bitsPerSample == 8) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++)
             pyramidLevels[0].planes[plane].SetExternalPelPlanes<uint8_t>(pelFrame, pel, plane, core, vsapi);
     } else {
@@ -1007,6 +1011,7 @@ void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) cons
     vsapi->mapSetInt(props, (prefix + "SuperChroma").c_str(), chroma, maReplace);
     vsapi->mapSetInt(props, (prefix + "SuperXRatioUV").c_str(), xRatioUV, maReplace);
     vsapi->mapSetInt(props, (prefix + "SuperYRatioUV").c_str(), yRatioUV, maReplace);
+    vsapi->mapSetInt(props, (prefix + "SuperBitsPerSample").c_str(), bitsPerSample, maReplace);
 }
 
 const FramePyramidLevel &FramePyramid::GetLevel(int level) const noexcept {
@@ -1014,11 +1019,20 @@ const FramePyramidLevel &FramePyramid::GetLevel(int level) const noexcept {
     return pyramidLevels[level];
 }
 
-
-bool FramePyramid::IsValid() const noexcept {
-    return state == State::Valid;
+bool FramePyramid::IsCompatible(const FramePyramid &other) const noexcept {
+    if (nWidth[0] != other.nWidth[0] || nHeight[0] != other.nHeight[0] || nPel != other.nPel || chroma != other.chroma
+        || nRealWidth[0] != other.nRealWidth[0] || nRealHeight[0] != other.nRealHeight[0] || nHPad[0] != other.nHPad[0] || nVPad[0] != other.nVPad[0]
+        || nBlkSizePadX[0] != other.nBlkSizePadX[0] || nBlkSizePadY[0] != other.nBlkSizePadY[0] || xRatioUV != other.xRatioUV || yRatioUV != other.yRatioUV || bitsPerSample != other.bitsPerSample)
+        return false;
+    return true;
 }
 
-bool FramePyramid::IsValidMetadataValid() const noexcept {
-    return IsValid() || state == State::ValidMetadataOnly;
+bool FramePyramid::IsCompatibleWithSource(const VSVideoInfo *vi) const noexcept {
+    if (!vsh::isConstantVideoFormat(vi))
+        return false;
+    if (vi->format.numPlanes != (chroma ? 3 : 1))
+        return false;
+    if (nRealWidth[0] != vi->width || nRealHeight[0] != vi->height || (xRatioUV != 1 << vi->format.subSamplingW) || yRatioUV != (1 << vi->format.subSamplingH) || bitsPerSample != vi->format.bitsPerSample)
+        return false;
+    return true;
 }

@@ -36,7 +36,7 @@
     <ClInclude Include="..\src\MVFlowFPSHelper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\MVDegrains.h">
+    <ClInclude Include="..\src\Degrains.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\CopyCode.h">
@@ -71,7 +71,7 @@
     <ClCompile Include="..\src\MVFlow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVDegrains.cpp">
+    <ClCompile Include="..\src\Degrains.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\CopyCode.cpp">
@@ -113,13 +113,13 @@
     <ClCompile Include="..\src\MVMask.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVRecalculate.cpp">
+    <ClCompile Include="..\src\Recalculate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\MVFlowFPSHelper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVDegrains_AVX2.cpp">
+    <ClCompile Include="..\src\Degrains_AVX2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\CPU.cpp">

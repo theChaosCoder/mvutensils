@@ -561,6 +561,9 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
     try {
         getProcessPlanesArg(in, d->process, vsapi);
 
+        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = vsapi->getVideoInfo(d->node);
+
         char errorMsg[ERROR_SIZE + 1] = {};
         const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
         if (!evil)
@@ -584,21 +587,20 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
             if (!vecFrame)
                 throw std::runtime_error("Failed to retrieve first frame from vector clip " + std::to_string(r) + ": " + std::string(errorMsg));
 
-            try {
-                evilVectors[r].emplace(vecFrame, 0, d->prefix, core, vsapi);
-            } catch (...) {
-                vsapi->freeFrame(vecFrame);
-                throw;
-            }
+            evilVectors[r].emplace(vecFrame, 0, d->prefix, core, vsapi);
+            vsapi->freeFrame(vecFrame);
 
             if (r > 0 && !evilVectors[r]->IsCompatible(*evilVectors[r - 1]))
-                throw std::runtime_error("Incompatible vector formats");
+                throw std::runtime_error("The motion vectors passed are not compatible with each other");
+
+            if (!evilVectors[r]->IsCompatible(evilPyramid))
+                throw std::runtime_error("The motion vectors passed are not compatible with the super clip");
 
             d->deltaFrame[r] = evilVectors[r]->nDeltaFrame;
         }
 
-        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
-        d->vi = vsapi->getVideoInfo(d->node);
+        if (!evilPyramid.IsCompatibleWithSource(d->vi))
+            throw std::runtime_error("super clip is not compatible with the source clip");
 
         int64_t nSCD1_old = d->nSCD1;
         evilVectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
