@@ -112,7 +112,15 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         vsapi->requestFrameFilter(n, d->node, frameCtx);
     } else if (activationReason == arAllFramesReady) {
         const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
-        VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
+
+        const int pl[] = { 0, 1, 2 };
+        const VSFrame *fr[] = {
+            d->process[0] ? nullptr : src,
+            d->process[1] ? nullptr : src,
+            d->process[2] ? nullptr : src
+        };
+
+        VSFrame *dst = vsapi->newVideoFrame2(&d->vi->format, d->vi->width, d->vi->height, fr, pl, src, core);
 
         int bitsPerSample = d->vi->format.bitsPerSample;
 
@@ -202,10 +210,8 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         // -----------------------------------------------------------------------------
 
         for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-            if (!d->process[plane]) {
-                memcpy(pDstCur[plane], pSrcCur[plane], nSrcPitches[plane] * nHeight[plane]);
+            if (!d->process[plane])
                 continue;
-            }
 
             if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
                 for (int by = 0; by < nBlkY; by++) {
@@ -286,9 +292,14 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                     // Last block row outputs all nBlkSizeY rows; others output only stepY
                     int rowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : stepY;
+                    int outputHeight = std::min(rowsToOutput, vsapi->getFrameHeight(dst, plane) - by * stepY);
+                    int outputWidth = std::min(nWidth_B[plane], vsapi->getFrameWidth(dst, plane));
 
-                    d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp, dstTempPitch,
-                        nWidth_B[plane], rowsToOutput, bitsPerSample);
+                    
+
+                    if (outputHeight > 0)
+                        d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp, dstTempPitch,
+                            outputWidth, outputHeight, bitsPerSample);
 
                     pDstCur[plane] += nDstPitches[plane] * rowsToOutput;
                     pSrcCur[plane] += stepY * nSrcPitches[plane];
@@ -298,22 +309,22 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                         memmove(DstTemp, DstTemp + stepY * dstTempPitch, nOverlapY[plane] * dstTempPitch);
                 }
 
-                if (nWidth_B[0] < nWidth[0])
+                if (nWidth_B[0] < vsapi->getFrameWidth(dst, plane))
                     vsh::bitblt(pDst[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
                         pSrc[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
-                        (nWidth[plane] - nWidth_B[plane]) * bytesPerSample, nHeight_B[plane]);
+                        (vsapi->getFrameWidth(dst, plane) - nWidth_B[plane]) * bytesPerSample, nHeight_B[plane]);
 
-                if (nHeight_B[0] < nHeight[0]) // bottom noncovered region
+                if (nHeight_B[0] < vsapi->getFrameHeight(dst, plane)) // bottom noncovered region
                     vsh::bitblt(pDst[plane] + nDstPitches[plane] * nHeight_B[plane], nDstPitches[plane],
                         pSrc[plane] + nSrcPitches[plane] * nHeight_B[plane], nSrcPitches[plane],
-                        nWidth[plane] * bytesPerSample, nHeight[plane] - nHeight_B[plane]);
+                        nWidth[plane] * bytesPerSample, vsapi->getFrameHeight(dst, plane) - nHeight_B[plane]);
             }
 
             int pixelMax = (1 << bitsPerSample) - 1;
             if (nLimit[plane] < pixelMax)
                 d->LimitChanges(pDst[plane], nDstPitches[plane],
                                 pSrc[plane], nSrcPitches[plane],
-                                nWidth[plane], nHeight[plane], nLimit[plane]);
+                                vsapi->getFrameWidth(dst, plane), vsapi->getFrameHeight(dst, plane), nLimit[plane]);
         }
 
 
