@@ -123,10 +123,8 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         uint8_t *pDstCur[3] = {};
         const uint8_t *pSrcCur[3] = {};
         const uint8_t *pSrc[3] = {};
-        const uint8_t *pRefs[radius * 2][3] = {};
         ptrdiff_t nDstPitches[3] = { 0 };
         ptrdiff_t nSrcPitches[3] = { 0 };
-        ptrdiff_t nRefPitches[radius * 2][3] = {};
         bool isUsable[radius * 2];
 
         std::optional<MotionBlockPyramid> fgops[radius * 2];
@@ -154,11 +152,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
             pSrc[i] = vsapi->getReadPtr(src, i);
             nSrcPitches[i] = vsapi->getStride(src, i);
 
-            for (int r = 0; r < radius * 2; r++)
-                if (isUsable[r]) {
-                    pRefs[r][i] = vsapi->getReadPtr(refFrames[r], i);
-                    nRefPitches[r][i] = vsapi->getStride(refFrames[r], i);
-                }
         }
 
         const int xSubUV = d->xSubUV;
