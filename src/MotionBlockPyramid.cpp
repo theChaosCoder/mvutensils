@@ -1632,7 +1632,7 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
     state = State::AnalysisDone;
 }
 
-void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept {
+void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept {
     auto props = vsapi->getFramePropertiesRW(dst);
 
     vsapi->mapSetInt(props, (prefix + "AnalysisWidth").c_str(), nWidth, maReplace);
@@ -1669,6 +1669,8 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix
                 dividedVectors.size() * sizeof(VECTOR),
                 dtBinary,
                 maReplace);
+            if (oneLevel)
+                return;
         }
 
         for (int i = 0; i < nLevelCount; i++) {
@@ -1679,6 +1681,8 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, const std::string &prefix
                 plane.vectors.size() * sizeof(VECTOR),
                 dtBinary,
                 maAppend);
+            if (oneLevel)
+                return;
         };
     }
 

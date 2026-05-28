@@ -131,7 +131,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
-            vectorFields.ExportFrameData(dst, d->prefix, core, vsapi);
+            vectorFields.ExportFrameData(dst, true, d->prefix, core, vsapi);
 
             return dst;
 

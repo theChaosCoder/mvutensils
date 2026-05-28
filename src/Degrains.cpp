@@ -90,6 +90,8 @@ template<int radius, typename PixelType>
 static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     DegrainData<radius> *d = reinterpret_cast<DegrainData<radius> *>(instanceData);
 
+    // FIXME, handle exception
+    // FIXME, investigate weird vector delta frame checks
     if (activationReason == arInitial) {
 
         for (int r = 0; r < radius * 2; r += 2) {
@@ -214,6 +216,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                 continue;
 
             if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
+                // FIXME, case when blocksize isn't a multiple of the frame size
                 for (int by = 0; by < nBlkY; by++) {
                     int xx = 0;
                     for (int bx = 0; bx < nBlkX; bx++) {
