@@ -69,6 +69,7 @@ struct DegrainData {
     OverlapWindows OverWins[3];
 
     std::string prefix;
+    std::string filterName;
 
     const VSAPI *vsapi;
 
@@ -90,7 +91,6 @@ template<int radius, typename PixelType>
 static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     DegrainData<radius> *d = reinterpret_cast<DegrainData<radius> *>(instanceData);
 
-    // FIXME, handle exception
     // FIXME, investigate weird vector delta frame checks
     if (activationReason == arInitial) {
 
@@ -141,233 +141,236 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         ptrdiff_t nSrcPitches[3] = {};
         bool isUsable[radius * 2] = {};
 
-        std::optional<MotionBlockPyramid> fgops[radius * 2];
-        
-        const VSFrame *refFrames[radius * 2] = {};
+        try {
 
-        for (int r = 0; r < radius * 2; r++) {
-            const VSFrame *frame = vsapi->getFrameFilter(n, d->vectors[r], frameCtx);
-            fgops[r].emplace(frame, 1, d->prefix, core, vsapi);
-            isUsable[r] = fgops[r]->IsUsable(d->nSCD1, d->nSCD2);
-            vsapi->freeFrame(frame);
+            std::optional<MotionBlockPyramid> fgops[radius * 2];
 
-            if (isUsable[r]) {
-                int offset = fgops[r]->nDeltaFrame;
-                refFrames[r] = vsapi->getFrameFilter(n + offset, d->super, frameCtx);
+            const VSFrame *refFrames[radius * 2] = {};
+
+            for (int r = 0; r < radius * 2; r++) {
+                const VSFrame *frame = vsapi->getFrameFilter(n, d->vectors[r], frameCtx);
+                fgops[r].emplace(frame, 1, d->prefix, core, vsapi);
+                isUsable[r] = fgops[r]->IsUsable(d->nSCD1, d->nSCD2);
+                vsapi->freeFrame(frame);
+
+                if (isUsable[r]) {
+                    int offset = fgops[r]->nDeltaFrame;
+                    refFrames[r] = vsapi->getFrameFilter(n + offset, d->super, frameCtx);
+                }
             }
-        }
 
-        int nLogPel = (fgops[0]->nPel == 4) ? 2 : (fgops[0]->nPel == 2) ? 1 : 0;
-
-
-        FramePyramid pSrcFrame(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, core, vsapi);
-        const auto &srcLevel = pSrcFrame.GetLevel(0);
-
-        for (int i = 0; i < d->vi->format.numPlanes; i++) {
-            pDst[i] = vsapi->getWritePtr(dst, i);
-            nDstPitches[i] = vsapi->getStride(dst, i);
-            pSrc[i] = srcLevel.planes[i].GetPointer<PixelType>(0, 0);
-            nSrcPitches[i] = srcLevel.planes[i].nPitch;
-
-        }
-
-        const int xSubUV = d->xSubUV;
-        const int ySubUV = d->ySubUV;
-        const int nBlkX = fgops[0]->nBlkX;
-        const int nBlkY = fgops[0]->nBlkY;
-        const ptrdiff_t dstTempPitch = d->dstTempPitch;
-        const int *nWidth = d->nWidth;
-        const int *nHeight = d->nHeight;
-        const int *nOverlapX = d->nOverlapX;
-        const int *nOverlapY = d->nOverlapY;
-        const int *nBlkSizeX = d->nBlkSizeX;
-        const int *nBlkSizeY = d->nBlkSizeY;
-        const int *nWidth_B = d->nWidth_B;
-        const int *nHeight_B = d->nHeight_B;
-        const int64_t *thSAD = d->thSAD;
-        const int *nLimit = d->nLimit;
+            int nLogPel = (fgops[0]->nPel == 4) ? 2 : (fgops[0]->nPel == 2) ? 1 : 0;
 
 
-        std::optional<FramePyramid> pRefGOF[radius * 2];
-        for (int r = 0; r < radius * 2; r++)
-            if (isUsable[r])
-                pRefGOF[r].emplace(refFrames[r], 1, d->prefix, core, vsapi);
+            FramePyramid pSrcFrame(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, core, vsapi);
+            const auto &srcLevel = pSrcFrame.GetLevel(0);
 
-        OverlapWindows *OverWins[3] = { &d->OverWins[0], &d->OverWins[1], &d->OverWins[2] };
-        uint8_t *DstTemp = nullptr;
-        int tmpBlockPitch = nBlkSizeX[0] * bytesPerSample;
-        if (nOverlapX[0] > 0 || nOverlapY[0] > 0)
-            DstTemp = new uint8_t[dstTempPitch * nBlkSizeY[0]];
+            for (int i = 0; i < d->vi->format.numPlanes; i++) {
+                pDst[i] = vsapi->getWritePtr(dst, i);
+                nDstPitches[i] = vsapi->getStride(dst, i);
+                pSrc[i] = srcLevel.planes[i].GetPointer<PixelType>(0, 0);
+                nSrcPitches[i] = srcLevel.planes[i].nPitch;
+
+            }
+
+            const int xSubUV = d->xSubUV;
+            const int ySubUV = d->ySubUV;
+            const int nBlkX = fgops[0]->nBlkX;
+            const int nBlkY = fgops[0]->nBlkY;
+            const ptrdiff_t dstTempPitch = d->dstTempPitch;
+            const int *nWidth = d->nWidth;
+            const int *nHeight = d->nHeight;
+            const int *nOverlapX = d->nOverlapX;
+            const int *nOverlapY = d->nOverlapY;
+            const int *nBlkSizeX = d->nBlkSizeX;
+            const int *nBlkSizeY = d->nBlkSizeY;
+            const int *nWidth_B = d->nWidth_B;
+            const int *nHeight_B = d->nHeight_B;
+            const int64_t *thSAD = d->thSAD;
+            const int *nLimit = d->nLimit;
 
 
-        uint8_t *tmpBlock = new uint8_t[tmpBlockPitch * nBlkSizeY[0]];
+            std::optional<FramePyramid> pRefGOF[radius * 2];
+            for (int r = 0; r < radius * 2; r++)
+                if (isUsable[r])
+                    pRefGOF[r].emplace(refFrames[r], 1, d->prefix, core, vsapi);
 
-        const FramePyramidLevel *pPlanes[radius * 2] = {};
+            OverlapWindows *OverWins[3] = { &d->OverWins[0], &d->OverWins[1], &d->OverWins[2] };
+            std::unique_ptr<uint8_t[]> DstTempAlloc;
+            uint8_t *DstTemp = nullptr;
+            int tmpBlockPitch = nBlkSizeX[0] * bytesPerSample;
+            if (nOverlapX[0] > 0 || nOverlapY[0] > 0) {
+                DstTempAlloc.reset(new uint8_t[dstTempPitch * nBlkSizeY[0]]);
+                DstTemp = DstTempAlloc.get();
+            }
 
-        for (int r = 0; r < radius * 2; r++) {
-            if (isUsable[r])
-                pPlanes[r] = &pRefGOF[r]->GetLevel(0);
-        }
+            std::unique_ptr<uint8_t[]> tmpBlockAlloc(new uint8_t[tmpBlockPitch * nBlkSizeY[0]]);
+            uint8_t *tmpBlock = tmpBlockAlloc.get();
+
+            const FramePyramidLevel *pPlanes[radius * 2] = {};
+
+            for (int r = 0; r < radius * 2; r++) {
+                if (isUsable[r])
+                    pPlanes[r] = &pRefGOF[r]->GetLevel(0);
+            }
 
 
-        pDstCur[0] = pDst[0];
-        pDstCur[1] = pDst[1];
-        pDstCur[2] = pDst[2];
-        pSrcCur[0] = pSrc[0];
-        pSrcCur[1] = pSrc[1];
-        pSrcCur[2] = pSrc[2];
-        // -----------------------------------------------------------------------------
+            pDstCur[0] = pDst[0];
+            pDstCur[1] = pDst[1];
+            pDstCur[2] = pDst[2];
+            pSrcCur[0] = pSrc[0];
+            pSrcCur[1] = pSrc[1];
+            pSrcCur[2] = pSrc[2];
+            // -----------------------------------------------------------------------------
 
-        for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-            if (!d->process[plane])
-                continue;
+            for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
+                if (!d->process[plane])
+                    continue;
 
-            if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
-                const int frameW = vsapi->getFrameWidth(dst, plane);
-                const int frameH = vsapi->getFrameHeight(dst, plane);
+                if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
+                    const int frameW = vsapi->getFrameWidth(dst, plane);
+                    const int frameH = vsapi->getFrameHeight(dst, plane);
 
-                for (int by = 0; by < nBlkY; by++) {
-                    const int dstPixY = by * nBlkSizeY[plane];
-                    const int validH = std::min(nBlkSizeY[plane], frameH - dstPixY);
-                    if (validH <= 0)
-                        break;
+                    for (int by = 0; by < nBlkY; by++) {
+                        const int dstPixY = by * nBlkSizeY[plane];
+                        const int validH = std::min(nBlkSizeY[plane], frameH - dstPixY);
+                        if (validH <= 0)
+                            break;
 
-                    int xx = 0;
-                    for (int bx = 0; bx < nBlkX; bx++) {
-                        int i = by * nBlkX + bx;
+                        int xx = 0;
+                        for (int bx = 0; bx < nBlkX; bx++) {
+                            int i = by * nBlkX + bx;
 
-                        const uint8_t *pointers[radius * 2];
-                        ptrdiff_t strides[radius * 2];
-                        int WSrc, WRefs[radius * 2];
+                            const uint8_t *pointers[radius * 2];
+                            ptrdiff_t strides[radius * 2];
+                            int WSrc, WRefs[radius * 2];
 
-                        for (int r = 0; r < radius * 2; r++)
-                            useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
+                            for (int r = 0; r < radius * 2; r++)
+                                useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
 
-                        normaliseWeights<radius>(WSrc, WRefs);
+                            normaliseWeights<radius>(WSrc, WRefs);
 
-                        const int dstPixX = xx / bytesPerSample;
-                        const int validW = std::min(nBlkSizeX[plane], frameW - dstPixX);
+                            const int dstPixX = xx / bytesPerSample;
+                            const int validW = std::min(nBlkSizeX[plane], frameW - dstPixX);
 
-                        if (validW == nBlkSizeX[plane] && validH == nBlkSizeY[plane]) {
-                            // Block fits entirely — write directly
-                            d->DEGRAIN[plane](pDstCur[plane] + xx, nDstPitches[plane], pSrcCur[plane] + xx, nSrcPitches[plane],
-                                pointers, strides, WSrc, WRefs);
-                        } else if (validW > 0) {
-                            // Edge block — write to tmpBlock, then copy only the valid region
-                            d->DEGRAIN[plane](tmpBlock, tmpBlockPitch, pSrcCur[plane] + xx, nSrcPitches[plane],
-                                pointers, strides, WSrc, WRefs);
-                            vsh::bitblt(pDstCur[plane] + xx, nDstPitches[plane],
-                                tmpBlock, tmpBlockPitch,
-                                validW * bytesPerSample, validH);
+                            if (validW == nBlkSizeX[plane] && validH == nBlkSizeY[plane]) {
+                                // Block fits entirely — write directly
+                                d->DEGRAIN[plane](pDstCur[plane] + xx, nDstPitches[plane], pSrcCur[plane] + xx, nSrcPitches[plane],
+                                    pointers, strides, WSrc, WRefs);
+                            } else if (validW > 0) {
+                                // Edge block — write to tmpBlock, then copy only the valid region
+                                d->DEGRAIN[plane](tmpBlock, tmpBlockPitch, pSrcCur[plane] + xx, nSrcPitches[plane],
+                                    pointers, strides, WSrc, WRefs);
+                                vsh::bitblt(pDstCur[plane] + xx, nDstPitches[plane],
+                                    tmpBlock, tmpBlockPitch,
+                                    validW * bytesPerSample, validH);
+                            }
+
+                            xx += nBlkSizeX[plane] * bytesPerSample;
                         }
 
-                        xx += nBlkSizeX[plane] * bytesPerSample;
+                        // Right non-covered region (source copy), clamped to actual row count
+                        if (nWidth_B[plane] < frameW)
+                            vsh::bitblt(pDstCur[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
+                                pSrcCur[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
+                                (frameW - nWidth_B[plane]) * bytesPerSample, validH);
+
+                        pDstCur[plane] += nBlkSizeY[plane] * nDstPitches[plane];
+                        pSrcCur[plane] += nBlkSizeY[plane] * nSrcPitches[plane];
                     }
 
-                    // Right non-covered region (source copy), clamped to actual row count
-                    if (nWidth_B[plane] < frameW)
-                        vsh::bitblt(pDstCur[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
-                            pSrcCur[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
-                            (frameW - nWidth_B[plane]) * bytesPerSample, validH);
+                    // Bottom non-covered region (source copy)
+                    if (nHeight_B[plane] < frameH)
+                        vsh::bitblt(pDstCur[plane], nDstPitches[plane],
+                            pSrcCur[plane], nSrcPitches[plane],
+                            frameW * bytesPerSample, frameH - nHeight_B[plane]);
+                } else { // overlap - sliding window
+                    const int stepY = nBlkSizeY[plane] - nOverlapY[plane];
 
-                    pDstCur[plane] += nBlkSizeY[plane] * nDstPitches[plane];
-                    pSrcCur[plane] += nBlkSizeY[plane] * nSrcPitches[plane];
-                }
+                    // Clear the whole buffer for the first block row
+                    memset(DstTemp, 0, dstTempPitch * nBlkSizeY[plane]);
 
-                // Bottom non-covered region (source copy)
-                if (nHeight_B[plane] < frameH)
-                    vsh::bitblt(pDstCur[plane], nDstPitches[plane],
-                        pSrcCur[plane], nSrcPitches[plane],
-                        frameW * bytesPerSample, frameH - nHeight_B[plane]);
-            } else { // overlap - sliding window
-                const int stepY = nBlkSizeY[plane] - nOverlapY[plane];
+                    for (int by = 0; by < nBlkY; by++) {
+                        int wby = ((by + nBlkY - 3) / (nBlkY - 2)) * 3;
+                        int wbx = 0;
+                        int xx = 0;
 
-                // Clear the whole buffer for the first block row
-                memset(DstTemp, 0, dstTempPitch * nBlkSizeY[plane]);
+                        // For subsequent rows only clear the new (non-overlap) region;
+                        // the top nOverlapY rows were preserved by the memmove below
+                        if (by > 0)
+                            memset(DstTemp + nOverlapY[plane] * dstTempPitch, 0, dstTempPitch * stepY);
 
-                for (int by = 0; by < nBlkY; by++) {
-                    int wby = ((by + nBlkY - 3) / (nBlkY - 2)) * 3;
-                    int wbx = 0;
-                    int xx = 0;
+                        for (int bx = 0; bx < nBlkX; bx++) {
+                            // select window
+                            wbx = bx == nBlkX - 1 ? 2 : wbx;
+                            const int16_t *winOver = OverWins[plane]->GetWindow(wby + wbx);
 
-                    // For subsequent rows only clear the new (non-overlap) region;
-                    // the top nOverlapY rows were preserved by the memmove below
-                    if (by > 0)
-                        memset(DstTemp + nOverlapY[plane] * dstTempPitch, 0, dstTempPitch * stepY);
+                            int i = by * nBlkX + bx;
 
-                    for (int bx = 0; bx < nBlkX; bx++) {
-                        // select window
-                        wbx = bx == nBlkX - 1 ? 2 : wbx;
-                        const int16_t *winOver = OverWins[plane]->GetWindow(wby + wbx);
+                            const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
+                            ptrdiff_t strides[radius * 2];
 
-                        int i = by * nBlkX + bx;
+                            int WSrc, WRefs[radius * 2];
 
-                        const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
-                        ptrdiff_t strides[radius * 2];
+                            for (int r = 0; r < radius * 2; r++)
+                                useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
 
-                        int WSrc, WRefs[radius * 2];
+                            normaliseWeights<radius>(WSrc, WRefs);
 
-                        for (int r = 0; r < radius * 2; r++)
-                            useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
+                            d->DEGRAIN[plane](tmpBlock, tmpBlockPitch, pSrcCur[plane] + xx, nSrcPitches[plane],
+                                pointers, strides,
+                                WSrc, WRefs);
+                            d->OVERS[plane](DstTemp + xx * 2, dstTempPitch, tmpBlock, tmpBlockPitch, winOver, nBlkSizeX[plane]);
 
-                        normaliseWeights<radius>(WSrc, WRefs);
+                            xx += (nBlkSizeX[plane] - nOverlapX[plane]) * bytesPerSample;
+                            wbx = 1;
+                        }
 
-                        d->DEGRAIN[plane](tmpBlock, tmpBlockPitch, pSrcCur[plane] + xx, nSrcPitches[plane],
-                            pointers, strides,
-                            WSrc, WRefs);
-                        d->OVERS[plane](DstTemp + xx * 2, dstTempPitch, tmpBlock, tmpBlockPitch, winOver, nBlkSizeX[plane]);
+                        // Last block row outputs all nBlkSizeY rows; others output only stepY
+                        int rowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : stepY;
+                        int outputHeight = std::min(rowsToOutput, vsapi->getFrameHeight(dst, plane) - by * stepY);
+                        int outputWidth = std::min(nWidth_B[plane], vsapi->getFrameWidth(dst, plane));
 
-                        xx += (nBlkSizeX[plane] - nOverlapX[plane]) * bytesPerSample;
-                        wbx = 1;
+
+
+                        if (outputHeight > 0)
+                            d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp, dstTempPitch,
+                                outputWidth, outputHeight, bitsPerSample);
+
+                        pDstCur[plane] += nDstPitches[plane] * rowsToOutput;
+                        pSrcCur[plane] += stepY * nSrcPitches[plane];
+
+                        // Slide: preserve the overlap rows at the top for the next block row
+                        if (by < nBlkY - 1)
+                            memmove(DstTemp, DstTemp + stepY * dstTempPitch, nOverlapY[plane] * dstTempPitch);
                     }
 
-                    // Last block row outputs all nBlkSizeY rows; others output only stepY
-                    int rowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : stepY;
-                    int outputHeight = std::min(rowsToOutput, vsapi->getFrameHeight(dst, plane) - by * stepY);
-                    int outputWidth = std::min(nWidth_B[plane], vsapi->getFrameWidth(dst, plane));
+                    if (nWidth_B[0] < vsapi->getFrameWidth(dst, plane))
+                        vsh::bitblt(pDst[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
+                            pSrc[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
+                            (vsapi->getFrameWidth(dst, plane) - nWidth_B[plane]) * bytesPerSample, nHeight_B[plane]);
 
-                    
-
-                    if (outputHeight > 0)
-                        d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp, dstTempPitch,
-                            outputWidth, outputHeight, bitsPerSample);
-
-                    pDstCur[plane] += nDstPitches[plane] * rowsToOutput;
-                    pSrcCur[plane] += stepY * nSrcPitches[plane];
-
-                    // Slide: preserve the overlap rows at the top for the next block row
-                    if (by < nBlkY - 1)
-                        memmove(DstTemp, DstTemp + stepY * dstTempPitch, nOverlapY[plane] * dstTempPitch);
+                    if (nHeight_B[0] < vsapi->getFrameHeight(dst, plane)) // bottom noncovered region
+                        vsh::bitblt(pDst[plane] + nDstPitches[plane] * nHeight_B[plane], nDstPitches[plane],
+                            pSrc[plane] + nSrcPitches[plane] * nHeight_B[plane], nSrcPitches[plane],
+                            nWidth[plane] * bytesPerSample, vsapi->getFrameHeight(dst, plane) - nHeight_B[plane]);
                 }
 
-                if (nWidth_B[0] < vsapi->getFrameWidth(dst, plane))
-                    vsh::bitblt(pDst[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
-                        pSrc[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
-                        (vsapi->getFrameWidth(dst, plane) - nWidth_B[plane]) * bytesPerSample, nHeight_B[plane]);
-
-                if (nHeight_B[0] < vsapi->getFrameHeight(dst, plane)) // bottom noncovered region
-                    vsh::bitblt(pDst[plane] + nDstPitches[plane] * nHeight_B[plane], nDstPitches[plane],
-                        pSrc[plane] + nSrcPitches[plane] * nHeight_B[plane], nSrcPitches[plane],
-                        nWidth[plane] * bytesPerSample, vsapi->getFrameHeight(dst, plane) - nHeight_B[plane]);
+                int pixelMax = (1 << bitsPerSample) - 1;
+                if (nLimit[plane] < pixelMax)
+                    d->LimitChanges(pDst[plane], nDstPitches[plane],
+                        pSrc[plane], nSrcPitches[plane],
+                        vsapi->getFrameWidth(dst, plane), vsapi->getFrameHeight(dst, plane), nLimit[plane]);
             }
 
-            int pixelMax = (1 << bitsPerSample) - 1;
-            if (nLimit[plane] < pixelMax)
-                d->LimitChanges(pDst[plane], nDstPitches[plane],
-                                pSrc[plane], nSrcPitches[plane],
-                                vsapi->getFrameWidth(dst, plane), vsapi->getFrameHeight(dst, plane), nLimit[plane]);
+
+            return dst;
+
+        } catch (std::runtime_error &e) {
+            vsapi->freeFrame(dst);
+            vsapi->setFilterError((d->filterName + ": " + e.what()).c_str(), frameCtx);
+            return nullptr;
         }
-
-
-        if (tmpBlock)
-            delete[] tmpBlock;
-
-        if (DstTemp)
-            delete[] DstTemp;
-
-        vsapi->freeFrame(src);
-
-        return dst;
     }
 
     return nullptr;
@@ -550,8 +553,8 @@ template <int radius>
 static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<DegrainData<radius>> d(new DegrainData<radius>(vsapi));
 
-    std::string filter = "Degrain";
-    filter.append(std::to_string(radius));
+    
+    d->filterName = "Degrain" + std::to_string(radius);
 
     int err;
 
@@ -746,11 +749,11 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         assert(numDeps == deps.size());
 
-        vsapi->createVideoFilter(out, filter.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, filterFree<DegrainData<radius>>, fmParallel, deps.data(), numDeps, d.get(), core);
+        vsapi->createVideoFilter(out, d->filterName.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, filterFree<DegrainData<radius>>, fmParallel, deps.data(), numDeps, d.get(), core);
         d.release();
 
     } catch (std::runtime_error &e) {
-        vsapi->mapSetError(out, (filter + ": " + e.what()).c_str());
+        vsapi->mapSetError(out, (d->filterName + ": " + e.what()).c_str());
     }
 }
 

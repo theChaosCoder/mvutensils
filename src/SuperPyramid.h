@@ -145,13 +145,6 @@ public:
 
 class FramePyramid {
 public:
-    // FIXME, currently unused
-    enum class State {
-        Invalid,
-        ValidMetadataOnly,
-        Valid
-    };
-
     std::vector<FramePyramidLevel> pyramidLevels; // 0 is the orignal padded frame, higher levels are n times reduced
     int nPel = 1; // Why is nPel stored here as well? It's trivial to get with an accessor from the top level plane
 
@@ -175,7 +168,6 @@ public:
     int bitsPerSample = -1;
 
 private:
-    State state = State::Invalid;
     const VSFrame *serializedData = nullptr;
     VSCore *core;
     const VSAPI *vsapi;
@@ -196,5 +188,5 @@ public:
 
     // FIXME, add these helper functions and create fewer levels when possible?
     //static int GetMaxLevels(int width, int height, int ration, int overlapY, int levels) noexcept;
-    //static int GetMaxLevelsForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int overlapY, int levels) noexcept;
+    //static int GetMaxLevelsForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int overlapY) noexcept;
 };
