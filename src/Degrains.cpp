@@ -105,6 +105,8 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
             if (n + offB < d->vi->numFrames && n + offB >= 0)
                 vsapi->requestFrameFilter(n + offB, d->super, frameCtx);
 
+            vsapi->requestFrameFilter(n, d->super, frameCtx);
+
             // Forward
             int offF = d->deltaFrame[r + 1];
             if (n + offF >= 0 && n + offF < d->vi->numFrames)
@@ -123,6 +125,8 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         };
 
         VSFrame *dst = vsapi->newVideoFrame2(&d->vi->format, d->vi->width, d->vi->height, fr, pl, src, core);
+
+        vsapi->freeFrame(src);
 
         int bitsPerSample = d->vi->format.bitsPerSample;
 
@@ -156,11 +160,14 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         int nLogPel = (fgops[0]->nPel == 4) ? 2 : (fgops[0]->nPel == 2) ? 1 : 0;
 
 
+        FramePyramid pSrcFrame(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, core, vsapi);
+        const auto &srcLevel = pSrcFrame.GetLevel(0);
+
         for (int i = 0; i < d->vi->format.numPlanes; i++) {
             pDst[i] = vsapi->getWritePtr(dst, i);
             nDstPitches[i] = vsapi->getStride(dst, i);
-            pSrc[i] = vsapi->getReadPtr(src, i);
-            nSrcPitches[i] = vsapi->getStride(src, i);
+            pSrc[i] = srcLevel.planes[i].GetPointer<PixelType>(0, 0);
+            nSrcPitches[i] = srcLevel.planes[i].nPitch;
 
         }
 
@@ -189,11 +196,11 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         OverlapWindows *OverWins[3] = { &d->OverWins[0], &d->OverWins[1], &d->OverWins[2] };
         uint8_t *DstTemp = nullptr;
         int tmpBlockPitch = nBlkSizeX[0] * bytesPerSample;
-        uint8_t *tmpBlock = nullptr;
-        if (nOverlapX[0] > 0 || nOverlapY[0] > 0) {
+        if (nOverlapX[0] > 0 || nOverlapY[0] > 0)
             DstTemp = new uint8_t[dstTempPitch * nBlkSizeY[0]];
-            tmpBlock = new uint8_t[tmpBlockPitch * nBlkSizeY[0]];
-        }
+
+
+        uint8_t *tmpBlock = new uint8_t[tmpBlockPitch * nBlkSizeY[0]];
 
         const FramePyramidLevel *pPlanes[radius * 2] = {};
 
@@ -216,15 +223,21 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                 continue;
 
             if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
-                // FIXME, case when blocksize isn't a multiple of the frame size
+                const int frameW = vsapi->getFrameWidth(dst, plane);
+                const int frameH = vsapi->getFrameHeight(dst, plane);
+
                 for (int by = 0; by < nBlkY; by++) {
+                    const int dstPixY = by * nBlkSizeY[plane];
+                    const int validH = std::min(nBlkSizeY[plane], frameH - dstPixY);
+                    if (validH <= 0)
+                        break;
+
                     int xx = 0;
                     for (int bx = 0; bx < nBlkX; bx++) {
                         int i = by * nBlkX + bx;
 
-                        const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
+                        const uint8_t *pointers[radius * 2];
                         ptrdiff_t strides[radius * 2];
-
                         int WSrc, WRefs[radius * 2];
 
                         for (int r = 0; r < radius * 2; r++)
@@ -232,25 +245,40 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                         normaliseWeights<radius>(WSrc, WRefs);
 
-                        d->DEGRAIN[plane](pDstCur[plane] + xx, nDstPitches[plane], pSrcCur[plane] + xx, nSrcPitches[plane],
-                                          pointers, strides,
-                                          WSrc, WRefs);
+                        const int dstPixX = xx / bytesPerSample;
+                        const int validW = std::min(nBlkSizeX[plane], frameW - dstPixX);
+
+                        if (validW == nBlkSizeX[plane] && validH == nBlkSizeY[plane]) {
+                            // Block fits entirely — write directly
+                            d->DEGRAIN[plane](pDstCur[plane] + xx, nDstPitches[plane], pSrcCur[plane] + xx, nSrcPitches[plane],
+                                pointers, strides, WSrc, WRefs);
+                        } else if (validW > 0) {
+                            // Edge block — write to tmpBlock, then copy only the valid region
+                            d->DEGRAIN[plane](tmpBlock, tmpBlockPitch, pSrcCur[plane] + xx, nSrcPitches[plane],
+                                pointers, strides, WSrc, WRefs);
+                            vsh::bitblt(pDstCur[plane] + xx, nDstPitches[plane],
+                                tmpBlock, tmpBlockPitch,
+                                validW * bytesPerSample, validH);
+                        }
 
                         xx += nBlkSizeX[plane] * bytesPerSample;
-
-                        if (bx == nBlkX - 1 && nWidth_B[0] < nWidth[0]) // right non-covered region
-                            vsh::bitblt(pDstCur[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
-                                      pSrcCur[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
-                                      (nWidth[plane] - nWidth_B[plane]) * bytesPerSample, nBlkSizeY[plane]);
                     }
-                    pDstCur[plane] += nBlkSizeY[plane] * (nDstPitches[plane]);
-                    pSrcCur[plane] += nBlkSizeY[plane] * (nSrcPitches[plane]);
 
-                    if (by == nBlkY - 1 && nHeight_B[0] < nHeight[0]) // bottom uncovered region
-                        vsh::bitblt(pDstCur[plane], nDstPitches[plane],
-                                  pSrcCur[plane], nSrcPitches[plane],
-                                  nWidth[plane] * bytesPerSample, nHeight[plane] - nHeight_B[plane]);
+                    // Right non-covered region (source copy), clamped to actual row count
+                    if (nWidth_B[plane] < frameW)
+                        vsh::bitblt(pDstCur[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
+                            pSrcCur[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
+                            (frameW - nWidth_B[plane]) * bytesPerSample, validH);
+
+                    pDstCur[plane] += nBlkSizeY[plane] * nDstPitches[plane];
+                    pSrcCur[plane] += nBlkSizeY[plane] * nSrcPitches[plane];
                 }
+
+                // Bottom non-covered region (source copy)
+                if (nHeight_B[plane] < frameH)
+                    vsh::bitblt(pDstCur[plane], nDstPitches[plane],
+                        pSrcCur[plane], nSrcPitches[plane],
+                        frameW * bytesPerSample, frameH - nHeight_B[plane]);
             } else { // overlap - sliding window
                 const int stepY = nBlkSizeY[plane] - nOverlapY[plane];
 
