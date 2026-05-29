@@ -31,8 +31,6 @@ int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) noexcept;
 // If an external pel clip is supplied the data at (0, 0) is discarded and the original size level 0 frame data is used instead
 // The pPlane allocations are completely independent of each other and can be exported
 
-// FIXME, note that nPel is duplicated and weird everywhere if anything it should go in the FramePyramidLevel or something
-
 class PyramidPlane {
     friend class FramePyramid;
 public:
@@ -147,6 +145,7 @@ public:
 
 class FramePyramid {
 public:
+    // FIXME, currently unused
     enum class State {
         Invalid,
         ValidMetadataOnly,
@@ -162,11 +161,11 @@ public:
     int nRealWidth[3] = {}; // The original width of the input frame
     int nRealHeight[3] = {}; // The original height of the input frame
 
-    int nHPad[3];
-    int nVPad[3];
+    int nHPad[3] = {};
+    int nVPad[3] = {};
 
-    int nBlkSizePadX[3];
-    int nBlkSizePadY[3];
+    int nBlkSizePadX[3] = {};
+    int nBlkSizePadY[3] = {};
 
     int xRatioUV = 1;
     int yRatioUV = 1;

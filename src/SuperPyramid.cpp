@@ -723,18 +723,19 @@ void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int 
 
     nOffsetPadding = nPitch * nVPadding + nHPadding * format->bytesPerSample;
 
-    // FIXME, check so everything is the same format and dimensions
-
-    for (int i = 0; i < pel * pel; i++) {
-        storage[i] = planeFrames[i];
-        pPlane[i] = vsapi->getReadPtr(planeFrames[i], 0);
-    }
-
     nPaddedWidth = vsapi->getFrameWidth(planeFrames[0], 0);
     nPaddedHeight = vsapi->getFrameHeight(planeFrames[0], 0);
 
     nWidth = nPaddedWidth - 2 * nHPadding;
     nHeight = nPaddedHeight - 2 * nVPadding;
+
+    for (int i = 0; i < pel * pel; i++) {
+        storage[i] = planeFrames[i];
+        pPlane[i] = vsapi->getReadPtr(planeFrames[i], 0);
+
+        if (!vsh::isSameVideoFormat(format, vsapi->getVideoFrameFormat(planeFrames[i])) || vsapi->getFrameWidth(planeFrames[i], 0) != nPaddedWidth || vsapi->getFrameHeight(planeFrames[i], 0) != nPaddedHeight)
+            throw SuperPyramidError("Inconsistent video format or dimensions in pel frames");
+    }
 }
 
 int GetPyramidLevelForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int overlapY, int levels) {
@@ -812,8 +813,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         }
     }
 
-    size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8); // FIXME, roud up nicer?
-
+    size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8);
     uint8_t *tempBuffer = vsh::vsh_aligned_malloc<uint8_t>(tempBufferSize, 32);
 
     // FIXME, also limit the number of levels generated based on blksize to save memory
@@ -854,7 +854,8 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
     nHPad[0] = vsapi->mapGetIntSaturated(props, (prefix + "SuperHPad").c_str(), 0, &err);
     nVPad[0] = vsapi->mapGetIntSaturated(props, (prefix + "SuperVPad").c_str(), 0, &err);
     bitsPerSample = vsapi->mapGetIntSaturated(props, (prefix + "SuperBitsPerSample").c_str(), 0, &err);
-
+    nBlkSizePadX[0] = nWidth[0] - nRealWidth[0];
+    nBlkSizePadY[0] = nHeight[0] - nRealHeight[0];
 
     nPel = vsapi->mapGetIntSaturated(props, (prefix + "SuperPel").c_str(), 0, &err);
     int levels = vsapi->mapGetIntSaturated(props, (prefix + "SuperLevels").c_str(), 0, &err);
@@ -878,6 +879,10 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
         nHPad[2] = nHPad[0] / xRatioUV;
         nVPad[1] = nVPad[0] / yRatioUV;
         nVPad[2] = nVPad[0] / yRatioUV;
+        nBlkSizePadX[1] = nWidth[1] - nRealWidth[1];
+        nBlkSizePadX[2] = nWidth[2] - nRealWidth[2];
+        nBlkSizePadY[1] = nHeight[1] - nRealHeight[1];
+        nBlkSizePadY[2] = nHeight[2] - nRealHeight[2];
     }
 
     bitsPerSample = vsapi->getVideoFrameFormat(srcFrame)->bitsPerSample;
@@ -888,7 +893,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
 
     try {
 
-        pyramidLevels.resize(levels);
+        pyramidLevels.resize(loadLevels);
 
         if (nPel > 1 && loadLevels > 0) {
             std::string propStr = prefix + "SuperLevel0";

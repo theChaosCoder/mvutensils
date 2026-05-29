@@ -1487,11 +1487,8 @@ bool MotionBlockLevel::IsSceneChange(int64_t nTh1, int nTh2) const noexcept {
     return (sum > nTh2);
 }
 
-
-/// ///////////////////////////////////////////////////////
-
-// FIXME, how should the levels modifier work? how did it work?
 // levels > 0 means use that many levels, levels < 0 means use all valid levels except abs(levels) from the end, levels = 0 means use all valid levels
+// this was mostly inherited from old mvtools code
 MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int deltaFrame) {
     this->nBlkSizeX = nBlkSizeX;
     this->nBlkSizeY = nBlkSizeY;
