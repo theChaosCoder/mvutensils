@@ -264,10 +264,8 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         d->thSAD = (int64_t)((double)d->thSAD * pixelMax / 255.0 + 0.5);
         d->nLambda = (int)((double)d->nLambda * pixelMax / 255.0 + 0.5);
 
-        // FIXME, are we normalizing based on from or to format?
-        // Now it's the vector from
-        // normalize threshold to block size
-        int referenceBlockSize = 8 * 8;
+        // Normalize threshold to old block size
+        const int referenceBlockSize = 8 * 8;
         d->thSAD = d->thSAD * (vectors.nBlkSizeX * vectors.nBlkSizeY) / referenceBlockSize;
         if (d->chroma)
             d->thSAD += d->thSAD / (vectors.xRatioUV * vectors.yRatioUV) * 2;
