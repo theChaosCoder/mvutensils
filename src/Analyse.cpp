@@ -8,7 +8,7 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "CommonMacros.h"
+#include "Common.h"
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 

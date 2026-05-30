@@ -1,9 +1,9 @@
 #include "MotionBlockPyramid.h"
 
 #include <VSHelper4.h>
-#include "CommonFunctions.h"
 #include <functional>
 #include <algorithm>
+#include "Common.h"
 
 // Only for emms
 #ifdef MVTOOLS_X86

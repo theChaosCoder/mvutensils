@@ -4,7 +4,7 @@
 
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
-#include "CommonMacros.h"
+#include "Common.h"
 
 struct RecalculateDataExtra {
     const VSVideoInfo *vi;

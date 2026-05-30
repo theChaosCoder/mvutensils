@@ -24,7 +24,7 @@
 
 #include "CopyCode.h"
 #include "Overlap.h"
-#include "CommonMacros.h"
+#include "Common.h"
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 

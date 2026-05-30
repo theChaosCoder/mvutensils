@@ -7,7 +7,7 @@
 #include <VSHelper4.h>
 
 #include "SuperPyramid.h"
-#include "CommonMacros.h"
+#include "Common.h"
 
 
 struct SuperDataExtra {

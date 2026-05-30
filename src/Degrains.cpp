@@ -27,7 +27,7 @@
 
 #include "Degrains.h"
 #include "Overlap.h"
-#include "CommonMacros.h"
+#include "Common.h"
 #include "CPU.h"
 
 
