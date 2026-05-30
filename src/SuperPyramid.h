@@ -24,8 +24,6 @@ enum class RFilterParam {
     Cubic
 };
 
-int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) noexcept;
-
 // Important note on data storage: Pyramid level 0 isn't just the original unreduced frame with padding,
 // if nPel > 1 it also stores the relevant offset images in pPlane[1..3] or pPlane[1..15] for pel 2 and 4 respectively
 // If an external pel clip is supplied the data at (0, 0) is discarded and the original size level 0 frame data is used instead
@@ -185,8 +183,5 @@ public:
     const FramePyramidLevel &GetLevel(int level) const noexcept;
     bool IsCompatible(const FramePyramid &other) const noexcept;
     bool IsCompatibleWithSource(const VSVideoInfo *vi) const noexcept;
-
-    // FIXME, add these helper functions and create fewer levels when possible?
-    //static int GetMaxLevels(int width, int height, int ration, int overlapY, int levels) noexcept;
-    //static int GetMaxLevelsForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int overlapY) noexcept;
+    static int GetMaxLevelsForBlockSize(int width, int height, int xRatioUV, int yRatioUV, int blkSizeX, int blkSizeY, int padX, int padY) noexcept;
 };

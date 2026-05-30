@@ -2,6 +2,7 @@
 
 #include <VSHelper4.h>
 #include <cassert>
+#include <memory>
 
 template<typename PixelType>
 void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) noexcept {
@@ -188,7 +189,7 @@ static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
     }
 }
 
-int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) noexcept {
+static int PlaneDimensionLuma(int numPixels, int ratioUV, int pad) noexcept {
       return (pad >= ratioUV) ? ((numPixels / ratioUV + 1) / 2) * ratioUV : ((numPixels / ratioUV) / 2) * ratioUV;
 }
 
@@ -789,7 +790,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         nHeight[plane] = nRealHeight[plane];
     }
 
-
+    // Calculate padding needed to make the dimensions fit the block size and overlap, if specified
 
     if (nBlkSizeX > 0 && nOverlapX >= 0) {
         int nBlkX = (nRealWidth[0] - nOverlapX) / (nBlkSizeX - nOverlapX);
@@ -814,24 +815,21 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
     }
 
     size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8);
-    uint8_t *tempBuffer = vsh::vsh_aligned_malloc<uint8_t>(tempBufferSize, 32);
+    std::unique_ptr<uint8_t, decltype(&vsh::vsh_aligned_free)> tempBuffer(vsh::vsh_aligned_malloc<uint8_t>(tempBufferSize, 32), vsh::vsh_aligned_free);
 
-    // FIXME, also limit the number of levels generated based on blksize to save memory
     if (srcFormat->bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
             pyramidLevels[0].planes[plane].CopyAndPadPlane<uint8_t>(srcFrame, plane, nHPad[plane], nVPad[plane], nWidth[plane] - nRealWidth[plane], nHeight[plane] - nRealHeight[plane], core, vsapi);
             for (int i = 1; i < levels; i++)
-                pyramidLevels[i].planes[plane].ReducePlane<uint8_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer, core, vsapi);
+                pyramidLevels[i].planes[plane].ReducePlane<uint8_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer.get(), core, vsapi);
         }
     } else {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
             pyramidLevels[0].planes[plane].CopyAndPadPlane<uint16_t>(srcFrame, plane, nHPad[plane], nVPad[plane], nWidth[plane] - nRealWidth[plane], nHeight[plane] - nRealHeight[plane], core, vsapi);
             for (int i = 1; i < levels; i++)
-                pyramidLevels[i].planes[plane].ReducePlane<uint16_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer, core, vsapi);
+                pyramidLevels[i].planes[plane].ReducePlane<uint16_t>(pyramidLevels[i - 1].planes[plane], xRatioUV, yRatioUV, rFilter, tempBuffer.get(), core, vsapi);
         }
     }
-
-    vsh::vsh_aligned_free(tempBuffer);
 }
 
 
@@ -1040,4 +1038,31 @@ bool FramePyramid::IsCompatibleWithSource(const VSVideoInfo *vi) const noexcept 
     if (nRealWidth[0] != vi->width || nRealHeight[0] != vi->height || (xRatioUV != 1 << vi->format.subSamplingW) || yRatioUV != (1 << vi->format.subSamplingH) || bitsPerSample != vi->format.bitsPerSample)
         return false;
     return true;
+}
+
+
+int FramePyramid::GetMaxLevelsForBlockSize(int width, int height, int xRatioUV, int yRatioUV, int blkSizeX, int blkSizeY, int padX, int padY) noexcept {
+    // Calculate the maximum number of levels based on the input dimensions, note that the smallest allowed plane is 2x2 pixels meaning that with 4:2:0 subsampling
+    // the smallest possible dimensions are 4x4 for luma. It is currently not really planned to support more subsampling levels
+    // Alternatively the maximum number of levels can be calculated based on the block size if specified, any level that can't fit
+    // a single block is useless
+    // Note that this function may return 0 levels if the input dimensions are too small
+
+    int nLevelsMax = 0;
+    int minLevelWidth = (blkSizeX > 0) ? blkSizeX : (xRatioUV * 2);
+    int minLevelHeight = (blkSizeY > 0) ? blkSizeY : (yRatioUV * 2);
+
+    while (true) {
+        width = PlaneDimensionLuma(width, xRatioUV, padX);
+        height = PlaneDimensionLuma(height, yRatioUV, padY);
+        if (height < minLevelHeight || width < minLevelWidth)
+            break;
+        nLevelsMax++;
+    }
+
+    // With blocksize specified a single level will always be possible since the input frame will be padded to fit the block size
+    if (blkSizeX > 0 && blkSizeY > 0)
+        return std::max(1, nLevelsMax);
+    else
+        return nLevelsMax;
 }

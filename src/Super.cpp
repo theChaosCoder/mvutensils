@@ -118,18 +118,27 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
         int xRatioUV = 1 << d->vi.format.subSamplingW;
         int yRatioUV = 1 << d->vi.format.subSamplingH;
 
-        // FIXME, maybe have a static helper function for this calculation since it's needed in multiple places, and it should be per plane or level
-        // at least two pixels width and height of chroma
-        int nLevelsMax = 0;
-        int nLevelWidth = d->vi.width;
-        int nLevelHeight = d->vi.height;
-        while (true) {
-            nLevelHeight = PlaneDimensionLuma(nLevelHeight, yRatioUV, d->nVPad);
-            nLevelWidth = PlaneDimensionLuma(nLevelWidth, xRatioUV, d->nHPad);
-            if (nLevelHeight < yRatioUV * 2 || nLevelWidth < xRatioUV * 2)
-                break;
-            nLevelsMax++;
-        }
+        d->nBlkSizeX = vsapi->mapGetIntSaturated(in, "blksizeh", 0, &err);
+        d->nBlkSizeY = vsapi->mapGetIntSaturated(in, "blksizev", 0, &err);
+        if (err)
+            d->nBlkSizeY = d->nBlkSizeX;
+
+        if (d->nBlkSizeX < 0 || d->nBlkSizeY < 0)
+            throw std::runtime_error("block size must be non-negative");
+
+        d->nOverlapX = vsapi->mapGetIntSaturated(in, "overlaph", 0, &err);
+        d->nOverlapY = vsapi->mapGetIntSaturated(in, "overlapv", 0, &err);
+        if (err)
+            d->nOverlapY = d->nOverlapX;
+
+        if (d->nOverlapY < 0 || d->nOverlapX < 0)
+            throw std::runtime_error("overlap must be non-negative");
+
+        int nLevelsMax = FramePyramid::GetMaxLevelsForBlockSize(d->vi.width, d->vi.height, xRatioUV, yRatioUV, d->nBlkSizeX, d->nBlkSizeY, d->nHPad, d->nVPad);
+
+        if (nLevelsMax <= 0)
+            throw std::runtime_error("input dimensions are too small to generate a super clip");
+
         if (d->nLevels <= 0 || d->nLevels > nLevelsMax)
             d->nLevels = nLevelsMax;
 
@@ -148,22 +157,6 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
                 throw std::runtime_error("pelclip's dimensions must be a multiple of the input clip's dimensions");
             }
         }
-
-        d->nBlkSizeX = vsapi->mapGetIntSaturated(in, "blksizeh", 0, &err);
-        d->nBlkSizeY = vsapi->mapGetIntSaturated(in, "blksizev", 0, &err);
-        if (err)
-            d->nBlkSizeY = d->nBlkSizeX;
-
-        if (d->nBlkSizeX < 0 || d->nBlkSizeY < 0)
-            throw std::runtime_error("block size must be non-negative");
-
-        d->nOverlapX = vsapi->mapGetIntSaturated(in, "overlaph", 0, &err);
-        d->nOverlapY = vsapi->mapGetIntSaturated(in, "overlapv", 0, &err);
-        if (err)
-            d->nOverlapY = d->nOverlapX;
-
-        if (d->nOverlapY < 0 || d->nOverlapX < 0)
-            throw std::runtime_error("overlap must be non-negative");
 
     } catch (std::runtime_error &e) {
         vsapi->mapSetError(out, ("Super: " + std::string(e.what())).c_str());
