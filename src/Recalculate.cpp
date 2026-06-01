@@ -23,7 +23,7 @@ struct RecalculateDataExtra {
     int nPel;
     int pnew;  
     MotionBlockPyramid::DivideExtra divideExtra; 
-    int meander;
+    bool meander;
 
     bool useSatd;
 
@@ -177,7 +177,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
 
     d->meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
     if (err)
-        d->meander = 1;
+        d->meander = true;
 
     d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 

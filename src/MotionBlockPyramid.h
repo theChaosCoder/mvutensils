@@ -165,7 +165,7 @@ private:
     void DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, int smooth, bool meander) noexcept;
+        int fieldShift, int64_t thSAD, bool smooth, bool meander) noexcept;
 
     template <int nLogPel, typename PixelType>
     void DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
@@ -188,7 +188,7 @@ public:
     void RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, bool useSatd, int smooth, bool meander);
+        int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander);
 
     void EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept;
     void InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) noexcept;
@@ -258,14 +258,14 @@ public:
     void SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
         int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
-        int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
+        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany,
         SearchType coarseSearchType, bool chroma);
 
     // FIXME, copy pSrcGOF fields to parameters
     void RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType searchType, int nSearchParam, int nLambda, int pnew,
-        int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander);
+        int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander);
 
     void DivideVectorsExtra(DivideExtra divideExtra);
 
