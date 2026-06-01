@@ -918,6 +918,14 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
             }
         }
 
+        // Propagate real dimensions to level 0 where they're relevant
+        if (!pyramidLevels.empty()) {
+            for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
+                pyramidLevels[0].planes[plane].nRealHeight = nRealHeight[plane];
+                pyramidLevels[0].planes[plane].nRealWidth = nRealWidth[plane];
+            }
+        }
+
     } catch (...) {
         FreeFrames();
         throw;

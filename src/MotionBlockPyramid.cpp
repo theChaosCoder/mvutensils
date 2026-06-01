@@ -1212,7 +1212,7 @@ template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
     SearchType st, int stp, int lambda, int pnew,
-    int fieldShift, int64_t thSAD, bool smooth, bool meander) {
+    int fieldShift, int64_t thSAD, bool smooth, bool meander, bool useSatd) {
                                     
     zeroMVfieldShifted.x = 0;
     zeroMVfieldShifted.y = fieldShift;
@@ -1257,7 +1257,6 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     nBlkX = (nRealWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
     nBlkY = (nRealHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
 
-
     int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
     int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
 
@@ -1279,6 +1278,8 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     VECTOR *pBlkData = vectors.data();
 
     this->pRefFrame = &pRefFrame;
+
+    InitMotionEstimationFields(useSatd, chroma);
 
     x[0] = pSrcFrame.planes[0].nHPadding;
     y[0] = pSrcFrame.planes[0].nVPadding;
@@ -1448,13 +1449,8 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
                 }
             }
 
-            // we store the result
-            vectors[blkIdx] = bestMV;
-
-
             /* write the results */
             pBlkData[blkx] = bestMV;
-
 
             if (iblkx < nBlkX - 1) {
                 x[0] += (nBlkSizeX - nOverlapX) * blkScanDir;
@@ -1479,22 +1475,20 @@ void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const 
     SearchType st, int stp, int lambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander) {
 
-    InitMotionEstimationFields(useSatd, chroma);
-
     if (bytesPerSample == 1) {
         if (nLogPel == 0)
-            DoRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<0, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander, useSatd);
         else if (nLogPel == 1)
-            DoRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<1, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander, useSatd);
         else
-            DoRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<2, uint8_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander, useSatd);
     } else {
         if (nLogPel == 0)
-            DoRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<0, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander, useSatd);
         else if (nLogPel == 1)
-            DoRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<1, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander, useSatd);
         else
-            DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander);
+            DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander, useSatd);
     }
 
     mvtools_cpu_emms();

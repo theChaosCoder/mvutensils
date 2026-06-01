@@ -165,7 +165,7 @@ private:
     void DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, bool smooth, bool meander);
+        int fieldShift, int64_t thSAD, bool smooth, bool meander, bool useSatd);
 
     template <int nLogPel, typename PixelType>
     void DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,

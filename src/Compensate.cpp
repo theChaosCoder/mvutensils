@@ -325,14 +325,15 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                     scPitches = nRefPitches;
                 }
 
+                // FIXME, this padding copy should be removed everywhere?
                 for (int plane = 0; plane < num_planes; plane++) {
-                    if (nWidth_B[0] < nWidth[0]) { // padding of right non-covered region
+                    if (nWidth_B[0] < vsapi->getFrameWidth(dst, plane)) { // padding of right non-covered region
                         vsh::bitblt(pDst[plane] + nWidth_B[plane] * sizeof(PixelType), nDstPitches[plane],
                             scSrc[plane] + (nWidth_B[plane] + nHPadding[plane]) * sizeof(PixelType) + nVPadding[plane] * scPitches[plane], scPitches[plane],
                             (nWidth[plane] - nWidth_B[plane]) * sizeof(PixelType), nHeight_B[plane]);
                     }
 
-                    if (nHeight_B[0] < nHeight[0]) { // padding of bottom non-covered region
+                    if (nHeight_B[0] < vsapi->getFrameHeight(dst, plane)) { // padding of bottom non-covered region
                         vsh::bitblt(pDst[plane] + nHeight_B[plane] * nDstPitches[plane], nDstPitches[plane],
                             scSrc[plane] + nHPadding[plane] * sizeof(PixelType) + (nHeight_B[plane] + nVPadding[plane]) * scPitches[plane], scPitches[plane],
                             nWidth[plane] * sizeof(PixelType), nHeight[plane] - nHeight_B[plane]);
