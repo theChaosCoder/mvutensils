@@ -29,7 +29,7 @@ Changes
     
     * The search and pelsearch argument had mode 0 and 1 removed, as a result all remaining mode have been adjusted by -2
     
-    * The isb argument was removed, instead delta accepts both posivite and negative numbers to indicate direction
+    * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction
     
     * Will throw an error when not all pixels can be processed due to the chosen blocksize/overlap combination
     
@@ -50,6 +50,8 @@ Planned changes
 * Have an Analyse wrapper that outputs a full array of all clips required for DegrainN
 
 * Make block size and overlap compulsory in Super (probably)
+
+* Make overlaph/v and blksizeh/v simply blocksize=[w, h] and overlap=[w, h] arrays
 
 * Have a general Degrain function that maps to the right DegrainN depending on the number of vectors passed (maybe, feedback welcome)
 

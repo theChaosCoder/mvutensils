@@ -16,6 +16,7 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
+#define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdlib>
 #include <stdexcept>
@@ -25,12 +26,10 @@
 #include "CPU.h"
 #include "Overlap.h"
 
-#ifndef M_PI
-#define M_PI       3.14159265358979323846f
-#endif
-
 extern uint32_t g_cpuinfo;
 
+// FIXME, use RAII
+// FIXME, why so much float? int version should be easily doable
 void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
     this->nx = nx;
     this->ny = ny;
