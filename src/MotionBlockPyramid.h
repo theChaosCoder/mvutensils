@@ -63,7 +63,6 @@ private:
     int yRatioUV;
     int nLogxRatioUV; // log of xRatioUV (0 for 1 and 1 for 2)
     int nLogyRatioUV; // log of yRatioUV (0 for 1 and 1 for 2)
-    int bytesPerSample;
 
     // static parameters during the whole search process
     SearchType searchType; /* search type used */
@@ -177,18 +176,18 @@ private:
     int MotionDistorsion(int vx, int vy) const noexcept;
     VECTOR ClipMV(VECTOR v) const noexcept;
     void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept;
-    void InitMotionEstimationFields(bool useSatd, bool chroma);
+    void InitMotionEstimationFields(bool useSatd, bool chroma, int bytesPerSample);
     void EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const noexcept;
 public:
     void SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         SearchType st, int stp, int lambda, int lsad, int pnew,
         int plevel, VECTOR *globalMVec, int fieldShift, bool useSatd,
-        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma);
+        int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma, int bytesPerSample);
 
     void RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander);
+        int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander, int bytesPerSample);
 
     void EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcept;
     void InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) noexcept;
@@ -240,8 +239,6 @@ public:
     int nHPadding;
     int nVPadding;
 
-    // FIXME, audit all bitspersample and bytespersample usage
-    // Also prevent recalculating from different bits per sample
     int bitsPerSample;
 private:
     State state = State::Invalid;
@@ -249,6 +246,7 @@ private:
     std::vector<VECTOR> dividedVectors;
     std::vector<MotionBlockLevel> pyramidLevels;
 public:
+    // The FramePyramid in src is only used as a template for the internal data structures, the actual motion estimation is performed on the frames passed to SearchMVs
     MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int deltaFrame);
 
     // de-serialization from a frame, can choose to omit some levels by setting maxLevel, if -1 all levels are loaded, 0 means only metadata and no vectors are loaded,

@@ -522,13 +522,9 @@ inline static int iexp2(int i) {
     return 1 << satz(i);
 }
 
-void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, bool smallestPlane, bool chroma, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) noexcept {
-
-    /* constant fields */
-
-    nPel = _nPel;
+void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int nPel_, int _nLevel, bool smallestPlane_, bool chroma_, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int bitsPerSample) noexcept {
+    nPel = nPel_;
     nLogPel = ilog2(nPel);
-    // nLogPel=0 for nPel=1, 1 for nPel=2, 2 for nPel=4, i.e. (x*nPel) = (x<<nLogPel)
     nLogScale = _nLevel;
     nScale = iexp2(nLogScale);
 
@@ -546,14 +542,10 @@ void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _n
     nLogxRatioUV = ilog2(xRatioUV);
     nLogyRatioUV = ilog2(yRatioUV);
 
-    bytesPerSample = (bitsPerSample + 7) / 8;
-
-    this->smallestPlane = smallestPlane;
-    this->chroma = chroma;
+    smallestPlane = smallestPlane_;
+    chroma = chroma_;
 
     globalMVPredictor = zeroMV;
-
-    /* arrays memory allocation */
 
     vectors.resize(nBlkCount);
 
@@ -614,7 +606,7 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
     predictors[4] = ClipMV(zeroMV);
 }
 
-void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma) {
+void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma, int bytesPerSample) {
     this->chroma = chroma;
 
     if (useSatd || (nBlkSizeX == 16 && nBlkSizeY == 2))
@@ -1182,11 +1174,10 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
 
 void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     SearchType st, int stp, int lambda, int lsad, int pnew,
-    int plevel, VECTOR *globalMVec,
-    int fieldShift, bool useSatd,
-    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) {
+    int plevel, VECTOR *globalMVec, int fieldShift, bool useSatd,
+    int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma, int bytesPerSample) {
 
-    InitMotionEstimationFields(useSatd, chroma);
+    InitMotionEstimationFields(useSatd, chroma, bytesPerSample);
 
     if (bytesPerSample == 1) {
         if (nLogPel == 0)
@@ -1253,9 +1244,6 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
         nLogyRatioUV = ilog2(yRatioUV);
     }
 
-    // FIXME, need to test blended bitdepth analysis or restrict it to same bitdepth
-    assert(bytesPerSample = sizeof(PixelType));
-
     // Calculate new block count
     int nRealWidth = pSrcFrame.planes[0].nRealWidth;
     int nRealHeight = pSrcFrame.planes[0].nRealHeight;
@@ -1286,7 +1274,7 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 
     this->pRefFrame = &pRefFrame;
 
-    InitMotionEstimationFields(useSatd, chroma);
+    InitMotionEstimationFields(useSatd, chroma, sizeof(PixelType));
 
     x[0] = pSrcFrame.planes[0].nHPadding;
     y[0] = pSrcFrame.planes[0].nVPadding;
@@ -1480,7 +1468,7 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
 void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
     SearchType st, int stp, int lambda, int pnew,
-    int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander) {
+    int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander, int bytesPerSample) {
 
     if (bytesPerSample == 1) {
         if (nLogPel == 0)
@@ -1658,12 +1646,20 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     if (state != State::ReadyForSearch)
         throw MotionBlockPyramidError("MotionBlockPyramid isn't in an appropriate state for searching motion vectors");
 
+    if (!pSrcGOF.IsCompatible(pRefGOF))
+        throw MotionBlockPyramidError("The two reference frames don't have the same format");
+
+    if (!IsCompatible(pSrcGOF) || !IsCompatible(pRefGOF))
+        throw MotionBlockPyramidError("Incompatible frame format for motion vector search, bitdepth must match");
+
     int fieldShiftCur = (nLevelCount - 1 == 0) ? fieldShift : 0; // may be non zero for finest level only
 
     VECTOR globalMV = zeroMV; // create and init global motion vector as zero
 
     if (!global)
         pglobal = pzero;
+
+    int bytesPerSample = (pSrcGOF.bitsPerSample == 8) ? 1 : 2;
 
     // Search the motion vectors, for the low details interpolations first
     SearchType searchTypeSmallest = (nLevelCount == 1 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for smallest coarse plane
@@ -1674,7 +1670,7 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
         pRefGOF.GetLevel(nLevelCount - 1),
         searchTypeSmallest, nSearchParamSmallest, nLambda, lsad, pnew, plevel,
         &globalMV, fieldShiftCur, useSatd,
-        pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
+        pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma, bytesPerSample);
     // Refining the search until we reach the highest detail interpolation.
 
     for (int i = nLevelCount - 2; i >= 0; i--) {
@@ -1689,7 +1685,7 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
         pyramidLevels[i].SearchMVs(pSrcGOF.GetLevel(i), pRefGOF.GetLevel(i),
             searchTypeLevel, nSearchParamLevel, nLambda, lsad, pnew, plevel,
             &globalMV, fieldShiftCur, useSatd,
-            pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma);
+            pzero, pglobal, badSAD, badrange, meander, tryManyLevel, chroma, bytesPerSample);
     }
 
     state = State::AnalysisDone;
@@ -1701,8 +1697,6 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
     SearchType searchType, int nSearchParam, int nLambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander) {
 
-    // FIXME, is bytes per sample properly set?
-
     if (state != State::ReadyForRecalculate)
         throw MotionBlockPyramidError("MotionBlockPyramid isn't in an appropriate state for recalculating motion vectors");
 
@@ -1712,14 +1706,14 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
     if (!pSrcGOF.IsCompatible(pRefGOF))
         throw MotionBlockPyramidError("The two reference frames don't have the same format");
 
-    // Search the motion vectors, for the low details interpolations first
-    // Refining the search until we reach the highest detail interpolation.
+    int bytesPerSample = (pSrcGOF.bitsPerSample == 8) ? 1 : 2;
+
     pyramidLevels[0].RecalculateMVs(pSrcGOF.GetLevel(0), pRefGOF.GetLevel(0),
         nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma,
         searchType, nSearchParam, nLambda, pnew,
-        fieldShift, thSAD, useSatd, smooth, meander);
+        fieldShift, thSAD, useSatd, smooth, meander, bytesPerSample);
 
-    // Update from level 0 plane properties
+    // Update from level 0 plane properties afterwards for proper export
     this->nBlkSizeX = pyramidLevels[0].nBlkSizeX;
     this->nBlkSizeY = pyramidLevels[0].nBlkSizeY;
     this->nOverlapX = pyramidLevels[0].nOverlapX;
