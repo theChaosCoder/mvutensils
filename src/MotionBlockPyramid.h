@@ -165,7 +165,7 @@ private:
     void DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType st, int stp, int lambda, int pnew,
-        int fieldShift, int64_t thSAD, bool smooth, bool meander) noexcept;
+        int fieldShift, int64_t thSAD, bool smooth, bool meander);
 
     template <int nLogPel, typename PixelType>
     void DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
@@ -261,7 +261,8 @@ public:
         int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany,
         SearchType coarseSearchType, bool chroma);
 
-    // FIXME, copy pSrcGOF fields to parameters
+    // FIXME, currnently you can't SearchMVs and then RecalculateMVs on the same object and instead it needs to be exported and imported into a new one
+    // this should probably be improved
     void RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType searchType, int nSearchParam, int nLambda, int pnew,

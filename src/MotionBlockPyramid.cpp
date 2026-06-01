@@ -1212,7 +1212,7 @@ template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
     int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
     SearchType st, int stp, int lambda, int pnew,
-    int fieldShift, int64_t thSAD, bool smooth, bool meander) noexcept {
+    int fieldShift, int64_t thSAD, bool smooth, bool meander) {
                                     
     zeroMVfieldShifted.x = 0;
     zeroMVfieldShifted.y = fieldShift;
@@ -1239,16 +1239,40 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     this->nBlkSizeY = nBlkSizeY;
     this->nOverlapX = nOverlapX;
     this->nOverlapY = nOverlapY;
-
-    // FIXME, set pSrcFrame attributes like in the normal constructor
-
+    this->nPel = 1 << nLogPel;
     this->chroma = chroma;
+    // FIXME, should probably set this too or figure it out somhow
+    //bitsPerSample = pSrcFrame.planes[0].bitsPerSample;
+    //int xRatioUV;
+    //int yRatioUV;
+    //int nLogxRatioUV; // log of xRatioUV (0 for 1 and 1 for 2)
+    //int nLogyRatioUV; // log of yRatioUV (0 for 1 and 1 for 2)
+    //int bytesPerSample;
 
-    // FIXME, needs more adjustment? how to pass changed blocksize/overlap?
-    nBlkX = (pSrcFrame.planes[0].nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
-    nBlkY = (pSrcFrame.planes[0].nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
+    // Calculate new block count
+    int nRealWidth = pSrcFrame.planes[0].nRealWidth;
+    int nRealHeight = pSrcFrame.planes[0].nRealHeight;
+    int nWidth = pSrcFrame.planes[0].nWidth;
+    int nHeight = pSrcFrame.planes[0].nHeight;
+    nBlkX = (nRealWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
+    nBlkY = (nRealHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
 
-    // FIXME, check if larger or equal to realX and smaller or equal to X
+
+    int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+    int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+
+    while (nWidth_B < nRealWidth) {
+        nBlkX++;
+        nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+    }
+
+    while (nHeight_B < nRealHeight) {
+        nBlkY++;
+        nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+    }
+
+    if (nWidth_B > nWidth || nHeight_B > nHeight)
+        throw MotionBlockPyramidError("The chosen block size has no multiple that will process the entire frame without exceeding the super clip padding, derive a new suitable super clip and try again");
 
     vectors.resize(nBlkX * nBlkY);
 
@@ -1503,15 +1527,25 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
     nHPadding = src.nHPad[0];
     nVPadding = src.nVPad[0];
     nPel = src.nPel;
-    nBlkX = (nWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
-    nBlkY = (nHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
+    nBlkX = (nRealWidth - nOverlapX) / (nBlkSizeX - nOverlapX);
+    nBlkY = (nRealHeight - nOverlapY) / (nBlkSizeY - nOverlapY);
     bitsPerSample = src.bitsPerSample;
 
     int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
     int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
 
-    if (nWidth_B < nRealWidth || nHeight_B < nRealHeight)
-        throw MotionBlockPyramidError("The chosen block size will leave some pixels unprocessed. Derive a new super clip with appropriate options!");
+    while (nWidth_B < nRealWidth) {
+        nBlkX++;
+        nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+    }
+
+    while (nHeight_B < nRealHeight) {
+        nBlkY++;
+        nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+    }
+
+    if (nWidth_B > nWidth || nHeight_B > nHeight)
+        throw MotionBlockPyramidError("The chosen block size has no multiple that will process the entire frame without exceeding the super clip padding, derive a new suitable super clip and try again");
 
     // calculate valid levels
     int nLevelsMax = 0;
@@ -1666,7 +1700,7 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
     SearchType searchType, int nSearchParam, int nLambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander) {
 
-    if (!HasMotionVectors())
+    if (state != State::ReadyForRecalculate)
         throw MotionBlockPyramidError("MotionBlockPyramid isn't in an appropriate state for recalculating motion vectors");
 
     // Search the motion vectors, for the low details interpolations first
@@ -1675,6 +1709,25 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
         nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma,
         searchType, nSearchParam, nLambda, pnew,
         fieldShift, thSAD, useSatd, smooth, meander);
+
+    // Update from level 0 plane properties
+    this->nBlkSizeX = pyramidLevels[0].nBlkSizeX;
+    this->nBlkSizeY = pyramidLevels[0].nBlkSizeY;
+    this->nOverlapX = pyramidLevels[0].nOverlapX;
+    this->nOverlapY = pyramidLevels[0].nOverlapY;
+    this->xRatioUV = pyramidLevels[0].xRatioUV;
+    this->yRatioUV = pyramidLevels[0].yRatioUV;
+    nBlkX = pyramidLevels[0].nBlkX;
+    nBlkY = pyramidLevels[0].nBlkY;
+    nPel = pyramidLevels[0].nPel;
+    bitsPerSample = pSrcGOF.bitsPerSample;
+    nWidth = pSrcGOF.nWidth[0];
+    nHeight = pSrcGOF.nHeight[0];
+    nRealWidth = pSrcGOF.nRealWidth[0];
+    nRealHeight = pSrcGOF.nRealHeight[0];
+    nHPadding = pSrcGOF.nHPad[0];
+    nVPadding = pSrcGOF.nVPad[0];
+    this->chroma = chroma;
 
     state = State::AnalysisDone;
 }

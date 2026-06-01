@@ -58,10 +58,10 @@ public:
 
     int nPel = 1; // 1 on all planes except the topmost where it can be 1, 2 or 4
 
+    // FIXME, identical to GetAbsolutePointerPel1? Combine?
     template<typename PixelType>
     const uint8_t *GetAbsolutePelPointer(int nX, int nY) const noexcept {
-        const uint8_t *ret = pPlane[0] + nX * sizeof(PixelType) + nY * nPitch;
-        return ret;
+        return pPlane[0] + nX * sizeof(PixelType) + nY * nPitch;
     }
 
     template<typename PixelType>
