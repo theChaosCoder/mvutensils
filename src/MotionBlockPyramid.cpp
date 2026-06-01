@@ -1222,12 +1222,13 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     globalMVPredictor.sad = 9999999;
     penaltyNew = pnew;
 
+    // FIXME, fix "this" mess
     int nBlkXold = nBlkX;
     int nBlkYold = nBlkY;
-    int nBlkSizeXold = nBlkSizeX;
-    int nBlkSizeYold = nBlkSizeY;
-    int nOverlapXold = nOverlapX;
-    int nOverlapYold = nOverlapY;
+    int nBlkSizeXold = this->nBlkSizeX;
+    int nBlkSizeYold = this->nBlkSizeY;
+    int nOverlapXold = this->nOverlapX;
+    int nOverlapYold = this->nOverlapY;
     int nStepXold = nBlkSizeXold - nOverlapXold;
     int nStepYold = nBlkSizeYold - nOverlapYold;
     int nLogPelold = ilog2(nPel);
@@ -1241,13 +1242,20 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     this->nOverlapY = nOverlapY;
     this->nPel = 1 << nLogPel;
     this->chroma = chroma;
-    // FIXME, should probably set this too or figure it out somhow
-    //bitsPerSample = pSrcFrame.planes[0].bitsPerSample;
-    //int xRatioUV;
-    //int yRatioUV;
-    //int nLogxRatioUV; // log of xRatioUV (0 for 1 and 1 for 2)
-    //int nLogyRatioUV; // log of yRatioUV (0 for 1 and 1 for 2)
-    //int bytesPerSample;
+
+    xRatioUV = 1;
+    yRatioUV = 1;
+    nLogxRatioUV = 0;
+    nLogyRatioUV = 0;
+    if (chroma) {
+        xRatioUV = pSrcFrame.planes[0].nRealWidth / pSrcFrame.planes[1].nRealWidth;
+        yRatioUV = pSrcFrame.planes[0].nRealHeight / pSrcFrame.planes[1].nRealHeight;
+        nLogxRatioUV = ilog2(xRatioUV);
+        nLogyRatioUV = ilog2(yRatioUV);
+    }
+
+    // FIXME, need to test blended bitdepth analysis or restrict it to same bitdepth
+    assert(bytesPerSample = sizeof(PixelType));
 
     // Calculate new block count
     int nRealWidth = pSrcFrame.planes[0].nRealWidth;
@@ -1694,8 +1702,16 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
     SearchType searchType, int nSearchParam, int nLambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander) {
 
+    // FIXME, is bytes per sample properly set?
+
     if (state != State::ReadyForRecalculate)
         throw MotionBlockPyramidError("MotionBlockPyramid isn't in an appropriate state for recalculating motion vectors");
+
+    if (!IsCompatibleForRecalc(pSrcGOF) || !IsCompatibleForRecalc(pRefGOF))
+        throw MotionBlockPyramidError("Incompatible frame format for motion vector recalculation, bitdepth must match");
+
+    if (!pSrcGOF.IsCompatible(pRefGOF))
+        throw MotionBlockPyramidError("The two reference frames don't have the same format");
 
     // Search the motion vectors, for the low details interpolations first
     // Refining the search until we reach the highest detail interpolation.
@@ -1845,7 +1861,6 @@ bool MotionBlockPyramid::IsCompatible(const MotionBlockPyramid &other) const noe
 }
 
 bool MotionBlockPyramid::IsCompatible(const FramePyramid &other) const noexcept {
-    // FIXME, does realwidth/height really matter?
     // FIXME, is bits per sample relevant or even loaded?
     if (nWidth != other.nWidth[0] || nHeight != other.nHeight[0] || nRealWidth != other.nRealWidth[0] || nRealHeight != other.nRealHeight[0])
         return false;
@@ -1859,6 +1874,13 @@ bool MotionBlockPyramid::IsCompatible(const FramePyramid &other) const noexcept 
     if (nPel != other.nPel)
         return false;
 
+    if (bitsPerSample != other.bitsPerSample)
+        return false;
+
+    return true;
+}
+
+bool MotionBlockPyramid::IsCompatibleForRecalc(const FramePyramid &other) const noexcept {
     if (bitsPerSample != other.bitsPerSample)
         return false;
 

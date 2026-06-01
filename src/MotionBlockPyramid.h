@@ -240,6 +240,8 @@ public:
     int nHPadding;
     int nVPadding;
 
+    // FIXME, audit all bitspersample and bytespersample usage
+    // Also prevent recalculating from different bits per sample
     int bitsPerSample;
 private:
     State state = State::Invalid;
@@ -277,5 +279,6 @@ public:
     bool HasMotionVectors() const noexcept;
     bool IsCompatible(const MotionBlockPyramid &other) const noexcept;
     bool IsCompatible(const FramePyramid &other) const noexcept;
+    bool IsCompatibleForRecalc(const FramePyramid &other) const noexcept;
 };
 

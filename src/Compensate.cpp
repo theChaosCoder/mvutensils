@@ -325,7 +325,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                     scPitches = nRefPitches;
                 }
 
-                // FIXME, this padding copy should be removed everywhere?
+                // FIXME, this padding copy should be removed everywhere? In degrain as well?
                 for (int plane = 0; plane < num_planes; plane++) {
                     if (nWidth_B[0] < vsapi->getFrameWidth(dst, plane)) { // padding of right non-covered region
                         vsh::bitblt(pDst[plane] + nWidth_B[plane] * sizeof(PixelType), nDstPitches[plane],
