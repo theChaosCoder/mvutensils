@@ -17,8 +17,6 @@ static void VS_CC filterFree(void *instanceData, VSCore *core, const VSAPI *vsap
     delete reinterpret_cast<T *>(instanceData);
 }
 
-// FIXME, probably should be called something else
-
 constexpr int ERROR_SIZE = 1024;
 
 static constexpr const int MV_DEFAULT_SCD1 = 400;

@@ -42,10 +42,7 @@
     <ClInclude Include="..\src\CopyCode.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\CommonFunctions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\CommonMacros.h">
+    <ClInclude Include="..\src\Common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\CPU.h">

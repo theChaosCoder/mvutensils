@@ -90,8 +90,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\src\CommonFunctions.h" />
-    <ClInclude Include="..\src\CommonMacros.h" />
+    <ClInclude Include="..\src\Common.h" />
     <ClInclude Include="..\src\CopyCode.h" />
     <ClInclude Include="..\src\CPU.h" />
     <ClInclude Include="..\src\MaskFun.h" />

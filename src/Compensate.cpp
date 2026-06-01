@@ -134,9 +134,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
         int num_planes = chroma ? 3 : 1;
 
-        const VSFrame *realSrc = vsapi->getFrameFilter(n, d->node, frameCtx);
-        VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, realSrc, core);
-        vsapi->freeFrame(realSrc);
+        VSFrame *dst = nullptr;
 
         try {
             const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
@@ -148,6 +146,10 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                 FramePyramid pRefGOF(ref, 1, d->prefix, core, vsapi);
                 const auto &pRefPlanes = pRefGOF.GetLevel(0).planes;
 
+                const VSFrame *realSrc = vsapi->getFrameFilter(n, d->node, frameCtx);
+                dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, realSrc, core);
+                vsapi->freeFrame(realSrc);
+
                 for (int i = 0; i < d->supervi->format.numPlanes; i++) {
                     pDstCur[i] = pDst[i] = vsapi->getWritePtr(dst, i);
                     nDstPitches[i] = vsapi->getStride(dst, i);
@@ -157,28 +159,21 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                     nRefPitches[i] = pRefGOF.GetLevel(0).planes[i].nPitch;
                 }
 
-
                 int fieldShift = 0;
                 if (fields && nPel > 1 && ((nref - n) % 2 != 0)) {
                     int err;
                     const VSMap *props = vsapi->getFramePropertiesRO(src);
                     int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                    if (err && !d->tff_exists) {
-                        vsapi->setFilterError("Compensate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                        vsapi->freeFrame(dst);
-                        return nullptr;
-                    }
+                    if (err && !d->tff_exists)
+                        throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
 
                     if (d->tff_exists)
                         src_top_field = d->tff ^ (n % 2);
 
                     props = vsapi->getFramePropertiesRO(ref);
                     bool ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                    if (err && !d->tff_exists) {
-                        vsapi->setFilterError("Compensate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                        vsapi->freeFrame(dst);
-                        return nullptr;
-                    }
+                    if (err && !d->tff_exists)
+                        throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
 
                     if (d->tff_exists)
                         ref_top_field = d->tff ^ (nref % 2);
@@ -344,10 +339,9 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                     }
                 }
             } else {
-                // FIXME, maybe return original frame without copy
-                 // Copy image
-                for (int plane = 0; plane < num_planes; plane++)
-                    vsh::bitblt(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), pSrcPlanes[plane].GetPointer<PixelType>(0, 0), pSrcPlanes[plane].nPitch, vsapi->getFrameWidth(dst, plane) * sizeof(PixelType), vsapi->getFrameHeight(dst, plane));
+                // Return source frame when no processing can be done
+                assert(!dst);
+                return vsapi->getFrameFilter(n, d->node, frameCtx);
             }
 
         } catch (std::runtime_error &e) {

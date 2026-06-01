@@ -1522,6 +1522,7 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
         nLevelsMax++;
 
     nLevelCount = nLevels > 0 ? nLevels : nLevelsMax + nLevels;
+    nLevelCount = std::min(nLevelCount, static_cast<int>(src.pyramidLevels.size()));
     pyramidLevels.resize(nLevelCount);
 
     for (int i = 0; i < nLevelCount; i++) {
