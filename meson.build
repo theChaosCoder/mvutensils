@@ -61,7 +61,7 @@ elif host_machine.cpu_family() == 'aarch64'
     add_project_arguments('-DMVTOOLS_ARM', language: ['cpp'])
 endif
 
-shared_module('mvtools',
+shared_module('mvutensils',
     files(
         'src/CopyCode.cpp',
         'src/CPU.cpp',

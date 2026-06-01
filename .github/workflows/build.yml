@@ -45,7 +45,7 @@ jobs:
 
     - uses: actions/upload-artifact@v7
       with:
-        name: mvtools-${{ matrix.arch }}
+        name: mvutensils-${{ matrix.arch }}
         path: dist
 
   build-windows-wheel:
@@ -63,7 +63,6 @@ jobs:
         msystem: CLANG64
         update: true
         install: >-
-          mingw-w64-clang-x86_64-fftw
           mingw-w64-clang-x86_64-git
           mingw-w64-clang-x86_64-nasm
           mingw-w64-clang-x86_64-ninja
@@ -86,12 +85,12 @@ jobs:
 
     - uses: actions/upload-artifact@v7
       with:
-        name: mvtools-sdist
+        name: mvutensils-sdist
         path: dist/*.tar.gz
 
     - uses: actions/upload-artifact@v7
       with:
-        name: mvtools-win_amd64
+        name: mvutensils-win_amd64
         path: dist/*.whl
 
   publish:

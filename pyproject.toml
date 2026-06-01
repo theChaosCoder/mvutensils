@@ -3,7 +3,7 @@ requires = ["meson-python", "VapourSynth>=74"]
 build-backend = "mesonpy"
 
 [project]
-name = "vapoursynth-mvtools"
+name = "vapoursynth-mvutensils"
 description = "Motion estimation and denoising filter for VapourSynth"
 readme = "readme.rst"
 requires-python = ">=3.12"
@@ -25,7 +25,7 @@ dependencies = ["VapourSynth"]
 dynamic = ["version"]
 
 [project.urls]
-Repository = "https://github.com/dubhatervapoursynth/vapoursynth-mvtools.git"
+Repository = "https://github.com/myrsloik/mvutensils.git"
 Issues = "https://github.com/dubhatervapoursynth/vapoursynth-mvtools/issues"
 
 [tool.meson-python.wheel]
