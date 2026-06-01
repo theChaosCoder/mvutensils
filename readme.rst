@@ -16,7 +16,8 @@ Changes
     
     * blksize has been renamed to blksizeh and overlap to overlaph, they still implicitly set blksizev and overlapv like before
     
-    * Frame properties are now consistently propagated (not that anyone cared)
+    * Frame properties are now consistently propagated, this means that many functions that previously only requested frames from super now also request from the original clip
+    
 
 * Super:
     * Now takes blksizeh/v and overlaph/v values to properly pad the source frame so the edges also are processed and not generate excessive levels that are unused, these are basically mandatory and may be changed to be later
@@ -28,18 +29,23 @@ Changes
     
     * The search and pelsearch argument had mode 0 and 1 removed, as a result all remaining mode have been adjusted by -2
     
+    * The isb argument was removed, instead delta accepts both posivite and negative numbers to indicate direction
+    
     * Will throw an error when not all pixels can be processed due to the chosen blocksize/overlap combination
     
-* Compensate
+* Compensate:
     * None
     
-* DegrainN
+* DegrainN:
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors
+
+* SCDetection:
+    * None
 
 Planned changes
 ===============
 
-* Remove divide argument in Analyse/Recalculate if nobody can explain why it's useful, Recalculate is already similar to divide=1/2 depending on smooth=False/True
+* Remove the divide argument in Analyse/Recalculate if nobody can explain why it's useful, Recalculate is already similar to divide=1/2 depending on smooth=False/True
 
 * Have an Analyse wrapper that outputs a full array of all clips required for DegrainN
 
