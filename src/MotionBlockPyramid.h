@@ -255,14 +255,12 @@ public:
     MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept;
     void ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept; // serialization to a frame, oneLevel means that only the finest level is exported, otherwise all levels are exported as separate properties
 
-    // FIXME, check state before running
     void SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
         int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
         int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
         SearchType coarseSearchType, bool chroma);
 
-    // FIXME, check state before running
     // FIXME, copy pSrcGOF fields to parameters
     void RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,

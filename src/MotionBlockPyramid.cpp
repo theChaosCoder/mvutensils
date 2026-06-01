@@ -1622,6 +1622,9 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     int pzero, int pglobal, int64_t badSAD, int badrange, int meander, int tryMany,
     SearchType coarseSearchType, bool chroma) {
 
+    if (state != State::ReadyForSearch)
+        throw MotionBlockPyramidError("MotionBlockPyramid isn't in an appropriate state for searching motion vectors");
+
     int fieldShiftCur = (nLevelCount - 1 == 0) ? fieldShift : 0; // may be non zero for finest level only
 
     VECTOR globalMV = zeroMV; // create and init global motion vector as zero
@@ -1664,6 +1667,9 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
     int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
     SearchType searchType, int nSearchParam, int nLambda, int pnew,
     int fieldShift, int64_t thSAD, bool useSatd, int smooth, int meander) {
+
+    if (!HasMotionVectors())
+        throw MotionBlockPyramidError("MotionBlockPyramid isn't in an appropriate state for recalculating motion vectors");
 
     // Search the motion vectors, for the low details interpolations first
     // Refining the search until we reach the highest detail interpolation.
