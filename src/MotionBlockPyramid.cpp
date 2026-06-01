@@ -1210,7 +1210,7 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
 
 template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-    int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
+    int nBlkSizeX_, int nBlkSizeY_, int nOverlapX_, int nOverlapY_, bool chroma_,
     SearchType st, int stp, int lambda, int pnew,
     int fieldShift, int64_t thSAD, bool smooth, bool meander, bool useSatd) {
                                     
@@ -1222,13 +1222,12 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     globalMVPredictor.sad = 9999999;
     penaltyNew = pnew;
 
-    // FIXME, fix "this" mess
     int nBlkXold = nBlkX;
     int nBlkYold = nBlkY;
-    int nBlkSizeXold = this->nBlkSizeX;
-    int nBlkSizeYold = this->nBlkSizeY;
-    int nOverlapXold = this->nOverlapX;
-    int nOverlapYold = this->nOverlapY;
+    int nBlkSizeXold = nBlkSizeX;
+    int nBlkSizeYold = nBlkSizeY;
+    int nOverlapXold = nOverlapX;
+    int nOverlapYold = nOverlapY;
     int nStepXold = nBlkSizeXold - nOverlapXold;
     int nStepYold = nBlkSizeYold - nOverlapYold;
     int nLogPelold = ilog2(nPel);
@@ -1236,12 +1235,12 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     std::vector<VECTOR> oldVectors;
     std::swap(oldVectors, vectors);
     
-    this->nBlkSizeX = nBlkSizeX;
-    this->nBlkSizeY = nBlkSizeY;
-    this->nOverlapX = nOverlapX;
-    this->nOverlapY = nOverlapY;
-    this->nPel = 1 << nLogPel;
-    this->chroma = chroma;
+    nBlkSizeX = nBlkSizeX_;
+    nBlkSizeY = nBlkSizeY_;
+    nOverlapX = nOverlapX_;
+    nOverlapY = nOverlapY_;
+    nPel = 1 << nLogPel;
+    chroma = chroma_;
 
     xRatioUV = 1;
     yRatioUV = 1;
@@ -1861,7 +1860,6 @@ bool MotionBlockPyramid::IsCompatible(const MotionBlockPyramid &other) const noe
 }
 
 bool MotionBlockPyramid::IsCompatible(const FramePyramid &other) const noexcept {
-    // FIXME, is bits per sample relevant or even loaded?
     if (nWidth != other.nWidth[0] || nHeight != other.nHeight[0] || nRealWidth != other.nRealWidth[0] || nRealHeight != other.nRealHeight[0])
         return false;
 

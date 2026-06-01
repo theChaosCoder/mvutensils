@@ -344,16 +344,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                         if (by < nBlkY - 1)
                             memmove(DstTemp, DstTemp + stepY * dstTempPitch, nOverlapY[plane] * dstTempPitch);
                     }
-
-                    if (nWidth_B[0] < vsapi->getFrameWidth(dst, plane))
-                        vsh::bitblt(pDst[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
-                            pSrc[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
-                            (vsapi->getFrameWidth(dst, plane) - nWidth_B[plane]) * bytesPerSample, nHeight_B[plane]);
-
-                    if (nHeight_B[0] < vsapi->getFrameHeight(dst, plane)) // bottom noncovered region
-                        vsh::bitblt(pDst[plane] + nDstPitches[plane] * nHeight_B[plane], nDstPitches[plane],
-                            pSrc[plane] + nSrcPitches[plane] * nHeight_B[plane], nSrcPitches[plane],
-                            nWidth[plane] * bytesPerSample, vsapi->getFrameHeight(dst, plane) - nHeight_B[plane]);
                 }
 
                 int pixelMax = (1 << bitsPerSample) - 1;

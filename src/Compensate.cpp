@@ -235,11 +235,13 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                     }
                 } else { // overlap
                     uint8_t *DstTemp[3] = {};
+                    std::unique_ptr<uint8_t[]> DstTempBuffers[3];
 
                     // Allocate buffer for only nBlkSizeY rows instead of full frame height
                     // We'll output finalized rows and reuse the buffer as a sliding window
                     for (int plane = 0; plane < num_planes; plane++) {
-                        DstTemp[plane] = (uint8_t *)malloc(nBlkSizeY[plane] * dstTempPitch[plane]);
+                        DstTempBuffers[plane] = std::make_unique<uint8_t[]>(nBlkSizeY[plane] * dstTempPitch[plane]);
+                        DstTemp[plane] = DstTempBuffers[plane].get();
                     }
 
                     for (int by = 0; by < nBlkY; by++) {
@@ -307,36 +309,6 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                                     nOverlapY[plane] * dstTempPitch[plane]);
                             }
                         }
-                    }
-
-                    for (int plane = 0; plane < num_planes; plane++) {
-                        free(DstTemp[plane]);
-                    }
-                }
-
-                const uint8_t **scSrc;
-                ptrdiff_t *scPitches;
-
-                if (scBehavior) {
-                    scSrc = pSrc;
-                    scPitches = nSrcPitches;
-                } else {
-                    scSrc = pRef;
-                    scPitches = nRefPitches;
-                }
-
-                // FIXME, this padding copy should be removed everywhere? In degrain as well?
-                for (int plane = 0; plane < num_planes; plane++) {
-                    if (nWidth_B[0] < vsapi->getFrameWidth(dst, plane)) { // padding of right non-covered region
-                        vsh::bitblt(pDst[plane] + nWidth_B[plane] * sizeof(PixelType), nDstPitches[plane],
-                            scSrc[plane] + (nWidth_B[plane] + nHPadding[plane]) * sizeof(PixelType) + nVPadding[plane] * scPitches[plane], scPitches[plane],
-                            (nWidth[plane] - nWidth_B[plane]) * sizeof(PixelType), nHeight_B[plane]);
-                    }
-
-                    if (nHeight_B[0] < vsapi->getFrameHeight(dst, plane)) { // padding of bottom non-covered region
-                        vsh::bitblt(pDst[plane] + nHeight_B[plane] * nDstPitches[plane], nDstPitches[plane],
-                            scSrc[plane] + nHPadding[plane] * sizeof(PixelType) + (nHeight_B[plane] + nVPadding[plane]) * scPitches[plane], scPitches[plane],
-                            nWidth[plane] * sizeof(PixelType), nHeight[plane] - nHeight_B[plane]);
                     }
                 }
             } else {

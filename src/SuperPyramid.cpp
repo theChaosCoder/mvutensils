@@ -944,7 +944,6 @@ void FramePyramid::FreeFrames() noexcept {
     vsapi->freeFrame(serializedData);
 }
 
-// FIXME, this should probably be per level if switched to one frame per level instead of one frame per plane
 FramePyramid::~FramePyramid() {
     FreeFrames();
 }
