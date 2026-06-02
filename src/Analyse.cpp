@@ -325,11 +325,10 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->deltaFrame == 0)
             throw std::runtime_error("delta can't be 0");
 
-        char errorMsg[ERROR_SIZE] = "failed to retrieve first frame from super clip. Error message: ";
-        size_t errorLen = strlen(errorMsg);
-        const VSFrame *evil = vsapi->getFrame(0, d->node, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+        char errorMsg[ERROR_SIZE] = {};
+        const VSFrame *evil = vsapi->getFrame(0, d->node, errorMsg, ERROR_SIZE);
         if (!evil)
-            throw std::runtime_error(errorMsg);
+            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
 
         FramePyramid super(evil, -1, d->prefix, core, vsapi);
 

@@ -115,7 +115,6 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
             SimpleResize *upsizer = &d->upsizer;
             SimpleResize *upsizerUV = &d->upsizerUV;
             uint8_t *smallMask = (uint8_t *)malloc(nBlkX * nBlkY);
-            uint8_t *smallMaskV = (uint8_t *)malloc(nBlkX * nBlkY);
 
             // FIXME, only kind 0..2 seem useful and should probably be separated into different filters
 
@@ -154,7 +153,6 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
             }
 
             free(smallMask);
-            free(smallMaskV);
         } else { // not usable
             memset(pDst[0], d->nSceneChangeValue, nHeight * nDstPitches[0]);
             memset(pDst[1], d->nSceneChangeValue, nHeightUV * nDstPitches[1]);
@@ -222,10 +220,10 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
         d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
-        char errorMsg[ERROR_SIZE] = "failed to retrieve first frame from super clip. Error message: ";
+        char errorMsg[ERROR_SIZE] = {};
         const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg, ERROR_SIZE);
         if (!evil2)
-            throw std::runtime_error(errorMsg);
+            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(errorMsg));
 
         MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi.format.bitsPerSample);

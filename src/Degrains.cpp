@@ -578,10 +578,10 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node);
 
-        char errorMsg[ERROR_SIZE + 1] = {};
+        char errorMsg[ERROR_SIZE] = {};
         const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
         if (!evil)
-            throw std::runtime_error("failed to retrieve first frame from super clip.Error message : " + std::string(errorMsg));
+            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
 
         FramePyramid evilPyramid(evil, 0, d->prefix, core, vsapi);
 

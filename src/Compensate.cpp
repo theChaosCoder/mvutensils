@@ -371,11 +371,10 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-        char errorMsg[ERROR_SIZE] = "failed to retrieve first frame from super clip. Error message: ";
-        size_t errorLen = strlen(errorMsg);
-        const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+        char errorMsg[ERROR_SIZE] = {};
+        const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
         if (!evil)
-            throw std::runtime_error(errorMsg);
+            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
 
 
         FramePyramid super(evil, 0, d->prefix, core, vsapi);
@@ -388,10 +387,10 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("source clip isn't compatible with super clip");
 
-        char error[ERROR_SIZE + 1] = {};
-        const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+        char error[ERROR_SIZE] = {};
+        const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, error, ERROR_SIZE);
         if (!evil2)
-            throw std::runtime_error(errorMsg);
+            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(error));
 
         MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
 
