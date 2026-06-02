@@ -24,6 +24,8 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
+#define ZIMGXX_NAMESPACE mvuzimgxx
+#include <zimg++.hpp>
 
 // BilinearUpsizeLuma(mask dst, dstpitch, dstwidth, dstheight, mask, maskpitch, nBlkx, nBlky, nBlkzieX, nBlksizeY, nOverlapX, nOverlapY)
 // BilinearUpsizeChroma(mask dst, dstpitch, dstwidth, dstheight, mask, maskpitch, nBlkx, nBlky, nBlkzieX, nBlksizeY, nOverlapX, nOverlapY, chromaLocation)
@@ -129,8 +131,6 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
     if (err)
         d->fGamma = 1.0f;
 
-    d->kind = vsapi->mapGetIntSaturated(in, "kind", 0, &err);
-
     double time = vsapi->mapGetFloat(in, "time", 0, &err);
     if (err)
         time = 100.0;
@@ -149,9 +149,6 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
         if (d->fGamma < 0.0f)
             throw std::runtime_error("gamma must not be negative");
-
-        if (d->kind < 0 || d->kind > 5)
-            throw std::runtime_error("kind must 0, 1, 2, 3, 4, or 5");
 
         if (time < 0.0 || time > 100.0)
             throw std::runtime_error("time must be between 0.0 and 100.0");
@@ -209,7 +206,6 @@ static constexpr char filterArgs[] =
     "vectors:vnode;"
     "ml:float:opt;"
     "gamma:float:opt;"
-    "kind:int:opt;"
     "time:float:opt;"
     "ysc:int:opt;"
     "thscd1:int:opt;"
