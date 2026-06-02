@@ -17,6 +17,10 @@ static void VS_CC filterFree(void *instanceData, VSCore *core, const VSAPI *vsap
     delete reinterpret_cast<T *>(instanceData);
 }
 
+constexpr int roundUpTo64(int value) {
+    return ((value + 63) / 64) * 64;
+}
+
 constexpr int ERROR_SIZE = 1024;
 
 static constexpr const int MV_DEFAULT_SCD1 = 400;

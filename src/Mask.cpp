@@ -24,6 +24,10 @@
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
+
+// BilinearUpsizeLuma(mask dst, dstpitch, dstwidth, dstheight, mask, maskpitch, nBlkx, nBlky, nBlkzieX, nBlksizeY, nOverlapX, nOverlapY)
+// BilinearUpsizeChroma(mask dst, dstpitch, dstwidth, dstheight, mask, maskpitch, nBlkx, nBlky, nBlkzieX, nBlksizeY, nOverlapX, nOverlapY, chromaLocation)
+
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 #include "Common.h"
@@ -31,7 +35,6 @@
 struct MaskDataExtra {
     VSVideoInfo vi;
 
-    float ml;
     float fGamma;
     int kind;
     int time256;
@@ -71,21 +74,22 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
             MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
             vsapi->freeFrame(mvn);
 
+            ptrdiff_t maskPitch = roundUpTo64(vectors.nBlkX);
+
             if (vectors.IsUsable(d->thscd1, d->thscd2)) {
-                std::unique_ptr<uint8_t[]> smallMask(new uint8_t[vectors.nBlkX * vectors.nBlkY]);
+                std::unique_ptr<uint8_t[]> smallMask(new uint8_t[maskPitch * vectors.nBlkY]);
 
                 if (d->kind == 0) {
-                    vectors.MakeVectorLengthMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), vectors.nBlkX, d->time256);
+                    vectors.MakeVectorLengthMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
                 } else if (d->kind == 1) {
-                    vectors.MakeSADMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), vectors.nBlkX, d->time256);
+                    vectors.MakeSADMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
                 } else if (d->kind == 2) {
-                    vectors.MakeVectorOcclusionMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), vectors.nBlkX, d->time256);
+                    vectors.MakeVectorOcclusionMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
                 }
 
-                upsizer->simpleResize_uint8_t(upsizer, pDst[0], nDstPitches[0], smallMask, nBlkX, 0);
-                upsizerUV->simpleResize_uint8_t(upsizerUV, pDst[1], nDstPitches[1], smallMask, nBlkX, 0);
-
-                memcpy(pDst[2], pDst[1], nHeightUV * nDstPitches[1]);
+                //upsizer->simpleResize_uint8_t(upsizer, pDst[0], nDstPitches[0], smallMask, nBlkX, 0);
+                //upsizerUV->simpleResize_uint8_t(upsizerUV, pDst[1], nDstPitches[1], smallMask, nBlkX, 0);
+                //memcpy(pDst[2], pDst[1], nHeightUV * nDstPitches[1]);
 
             } else {
                 for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
@@ -106,13 +110,20 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
 static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<MaskData> d(new MaskData(vsapi));
 
-    d->filterName = "Mask";
-
     int err;
 
-    d->ml = (float)vsapi->mapGetFloat(in, "ml", 0, &err);
+    d->kind = (intptr_t)userData;
+    
+    if (d->kind == 0)
+        d->filterName = "VectorLengthMask";
+    else if (d->kind == 1)
+        d->filterName = "SADMask";
+    else if (d->kind == 2)
+        d->filterName = "OcclusionMask";
+
+    float ml = (float)vsapi->mapGetFloat(in, "ml", 0, &err);
     if (err)
-        d->ml = 100.0f;
+        ml = 100.0f;
 
     d->fGamma = (float)vsapi->mapGetFloat(in, "gamma", 0, &err);
     if (err)
@@ -164,7 +175,7 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi.format.bitsPerSample);
 
-        d->fMaskNormFactor = 1.0f / d->ml;
+        d->fMaskNormFactor = 1.0f / ml;
 
         d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = *vsapi->getVideoInfo(d->node1);
@@ -175,9 +186,6 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
         if (d->vi.format.colorFamily == cfGray)
             vsapi->getVideoFormatByID(&d->vi.format, pfYUV444P8, core);
-
-        simpleInit(&d->upsizer, d->nWidthB, d->nHeightB, d->vectors_data.nBlkX, d->vectors_data.nBlkY, d->vectors_data.nWidth, d->vectors_data.nHeight, d->vectors_data.nPel);
-        simpleInit(&d->upsizerUV, d->nWidthBUV, d->nHeightBUV, d->vectors_data.nBlkX, d->vectors_data.nBlkY, d->nWidthUV, d->nHeightUV, d->vectors_data.nPel);
 
         d->time256 = (int)(time * 256 / 100);
 
@@ -196,18 +204,29 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 }
 
 
+static constexpr char filterArgs[] =
+    "clip:vnode;"
+    "vectors:vnode;"
+    "ml:float:opt;"
+    "gamma:float:opt;"
+    "kind:int:opt;"
+    "time:float:opt;"
+    "ysc:int:opt;"
+    "thscd1:int:opt;"
+    "thscd2:int:opt;"
+    "prefix:data:opt;";
+
 void maskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
-    vspapi->registerFunction("Mask",
-                 "clip:vnode;"
-                 "vectors:vnode;"
-                 "ml:float:opt;"
-                 "gamma:float:opt;"
-                 "kind:int:opt;"
-                 "time:float:opt;"
-                 "ysc:int:opt;"
-                 "thscd1:int:opt;"
-                 "thscd2:int:opt;"
-                 "prefix:data:opt;",
-                 "clip:vnode;",
-                 maskCreate, nullptr, plugin);
+    vspapi->registerFunction("VectorLengthMask",
+        filterArgs,
+        "clip:vnode;",
+        maskCreate, nullptr, plugin);
+    vspapi->registerFunction("SADMask",
+        filterArgs,
+        "clip:vnode;",
+        maskCreate, (void *)1, plugin);
+    vspapi->registerFunction("OcclusionMask",
+        filterArgs,
+        "clip:vnode;",
+        maskCreate, (void *)2, plugin);
 }

@@ -1924,16 +1924,17 @@ void MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, uint8_t
             }
             int i1 = bxi + byi * nBlkX;
             int64_t sad = GetBlock(i1).vector.sad >> (bitsPerSample - 8);
-            Mask[bx + by * MaskPitch] = ByteNorm(sad, dSADNormFactor, fGamma);
+            Mask[bx] = ByteNorm(sad, dSADNormFactor, fGamma);
         }
+        Mask += MaskPitch;
     }
 }
 
-static void ByteOccMask(uint8_t *VS_RESTRICT occMask, int occlusion, float occnorm, float fGamma) {
+static void ByteOccMask(uint8_t &occMask, int occlusion, float occnorm, float fGamma) {
     if (fGamma == 1.0f)
-        *occMask = std::max<uint8_t>(*occMask, static_cast<uint8_t>(std::min<float>(255 * occlusion * occnorm, 255)));
+        occMask = std::max<uint8_t>(occMask, static_cast<uint8_t>(std::min<float>(255 * occlusion * occnorm, 255)));
     else
-        *occMask = std::max<uint8_t>(*occMask, static_cast<uint8_t>(std::min<float>(255 * pow(occlusion * occnorm, fGamma), 255)));
+        occMask = std::max<uint8_t>(occMask, static_cast<uint8_t>(std::min<float>(255 * pow(occlusion * occnorm, fGamma), 255)));
 }
 
 void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, uint8_t *occMask, ptrdiff_t occMaskPitch, int time256) const noexcept {
@@ -1962,7 +1963,7 @@ void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float f
                     int minb = isBackward ? std::max(0, bx + 1 - occlusion * time4096X / 4096) : bx;
                     int maxb = isBackward ? bx + 1 : std::min(bx + 1 - occlusion * time4096X / 4096, nBlkX - 1);
                     for (int bxi = minb; bxi <= maxb; bxi++)
-                        ByteOccMask(&occMask[bxi + by * occMaskPitch], occlusion, occnormX, fGamma);
+                        ByteOccMask(occMask[bxi + by * occMaskPitch], occlusion, occnormX, fGamma);
                 }
             }
             if (by < nBlkY - 1) {
@@ -1974,7 +1975,7 @@ void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float f
                     int minb = isBackward ? std::max(0, by + 1 - occlusion * time4096Y / 4096) : by;
                     int maxb = isBackward ? by + 1 : std::min(by + 1 - occlusion * time4096Y / 4096, nBlkY - 1);
                     for (int byi = minb; byi <= maxb; byi++)
-                        ByteOccMask(&occMask[bx + byi * occMaskPitch], occlusion, occnormY, fGamma);
+                        ByteOccMask(occMask[bx + byi * occMaskPitch], occlusion, occnormY, fGamma);
                 }
             }
         }
