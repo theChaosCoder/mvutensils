@@ -237,21 +237,19 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
             d->nOverlapY % (2 << d->vi->format.subSamplingH)))
             throw std::runtime_error("overlaph and overlapv must be multiples of 2 or 4 when divide>0, depending on the super clip's subsampling");
 
-        char errorMsg[ERROR_SIZE] = "failed to retrieve first frame from super clip. Error message: ";
-        size_t errorLen = strlen(errorMsg);
-        const VSFrame *evil = vsapi->getFrame(0, d->node1, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+        char errorMsg[ERROR_SIZE] = {};
+        const VSFrame *evil = vsapi->getFrame(0, d->node1, errorMsg, ERROR_SIZE);
 
         if (!evil)
-            throw std::runtime_error(errorMsg);
+            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
 
         FramePyramid evilPyramid(evil, 0, d->prefix, core, vsapi);
 
         d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
-        char error[ERROR_SIZE + 1] = {};
-        const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
+        const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg, ERROR_SIZE);
         if (!evil2)
-            throw std::runtime_error(errorMsg);
+            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(errorMsg));
 
         MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
 

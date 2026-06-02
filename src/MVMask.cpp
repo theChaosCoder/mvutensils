@@ -18,24 +18,24 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
-#include <climits>
 #include <cmath>
+#include <memory>
 
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
+#include "SuperPyramid.h"
+#include "MotionBlockPyramid.h"
 #include "MaskFun.h"
-#include "MVAnalysisData.h"
 #include "SimpleResize.h"
-#include "CommonMacros.h"
+#include "Common.h"
 
 
 
-typedef struct MVMaskData {
-    VSNode *node;
+struct MaskDataExtra {
+    // FIXME, why not a const pointer?
     VSVideoInfo vi;
 
-    VSNode *vectors;
     float ml;
     float fGamma;
     int kind;
@@ -43,7 +43,6 @@ typedef struct MVMaskData {
     int nSceneChangeValue;
     int64_t thscd1;
     int thscd2;
-    int opt;
 
     float fMaskNormFactor;
     float fMaskNormFactor2;
@@ -56,129 +55,93 @@ typedef struct MVMaskData {
     int nWidthBUV;
     int nHeightBUV;
 
-    MVAnalysisData vectors_data;
+    std::string prefix;
 
     SimpleResize upsizer;
     SimpleResize upsizerUV;
-} MVMaskData;
+};
+
+typedef DualNodeData<MaskDataExtra> MaskData;
 
 
-static inline uint8_t mvmaskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma) {
+static uint8_t maskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma) {
     double norme = (double)(v.x * v.x + v.y * v.y) / (pel * pel);
 
-    double l = 255 * pow(norme * fMaskNormFactor2, fHalfGamma); //Fizick - simply rewritten
+    double l = 255 * pow(norme * fMaskNormFactor2, fHalfGamma);
 
     return (uint8_t)((l > 255) ? 255 : l);
 }
 
-
-static const VSFrame *VS_CC mvmaskGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
-
-    MVMaskData *d = (MVMaskData *)instanceData;
+static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+    MaskData *d =  reinterpret_cast<MaskData *>(instanceData);
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(n, d->vectors, frameCtx);
-        vsapi->requestFrameFilter(n, d->node, frameCtx);
+        vsapi->requestFrameFilter(n, d->node1, frameCtx);
+        vsapi->requestFrameFilter(n, d->node2, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
+        const VSFrame *src = vsapi->getFrameFilter(n, d->node1, frameCtx);
         VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, src, core);
+        vsapi->freeFrame(src);
 
-        const uint8_t *pSrc[3];
         uint8_t *pDst[3];
         ptrdiff_t nDstPitches[3];
-        ptrdiff_t nSrcPitches[3];
-
-        pSrc[0] = vsapi->getReadPtr(src, 0);
-        nSrcPitches[0] = vsapi->getStride(src, 0);
 
         for (int i = 0; i < 3; i++) {
             pDst[i] = vsapi->getWritePtr(dst, i);
             nDstPitches[i] = vsapi->getStride(dst, i);
         }
 
-        FakeGroupOfPlanes fgop;
-        const VSFrame *mvn = vsapi->getFrameFilter(n, d->vectors, frameCtx);
-        fgopInit(&fgop, &d->vectors_data);
-        const VSMap *mvprops = vsapi->getFramePropertiesRO(mvn);
-        fgopUpdate(&fgop, (const uint8_t *)vsapi->mapGetData(mvprops, prop_MVTools_vectors, 0, NULL));
+        const VSFrame *mvn = vsapi->getFrameFilter(n, d->node2, frameCtx);
+        MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
         vsapi->freeFrame(mvn);
 
-        const int kind = d->kind;
-        const int nWidth = d->vectors_data.nWidth;
-        const int nHeight = d->vectors_data.nHeight;
-        const int nWidthUV = d->nWidthUV;
-        const int nHeightUV = d->nHeightUV;
-        const int nSceneChangeValue = d->nSceneChangeValue;
+        const int nWidth = vectors.nWidth;
+        const int nHeight = vectors.nHeight;
+        const int nWidthUV = vectors.nWidthUV;
+        const int nHeightUV = vectors.nHeightUV;
 
-        if (fgopIsUsable(&fgop, d->thscd1, d->thscd2)) {
-            const int nBlkX = d->vectors_data.nBlkX;
-            const int nBlkY = d->vectors_data.nBlkY;
+        if (vectors.IsUsable(d->thscd1, d->thscd2)) {
+            const int nBlkX = vectors.nBlkX;
+            const int nBlkY = vectors.nBlkY;
             const int nBlkCount = nBlkX * nBlkY;
-            const float fMaskNormFactor = d->fMaskNormFactor;
-            const float fMaskNormFactor2 = d->fMaskNormFactor2;
-            const float fGamma = d->fGamma;
-            const float fHalfGamma = d->fHalfGamma;
-            const int nPel = d->vectors_data.nPel;
-            const int nBlkSizeX = d->vectors_data.nBlkSizeX;
-            const int nBlkSizeY = d->vectors_data.nBlkSizeY;
-            const int nOverlapX = d->vectors_data.nOverlapX;
-            const int nOverlapY = d->vectors_data.nOverlapY;
-            const int nWidthB = d->nWidthB;
-            const int nHeightB = d->nHeightB;
-            const int nWidthBUV = d->nWidthBUV;
-            const int nHeightBUV = d->nHeightBUV;
+            const int nBlkSizeX = vectors.nBlkSizeX;
+            const int nBlkSizeY = vectors.nBlkSizeY;
+            const int nOverlapX = vectors.nOverlapX;
+            const int nOverlapY = vectors.nOverlapY;
+            const int nWidthB = vectors.nWidthB;
+            const int nHeightB = vectors.nHeightB;
+            const int nWidthBUV = vectors.nWidthBUV;
+            const int nHeightBUV = vectors.nHeightBUV;
             SimpleResize *upsizer = &d->upsizer;
             SimpleResize *upsizerUV = &d->upsizerUV;
-            const int time256 = d->time256;
-            const int bitsPerSample = vsapi->getVideoFrameFormat(src)->bitsPerSample;
-
             uint8_t *smallMask = (uint8_t *)malloc(nBlkX * nBlkY);
             uint8_t *smallMaskV = (uint8_t *)malloc(nBlkX * nBlkY);
 
             // FIXME, only kind 0..2 seem useful and should probably be separated into different filters
 
-            if (kind == 0) { // vector length mask
+            if (d->kind == 0) { // vector length mask
                 for (int j = 0; j < nBlkCount; j++)
-                    smallMask[j] = mvmaskLength(fgopGetBlock(&fgop, 0, j)->vector, nPel, fMaskNormFactor2, fHalfGamma);
-            } else if (kind == 1) { // SAD mask
-                MakeSADMaskTime(&fgop, nBlkX, nBlkY, 4.0 * fMaskNormFactor / (nBlkSizeX * nBlkSizeY), fGamma, nPel, smallMask, nBlkX, time256, nBlkSizeX - nOverlapX, nBlkSizeY - nOverlapY, bitsPerSample);
-            } else if (kind == 2) { // occlusion mask
-                MakeVectorOcclusionMaskTime(&fgop, d->vectors_data.isBackward, nBlkX, nBlkY, 1.0 / fMaskNormFactor, fGamma, nPel, smallMask, nBlkX, time256, nBlkSizeX - nOverlapX, nBlkSizeY - nOverlapY);
-            } else if (kind == 3) { // vector x mask
-                for (int j = 0; j < nBlkCount; j++)
-                    smallMask[j] = VSMAX(0, VSMIN(255, (int)(fgopGetBlock(&fgop, 0, j)->vector.x * fMaskNormFactor * 100 + 128))); // shited by 128 for signed support
-            } else if (kind == 4) { // vector y mask
-                for (int j = 0; j < nBlkCount; j++)
-                    smallMask[j] = VSMAX(0, VSMIN(255, (int)(fgopGetBlock(&fgop, 0, j)->vector.y * fMaskNormFactor * 100 + 128))); // shited by 128 for signed support
-            } else if (kind == 5) {                                      // vector x mask in U, y mask in V
-                for (int j = 0; j < nBlkCount; j++) {
-                    VECTOR v = fgopGetBlock(&fgop, 0, j)->vector;
-                    smallMask[j] = VSMAX(0, VSMIN(255, (int)(v.x * fMaskNormFactor * 100 + 128)));  // shited by 128 for signed support
-                    smallMaskV[j] = VSMAX(0, VSMIN(255, (int)(v.y * fMaskNormFactor * 100 + 128))); // shited by 128 for signed support
-                }
+                    smallMask[j] = maskLength(vectors.GetBlock(j).vector, vectors.nPel, d->fMaskNormFactor2, d->fHalfGamma);
+            } else if (d->kind == 1) { // SAD mask
+                MakeSADMaskTime(&fgop, nBlkX, nBlkY, 4.0 * d->fMaskNormFactor / (nBlkSizeX * nBlkSizeY), d->fGamma, vectors.nPel, smallMask, nBlkX, d->time256, nBlkSizeX - nOverlapX, nBlkSizeY - nOverlapY, d->vi.format.bitsPerSample);
+            } else if (d->kind == 2) { // occlusion mask
+                MakeVectorOcclusionMaskTime(&fgop, d->vectors_data.isBackward, nBlkX, nBlkY, 1.0 / d->fMaskNormFactor, d->fGamma, vectors.nPel, smallMask, nBlkX, d->time256, nBlkSizeX - nOverlapX, nBlkSizeY - nOverlapY);
             }
 
-            if (kind == 5) { // do not change luma for kind=5
-                memcpy(pDst[0], pSrc[0], nSrcPitches[0] * nHeight);
-            } else {
-                upsizer->simpleResize_uint8_t(upsizer, pDst[0], nDstPitches[0], smallMask, nBlkX, 0);
-                if (nWidth > nWidthB)
-                    for (int h = 0; h < nHeight; h++)
-                        for (int w = nWidthB; w < nWidth; w++)
-                            *(pDst[0] + h * nDstPitches[0] + w) = *(pDst[0] + h * nDstPitches[0] + nWidthB - 1);
-                if (nHeight > nHeightB)
-                    vsh::bitblt(pDst[0] + nHeightB * nDstPitches[0], nDstPitches[0], pDst[0] + (nHeightB - 1) * nDstPitches[0], nDstPitches[0], nWidth, nHeight - nHeightB);
-            }
+            upsizer->simpleResize_uint8_t(upsizer, pDst[0], nDstPitches[0], smallMask, nBlkX, 0);
+            if (nWidth > nWidthB)
+                for (int h = 0; h < nHeight; h++)
+                    for (int w = nWidthB; w < nWidth; w++)
+                        *(pDst[0] + h * nDstPitches[0] + w) = *(pDst[0] + h * nDstPitches[0] + nWidthB - 1);
+            if (nHeight > nHeightB)
+                vsh::bitblt(pDst[0] + nHeightB * nDstPitches[0], nDstPitches[0], pDst[0] + (nHeightB - 1) * nDstPitches[0], nDstPitches[0], nWidth, nHeight - nHeightB);
 
             // chroma
             upsizerUV->simpleResize_uint8_t(upsizerUV, pDst[1], nDstPitches[1], smallMask, nBlkX, 0);
 
-            if (kind == 5)
-                upsizerUV->simpleResize_uint8_t(upsizerUV, pDst[2], nDstPitches[2], smallMaskV, nBlkX, 0);
-            else
-                memcpy(pDst[2], pDst[1], nHeightUV * nDstPitches[1]);
+            memcpy(pDst[2], pDst[1], nHeightUV * nDstPitches[1]);
 
+            // EXTEND to cover the unprocessed borders
             if (nWidthUV > nWidthBUV)
                 for (int h = 0; h < nHeightUV; h++)
                     for (int w = nWidthBUV; w < nWidthUV; w++) {
@@ -193,160 +156,125 @@ static const VSFrame *VS_CC mvmaskGetFrame(int n, int activationReason, void *in
             free(smallMask);
             free(smallMaskV);
         } else { // not usable
-            if (kind == 5)
-                memcpy(pDst[0], pSrc[0], nSrcPitches[0] * nHeight);
-            else
-                memset(pDst[0], nSceneChangeValue, nHeight * nDstPitches[0]);
-
-            memset(pDst[1], nSceneChangeValue, nHeightUV * nDstPitches[1]);
-            memset(pDst[2], nSceneChangeValue, nHeightUV * nDstPitches[2]);
+            memset(pDst[0], d->nSceneChangeValue, nHeight * nDstPitches[0]);
+            memset(pDst[1], d->nSceneChangeValue, nHeightUV * nDstPitches[1]);
+            memset(pDst[2], d->nSceneChangeValue, nHeightUV * nDstPitches[2]);
         }
 
-        fgopDeinit(&fgop);
 
-        vsapi->freeFrame(src);
 
         return dst;
     }
 
-    return 0;
+    return nullptr;
 }
 
+static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+    std::unique_ptr<MaskData> d(new MaskData(vsapi));
 
-static void VS_CC mvmaskFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
-    MVMaskData *d = (MVMaskData *)instanceData;
-
-    vsapi->freeNode(d->node);
-    vsapi->freeNode(d->vectors);
-    simpleDeinit(&d->upsizer);
-    simpleDeinit(&d->upsizerUV);
-    free(d);
-}
-
-
-static void VS_CC mvmaskCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
-
-    MVMaskData d;
-    MVMaskData *data;
+    std::string filterName = "Mask";
 
     int err;
 
-    d.ml = (float)vsapi->mapGetFloat(in, "ml", 0, &err);
+    d->ml = (float)vsapi->mapGetFloat(in, "ml", 0, &err);
     if (err)
-        d.ml = 100.0f;
+        d->ml = 100.0f;
 
-    d.fGamma = (float)vsapi->mapGetFloat(in, "gamma", 0, &err);
+    d->fGamma = (float)vsapi->mapGetFloat(in, "gamma", 0, &err);
     if (err)
-        d.fGamma = 1.0f;
+        d->fGamma = 1.0f;
 
-    d.kind = vsapi->mapGetIntSaturated(in, "kind", 0, &err);
+    d->kind = vsapi->mapGetIntSaturated(in, "kind", 0, &err);
 
     double time = vsapi->mapGetFloat(in, "time", 0, &err);
     if (err)
         time = 100.0;
 
-    d.nSceneChangeValue = vsapi->mapGetIntSaturated(in, "ysc", 0, &err);
+    d->nSceneChangeValue = vsapi->mapGetIntSaturated(in, "ysc", 0, &err);
 
-    d.thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
+    d->thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
     if (err)
-        d.thscd1 = MV_DEFAULT_SCD1;
+        d->thscd1 = MV_DEFAULT_SCD1;
 
-    d.thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
+    d->thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
     if (err)
-        d.thscd2 = MV_DEFAULT_SCD2;
+        d->thscd2 = MV_DEFAULT_SCD2;
 
-    d.opt = !!vsapi->mapGetInt(in, "opt", 0, &err);
-    if (err)
-        d.opt = 1;
+    try {
+
+        if (d->fGamma < 0.0f)
+            throw std::runtime_error("gamma must not be negative");
+
+        if (d->kind < 0 || d->kind > 5)
+            throw std::runtime_error("kind must 0, 1, 2, 3, 4, or 5");
+
+        if (time < 0.0 || time > 100.0)
+            throw std::runtime_error("time must be between 0.0 and 100.0");
+
+        if (d->nSceneChangeValue < 0 || d->nSceneChangeValue > 255)
+            throw std::runtime_error("ysc must be between 0 and 255");
+
+        const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+        if (prefix)
+            d->prefix = prefix;
+        else
+            d->prefix = DEFAULT_MVUTENSILS_PREFIX;
+
+        d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+
+        char errorMsg[ERROR_SIZE] = "failed to retrieve first frame from super clip. Error message: ";
+        const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg, ERROR_SIZE);
+        if (!evil2)
+            throw std::runtime_error(errorMsg);
+
+        MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
+        vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi.format.bitsPerSample);
+
+        d->fMaskNormFactor = 1.0f / d->ml;
+        d->fMaskNormFactor2 = d->fMaskNormFactor * d->fMaskNormFactor;
+
+        d->fHalfGamma = d->fGamma * 0.5f;
+
+        d->nWidthB = d->vectors_data.nBlkX * (d->vectors_data.nBlkSizeX - d->vectors_data.nOverlapX) + d->vectors_data.nOverlapX;
+        d->nHeightB = d->vectors_data.nBlkY * (d->vectors_data.nBlkSizeY - d->vectors_data.nOverlapY) + d->vectors_data.nOverlapY;
+
+        d->nHeightUV = d->vectors_data.nHeight / d->vectors_data.yRatioUV;
+        d->nWidthUV = d->vectors_data.nWidth / d->vectors_data.xRatioUV;
+        d->nHeightBUV = d->nHeightB / d->vectors_data.yRatioUV;
+        d->nWidthBUV = d->nWidthB / d->vectors_data.xRatioUV;
 
 
-    if (d.fGamma < 0.0f) {
-        vsapi->mapSetError(out, "Mask: gamma must not be negative.");
+        d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = *vsapi->getVideoInfo(d->node1);
+
+        // FIXME
+        if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 8 || d->vi.format.subSamplingW > 1 || d->vi.format.subSamplingH > 1 || (d->vi.format.colorFamily != cfYUV && d->vi.format.colorFamily != cfGray))
+            throw std::runtime_error("input clip must be GRAY8, YUV420P8, YUV422P8, YUV440P8, or YUV444P8, with constant dimensions.");
+
+        if (d->vi.format.colorFamily == cfGray)
+            vsapi->getVideoFormatByID(&d->vi.format, pfYUV444P8, core);
+
+        simpleInit(&d->upsizer, d->nWidthB, d->nHeightB, d->vectors_data.nBlkX, d->vectors_data.nBlkY, d->vectors_data.nWidth, d->vectors_data.nHeight, d->vectors_data.nPel);
+        simpleInit(&d->upsizerUV, d->nWidthBUV, d->nHeightBUV, d->vectors_data.nBlkX, d->vectors_data.nBlkY, d->nWidthUV, d->nHeightUV, d->vectors_data.nPel);
+
+        d->time256 = (int)(time * 256 / 100);
+
+    } catch (std::runtime_error &e) {
+        vsapi->mapSetError(out, (filterName + ": " + e.what()).c_str());
         return;
     }
-
-    if (d.kind < 0 || d.kind > 5) {
-        vsapi->mapSetError(out, "Mask: kind must 0, 1, 2, 3, 4, or 5.");
-        return;
-    }
-
-    if (time < 0.0 || time > 100.0) {
-        vsapi->mapSetError(out, "Mask: time must be between 0.0 and 100.0 (inclusive).");
-        return;
-    }
-
-    if (d.nSceneChangeValue < 0 || d.nSceneChangeValue > 255) {
-        vsapi->mapSetError(out, "Mask: ysc must be between 0 and 255 (inclusive).");
-        return;
-    }
-
-
-    d.vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
-
-    char error[ERROR_SIZE + 1] = { 0 };
-    const char *filter_name = "Mask";
-
-    adataFromVectorClip(&d.vectors_data, d.vectors, filter_name, "vectors", vsapi, error, ERROR_SIZE);
-
-    scaleThSCD(&d.thscd1, &d.thscd2, &d.vectors_data, filter_name, error, ERROR_SIZE);
-
-    if (error[0]) {
-        vsapi->mapSetError(out, error);
-
-        vsapi->freeNode(d.vectors);
-        return;
-    }
-
-
-    d.fMaskNormFactor = 1.0f / d.ml; // Fizick
-    d.fMaskNormFactor2 = d.fMaskNormFactor * d.fMaskNormFactor;
-
-    d.fHalfGamma = d.fGamma * 0.5f;
-
-    d.nWidthB = d.vectors_data.nBlkX * (d.vectors_data.nBlkSizeX - d.vectors_data.nOverlapX) + d.vectors_data.nOverlapX;
-    d.nHeightB = d.vectors_data.nBlkY * (d.vectors_data.nBlkSizeY - d.vectors_data.nOverlapY) + d.vectors_data.nOverlapY;
-
-    d.nHeightUV = d.vectors_data.nHeight / d.vectors_data.yRatioUV;
-    d.nWidthUV = d.vectors_data.nWidth / d.vectors_data.xRatioUV;
-    d.nHeightBUV = d.nHeightB / d.vectors_data.yRatioUV;
-    d.nWidthBUV = d.nWidthB / d.vectors_data.xRatioUV;
-
-
-    d.node = vsapi->mapGetNode(in, "clip", 0, NULL);
-    d.vi = *vsapi->getVideoInfo(d.node);
-
-    if (!vsh::isConstantVideoFormat(&d.vi) || d.vi.format.bitsPerSample > 8 || d.vi.format.subSamplingW > 1 || d.vi.format.subSamplingH > 1 || (d.vi.format.colorFamily != cfYUV && d.vi.format.colorFamily != cfGray)) {
-        vsapi->mapSetError(out, "Mask: input clip must be GRAY8, YUV420P8, YUV422P8, YUV440P8, or YUV444P8, with constant dimensions.");
-        vsapi->freeNode(d.node);
-        vsapi->freeNode(d.vectors);
-        return;
-    }
-
-    if (d.vi.format.colorFamily == cfGray)
-        vsapi->getVideoFormatByID(&d.vi.format, pfYUV444P8, core);
-
-    simpleInit(&d.upsizer, d.nWidthB, d.nHeightB, d.vectors_data.nBlkX, d.vectors_data.nBlkY, d.vectors_data.nWidth, d.vectors_data.nHeight, d.vectors_data.nPel, d.opt);
-    simpleInit(&d.upsizerUV, d.nWidthBUV, d.nHeightBUV, d.vectors_data.nBlkX, d.vectors_data.nBlkY, d.nWidthUV, d.nHeightUV, d.vectors_data.nPel, d.opt);
-
-    d.time256 = (int)(time * 256 / 100);
-
-
-    data = (MVMaskData *)malloc(sizeof(d));
-    *data = d;
 
     VSFilterDependency deps[2] = { 
-        {data->node, rpStrictSpatial}, 
-        {data->vectors, rpStrictSpatial},
+        {d->node1, rpStrictSpatial}, 
+        {d->node2, rpStrictSpatial},
     };
 
-    vsapi->createVideoFilter(out, "Mask", &data->vi, mvmaskGetFrame, mvmaskFree, fmParallel, deps, ARRAY_SIZE(deps), data, core);
+    vsapi->createVideoFilter(out, "Mask", &d->vi, maskGetFrame, filterFree<MaskData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    d.release();
 }
 
 
-void mvmaskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void maskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("Mask",
                  "clip:vnode;"
                  "vectors:vnode;"
@@ -357,7 +285,7 @@ void mvmaskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "ysc:int:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"
-                 "opt:int:opt;",
+                 "prefix:data:opt;",
                  "clip:vnode;",
-                 mvmaskCreate, 0, plugin);
+                 maskCreate, nullptr, plugin);
 }

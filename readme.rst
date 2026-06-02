@@ -53,6 +53,8 @@ Planned changes
 
 * Make overlaph/v and blksizeh/v simply blocksize=[w, h] and overlap=[w, h] arrays
 
+* Make overlap and blksize default to the values in the super clip for analyse (maybe)
+
 * Have a general Degrain function that maps to the right DegrainN depending on the number of vectors passed (maybe, feedback welcome)
 
 * Remove Finest (only exists as a helper function due to poor super frame data layout)

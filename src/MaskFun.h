@@ -78,6 +78,3 @@ typedef void (*FlowInterExtraFunction)(
         const int16_t *VYFullBB, const int16_t *VYFullFF);
 
 void selectFlowInterFunctions(FlowInterSimpleFunction *simple, FlowInterFunction *regular, FlowInterExtraFunction *extra, int bitsPerSample, int opt);
-
-
-#endif
