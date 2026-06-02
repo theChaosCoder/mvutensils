@@ -1878,3 +1878,105 @@ bool MotionBlockPyramid::IsCompatibleForRecalc(const FramePyramid &other) const 
 
     return true;
 }
+
+static uint8_t maskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma) {
+    double norme = (double)(v.x * v.x + v.y * v.y) / (pel * pel);
+
+    double l = 255 * pow(norme * fMaskNormFactor2, fHalfGamma);
+
+    return (uint8_t)((l > 255) ? 255 : l);
+}
+
+void MotionBlockPyramid::MakeVectorLengthMask(float normFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
+    float halfGamma = fGamma / 2;
+    normFactor = normFactor * normFactor;
+    for (int by = 0; by < nBlkY; by++) {
+        for (int bx = 0; bx < nBlkX; bx++)
+            Mask[bx] = maskLength(GetBlock(bx + by * nBlkX).vector, nPel, normFactor, halfGamma);
+        Mask += MaskPitch;
+    }
+}
+
+static unsigned char ByteNorm(int64_t sad, float dSADNormFactor, float fGamma) {
+    float l = 255 * pow(sad * dSADNormFactor, fGamma);
+    return (unsigned char)((l > 255) ? 255 : l);
+}
+
+void MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
+    int nBlkStepX = nBlkSizeX - nOverlapX;
+    int nBlkStepY = nBlkSizeY - nOverlapY;
+
+    memset(Mask, 0, nBlkY * MaskPitch);
+    int time4096X = (256 - time256) * 16 / (nBlkStepX * nPel);
+    int time4096Y = (256 - time256) * 16 / (nBlkStepY * nPel);
+
+    for (int by = 0; by < nBlkY; by++) {
+        for (int bx = 0; bx < nBlkX; bx++) {
+            int i = bx + by * nBlkX;
+            const BlockData block = GetBlock(i);
+            int vx = block.vector.x;
+            int vy = block.vector.y;
+            int bxi = bx - vx * time4096X / 4096;
+            int byi = by - vy * time4096Y / 4096;
+            if (bxi < 0 || bxi >= nBlkX || byi < 0 || byi >= nBlkY) {
+                bxi = bx;
+                byi = by;
+            }
+            int i1 = bxi + byi * nBlkX;
+            int64_t sad = GetBlock(i1).vector.sad >> (bitsPerSample - 8);
+            Mask[bx + by * MaskPitch] = ByteNorm(sad, dSADNormFactor, fGamma);
+        }
+    }
+}
+
+static void ByteOccMask(uint8_t *VS_RESTRICT occMask, int occlusion, float occnorm, float fGamma) {
+    if (fGamma == 1.0f)
+        *occMask = std::max<uint8_t>(*occMask, static_cast<uint8_t>(std::min<float>(255 * occlusion * occnorm, 255)));
+    else
+        *occMask = std::max<uint8_t>(*occMask, static_cast<uint8_t>(std::min<float>(255 * pow(occlusion * occnorm, fGamma), 255)));
+}
+
+void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, uint8_t *occMask, ptrdiff_t occMaskPitch, int time256) const noexcept {
+    int nBlkStepX = nBlkSizeX - nOverlapX;
+    int nBlkStepY = nBlkSizeY - nOverlapY;
+    bool isBackward = nDeltaFrame > 0;
+
+    memset(occMask, 0, occMaskPitch * nBlkY);
+    int time4096X = time256 * 16 / (nBlkStepX * nPel);
+    int time4096Y = time256 * 16 / (nBlkStepY * nPel);
+    double occnormX = 80.0 / (dMaskNormDivider * nBlkStepX * nPel);
+    double occnormY = 80.0 / (dMaskNormDivider * nBlkStepY * nPel);
+
+    for (int by = 0; by < nBlkY; by++) {
+        for (int bx = 0; bx < nBlkX; bx++) {
+            int i = bx + by * nBlkX;
+            const BlockData block = GetBlock(i);
+            int vx = block.vector.x;
+            int vy = block.vector.y;
+            if (bx < nBlkX - 1) {
+                int i1 = i + 1;
+                const BlockData block1 = GetBlock(i1);
+                int vx1 = block1.vector.x;
+                if (vx1 < vx) {
+                    int occlusion = vx - vx1;
+                    int minb = isBackward ? std::max(0, bx + 1 - occlusion * time4096X / 4096) : bx;
+                    int maxb = isBackward ? bx + 1 : std::min(bx + 1 - occlusion * time4096X / 4096, nBlkX - 1);
+                    for (int bxi = minb; bxi <= maxb; bxi++)
+                        ByteOccMask(&occMask[bxi + by * occMaskPitch], occlusion, occnormX, fGamma);
+                }
+            }
+            if (by < nBlkY - 1) {
+                int i1 = i + nBlkX;
+                const BlockData block1 = GetBlock(i1);
+                int vy1 = block1.vector.y;
+                if (vy1 < vy) {
+                    int occlusion = vy - vy1;
+                    int minb = isBackward ? std::max(0, by + 1 - occlusion * time4096Y / 4096) : by;
+                    int maxb = isBackward ? by + 1 : std::min(by + 1 - occlusion * time4096Y / 4096, nBlkY - 1);
+                    for (int byi = minb; byi <= maxb; byi++)
+                        ByteOccMask(&occMask[bx + byi * occMaskPitch], occlusion, occnormY, fGamma);
+                }
+            }
+        }
+    }
+}

@@ -12,7 +12,7 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void degrainsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void compensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void recalculateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
-void mvmaskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
+void maskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvfinestRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvflowRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvflowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
@@ -36,7 +36,7 @@ VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     degrainsRegister(plugin, vspapi);
     compensateRegister(plugin, vspapi);
     recalculateRegister(plugin, vspapi);
-    //mvmaskRegister(plugin, vspapi);
+    maskRegister(plugin, vspapi);
     //mvfinestRegister(plugin, vspapi);
     //mvflowRegister(plugin, vspapi);
     //mvflowblurRegister(plugin, vspapi);

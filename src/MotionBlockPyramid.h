@@ -278,5 +278,11 @@ public:
     bool IsCompatible(const MotionBlockPyramid &other) const noexcept;
     bool IsCompatible(const FramePyramid &other) const noexcept;
     bool IsCompatibleForRecalc(const FramePyramid &other) const noexcept;
+
+    // Mask output must be at least nBlkX * nBlkY in size
+    // FIXME, use float instead of double
+    void MakeVectorLengthMask(float normFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+    void MakeSADMask(float dSADNormFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+    void MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
 };
 
