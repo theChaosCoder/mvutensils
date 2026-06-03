@@ -27,8 +27,49 @@
 #define ZIMGXX_NAMESPACE mvuzimgxx
 #include <zimg++.hpp>
 
-// BilinearUpsizeLuma(mask dst, dstpitch, dstwidth, dstheight, mask, maskpitch, nBlkx, nBlky, nBlkzieX, nBlksizeY, nOverlapX, nOverlapY)
-// BilinearUpsizeChroma(mask dst, dstpitch, dstwidth, dstheight, mask, maskpitch, nBlkx, nBlky, nBlkzieX, nBlksizeY, nOverlapX, nOverlapY, chromaLocation)
+void BilinearUpsizeBlockMask(uint8_t *dst, ptrdiff_t dststride, int dstwidth, int dstheight, const uint8_t *src, ptrdiff_t srcstride, int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY) {
+    int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+    int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+
+    mvuzimgxx::zimage_format srcFmt;
+    srcFmt.width = nBlkX;
+    srcFmt.height = nBlkY;
+    srcFmt.pixel_type = ZIMG_PIXEL_BYTE;
+    srcFmt.color_family = ZIMG_COLOR_GREY;
+    srcFmt.pixel_range = ZIMG_RANGE_FULL;
+
+    // Adjust active region to cut off the padding blocks and properly scale the mask to the original frame size
+    srcFmt.active_region.width = (static_cast<double>(dstwidth) / nWidth_B) * nBlkX;
+    srcFmt.active_region.height = (static_cast<double>(dstheight) / nHeight_B) * nBlkY;
+
+    mvuzimgxx::zimage_format dstFmt;
+    dstFmt.width = dstwidth;
+    dstFmt.height = dstheight;
+    dstFmt.pixel_type = ZIMG_PIXEL_BYTE;
+    dstFmt.color_family = ZIMG_COLOR_GREY;
+    dstFmt.pixel_range = ZIMG_RANGE_FULL;
+
+    mvuzimgxx::zfilter_graph_builder_params params;
+    params.resample_filter = ZIMG_RESIZE_BILINEAR;
+    params.cpu_type = ZIMG_CPU_AUTO_64B;
+
+    mvuzimgxx::FilterGraph graph = mvuzimgxx::FilterGraph::build(srcFmt, dstFmt, &params);
+
+    size_t tmpSize = graph.get_tmp_size();
+    std::unique_ptr<char[]> tmp(new char[tmpSize]);
+
+    mvuzimgxx::zimage_buffer_const srcBuf;
+    srcBuf.plane[0].data = src;
+    srcBuf.plane[0].stride = srcstride;
+    srcBuf.plane[0].mask = ZIMG_BUFFER_MAX;
+
+    mvuzimgxx::zimage_buffer dstBuf;
+    dstBuf.plane[0].data = dst;
+    dstBuf.plane[0].stride = dststride;
+    dstBuf.plane[0].mask = ZIMG_BUFFER_MAX;
+
+    graph.process(srcBuf, dstBuf, tmp.get());
+}
 
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
@@ -89,10 +130,9 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                     vectors.MakeVectorOcclusionMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
                 }
 
-                //upsizer->simpleResize_uint8_t(upsizer, pDst[0], nDstPitches[0], smallMask, nBlkX, 0);
-                //upsizerUV->simpleResize_uint8_t(upsizerUV, pDst[1], nDstPitches[1], smallMask, nBlkX, 0);
-                //memcpy(pDst[2], pDst[1], nHeightUV * nDstPitches[1]);
-
+                for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
+                    BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), vsapi->getFrameWidth(dst, plane), vsapi->getFrameHeight(dst, plane),
+                        smallMask.get(), maskPitch, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY);
             } else {
                 for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
                     memset(vsapi->getWritePtr(dst, plane), d->nSceneChangeValue, vsapi->getStride(dst, plane) * vsapi->getFrameHeight(dst, plane));
@@ -226,3 +266,4 @@ void maskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
         "clip:vnode;",
         maskCreate, (void *)2, plugin);
 }
+

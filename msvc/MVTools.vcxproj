@@ -48,10 +48,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;C:\Libraries\mvutensils\zimg\src\zimg\api;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;C:\Libraries\mvutensils\zimg\src\zimg\api;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
