@@ -39,6 +39,9 @@ Changes
 * DegrainN:
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors
 
+* Mask:
+	* Split into 3 functions that correspond to kind 0-2 called VectorLengthMask, SADMask and OcclusionMask
+
 * SCDetection:
     * None
 

@@ -202,6 +202,10 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         else
             d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
+
+        d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = *vsapi->getVideoInfo(d->node1);
+
         d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
         char errorMsg[ERROR_SIZE] = {};
@@ -214,13 +218,11 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
         d->fMaskNormFactor = 1.0f / ml;
 
-        d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
-        d->vi = *vsapi->getVideoInfo(d->node1);
-
-        // FIXME
+        // FIXME, also make grayscale only mask output
         if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 8 || d->vi.format.subSamplingW > 1 || d->vi.format.subSamplingH > 1 || (d->vi.format.colorFamily != cfYUV && d->vi.format.colorFamily != cfGray))
             throw std::runtime_error("input clip must be GRAY8, YUV420P8, YUV422P8, YUV440P8, or YUV444P8, with constant dimensions.");
 
+        // FIXME
         if (d->vi.format.colorFamily == cfGray)
             vsapi->getVideoFormatByID(&d->vi.format, pfYUV444P8, core);
 

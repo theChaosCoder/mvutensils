@@ -1905,7 +1905,7 @@ static unsigned char ByteNorm(int64_t sad, float dSADNormFactor, float fGamma) {
 void MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
     int nBlkStepX = nBlkSizeX - nOverlapX;
     int nBlkStepY = nBlkSizeY - nOverlapY;
-
+    dSADNormFactor = 4.0 * dSADNormFactor / (nBlkSizeX * nBlkSizeY);
     memset(Mask, 0, nBlkY * MaskPitch);
     int time4096X = (256 - time256) * 16 / (nBlkStepX * nPel);
     int time4096Y = (256 - time256) * 16 / (nBlkStepY * nPel);
@@ -1940,6 +1940,7 @@ static void ByteOccMask(uint8_t &occMask, int occlusion, float occnorm, float fG
 void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, uint8_t *occMask, ptrdiff_t occMaskPitch, int time256) const noexcept {
     int nBlkStepX = nBlkSizeX - nOverlapX;
     int nBlkStepY = nBlkSizeY - nOverlapY;
+    dMaskNormDivider = 1.0 / dMaskNormDivider;
     bool isBackward = nDeltaFrame > 0;
 
     memset(occMask, 0, occMaskPitch * nBlkY);
