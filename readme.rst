@@ -40,7 +40,11 @@ Changes
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors
 
 * Mask:
-	* Split into 3 functions that correspond to kind 0-2 called VectorLengthMask, SADMask and OcclusionMask
+	* Split into 3 functions that correspond to kind 0-2 called VectorLengthMask, SADMask and OcclusionMask, obviously the kind argument has been removed
+	
+	* The clip argument was removed, it was used for nothing at all except attaching source frame properties and as such is pointless
+	
+	* Returns a grayscale full range mask only instead of the weird UV plane stuff goign on in the original
 
 * SCDetection:
     * None

@@ -23,6 +23,7 @@
 
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
+#include <VSConstants4.h>
 
 #define ZIMGXX_NAMESPACE mvuzimgxx
 #include <zimg++.hpp>
@@ -98,22 +99,19 @@ struct MaskDataExtra {
     std::string filterName;
 };
 
-typedef DualNodeData<MaskDataExtra> MaskData;
+typedef SingleNodeData<MaskDataExtra> MaskData;
 
 
 static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     MaskData *d =  reinterpret_cast<MaskData *>(instanceData);
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(n, d->node1, frameCtx);
-        vsapi->requestFrameFilter(n, d->node2, frameCtx);
+        vsapi->requestFrameFilter(n, d->node, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *src = vsapi->getFrameFilter(n, d->node1, frameCtx);
-        VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, src, core);
-        vsapi->freeFrame(src);
+        VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, nullptr, core);
 
         try {
-            const VSFrame *mvn = vsapi->getFrameFilter(n, d->node2, frameCtx);
+            const VSFrame *mvn = vsapi->getFrameFilter(n, d->node, frameCtx);
             MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
             vsapi->freeFrame(mvn);
 
@@ -130,13 +128,13 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                     vectors.MakeVectorOcclusionMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
                 }
 
-                for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
-                    BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, plane), vsapi->getStride(dst, plane), vsapi->getFrameWidth(dst, plane), vsapi->getFrameHeight(dst, plane),
-                        smallMask.get(), maskPitch, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY);
+                BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), vsapi->getFrameWidth(dst, 0), vsapi->getFrameHeight(dst, 0),
+                    smallMask.get(), maskPitch, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY);
             } else {
-                for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
-                    memset(vsapi->getWritePtr(dst, plane), d->nSceneChangeValue, vsapi->getStride(dst, plane) * vsapi->getFrameHeight(dst, plane));
+                memset(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, vsapi->getStride(dst, 0) * vsapi->getFrameHeight(dst, 0));
             }
+
+            vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_Range", VSC_RANGE_FULL, maAppend);
 
             return dst;
 
@@ -202,29 +200,23 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         else
             d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-
-        d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
-        d->vi = *vsapi->getVideoInfo(d->node1);
-
-        d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+        d->node = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
         char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg, ERROR_SIZE);
+        const VSFrame *evil2 = vsapi->getFrame(0, d->node, errorMsg, ERROR_SIZE);
         if (!evil2)
             throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(errorMsg));
 
         MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
+
+        d->vi = *vsapi->getVideoInfo(d->node);
+        d->vi.width = vectors.nRealWidth;
+        d->vi.height = vectors.nRealHeight;
+        vsapi->queryVideoFormat(&d->vi.format, cfGray, stInteger, vectors.bitsPerSample, 0, 0, core);
+
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi.format.bitsPerSample);
 
         d->fMaskNormFactor = 1.0f / ml;
-
-        // FIXME, also make grayscale only mask output
-        if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 8 || d->vi.format.subSamplingW > 1 || d->vi.format.subSamplingH > 1 || (d->vi.format.colorFamily != cfYUV && d->vi.format.colorFamily != cfGray))
-            throw std::runtime_error("input clip must be GRAY8, YUV420P8, YUV422P8, YUV440P8, or YUV444P8, with constant dimensions.");
-
-        // FIXME
-        if (d->vi.format.colorFamily == cfGray)
-            vsapi->getVideoFormatByID(&d->vi.format, pfYUV444P8, core);
 
         d->time256 = (int)(time * 256 / 100);
 
@@ -233,9 +225,8 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         return;
     }
 
-    VSFilterDependency deps[2] = { 
-        {d->node1, rpStrictSpatial}, 
-        {d->node2, rpStrictSpatial},
+    VSFilterDependency deps[1] = { 
+        {d->node, rpStrictSpatial}, 
     };
 
     vsapi->createVideoFilter(out, d->filterName.c_str(), &d->vi, maskGetFrame, filterFree<MaskData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
@@ -244,7 +235,6 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
 
 static constexpr char filterArgs[] =
-    "clip:vnode;"
     "vectors:vnode;"
     "ml:float:opt;"
     "gamma:float:opt;"
