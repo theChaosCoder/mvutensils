@@ -409,7 +409,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
 
         d->supervi = vsapi->getVideoInfo(d->super);
 
-        if (!vectors.IsCompatible(super))
+        if (!vectors.IsCompatibleForAnalysis(super))
             throw std::runtime_error("wrong source or super clip frame size");
 
         if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray))

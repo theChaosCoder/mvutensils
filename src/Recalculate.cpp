@@ -270,7 +270,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
 
         d->nPel = evilPyramid.nPel;
 
-        if (!vectors.IsCompatible(evilPyramid))
+        if (!vectors.IsCompatibleForAnalysis(evilPyramid))
             throw std::runtime_error("wrong source or super clip frame size");
 
     } catch (std::runtime_error &e) {

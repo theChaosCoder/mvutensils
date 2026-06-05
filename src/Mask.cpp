@@ -28,27 +28,30 @@
 #define ZIMGXX_NAMESPACE mvuzimgxx
 #include <zimg++.hpp>
 
-void BilinearUpsizeBlockMask(uint8_t *dst, ptrdiff_t dststride, int dstwidth, int dstheight, const uint8_t *src, ptrdiff_t srcstride, int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY) {
+template<typename PixelType>
+void BilinearUpsizeBlockMask(uint8_t *dst, ptrdiff_t dststride, int dstwidth, int dstheight, const PixelType *src, ptrdiff_t srcstride, int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int bitsPerSample) {
     int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
     int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
 
     mvuzimgxx::zimage_format srcFmt;
     srcFmt.width = nBlkX;
     srcFmt.height = nBlkY;
-    srcFmt.pixel_type = ZIMG_PIXEL_BYTE;
+    srcFmt.pixel_type = sizeof(PixelType) == 1 ?  ZIMG_PIXEL_BYTE : ZIMG_PIXEL_WORD;
     srcFmt.color_family = ZIMG_COLOR_GREY;
     srcFmt.pixel_range = ZIMG_RANGE_FULL;
+    srcFmt.depth = bitsPerSample;
 
-    // Adjust active region to cut off the padding blocks and properly scale the mask to the original frame size
+    // Adjust active region to cut off the padding part of the edge blocks and properly scale the mask to the original frame size
     srcFmt.active_region.width = (static_cast<double>(dstwidth) / nWidth_B) * nBlkX;
     srcFmt.active_region.height = (static_cast<double>(dstheight) / nHeight_B) * nBlkY;
 
     mvuzimgxx::zimage_format dstFmt;
     dstFmt.width = dstwidth;
     dstFmt.height = dstheight;
-    dstFmt.pixel_type = ZIMG_PIXEL_BYTE;
+    dstFmt.pixel_type = sizeof(PixelType) == 1 ? ZIMG_PIXEL_BYTE : ZIMG_PIXEL_WORD;
     dstFmt.color_family = ZIMG_COLOR_GREY;
     dstFmt.pixel_range = ZIMG_RANGE_FULL;
+    dstFmt.depth = bitsPerSample;
 
     mvuzimgxx::zfilter_graph_builder_params params;
     params.resample_filter = ZIMG_RESIZE_BILINEAR;
@@ -56,8 +59,10 @@ void BilinearUpsizeBlockMask(uint8_t *dst, ptrdiff_t dststride, int dstwidth, in
 
     mvuzimgxx::FilterGraph graph = mvuzimgxx::FilterGraph::build(srcFmt, dstFmt, &params);
 
-    size_t tmpSize = graph.get_tmp_size();
-    std::unique_ptr<char[]> tmp(new char[tmpSize]);
+    std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
+        vsh::vsh_aligned_malloc(graph.get_tmp_size(), 64),
+        vsh::vsh_aligned_free
+    };
 
     mvuzimgxx::zimage_buffer_const srcBuf;
     srcBuf.plane[0].data = src;
@@ -80,7 +85,7 @@ struct MaskDataExtra {
     VSVideoInfo vi;
 
     float fGamma;
-    int kind;
+    intptr_t kind;
     int time256;
     int nSceneChangeValue;
     int64_t thscd1;
@@ -101,7 +106,7 @@ struct MaskDataExtra {
 
 typedef SingleNodeData<MaskDataExtra> MaskData;
 
-
+template<typename PixelType>
 static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     MaskData *d =  reinterpret_cast<MaskData *>(instanceData);
 
@@ -115,10 +120,10 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
             MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
             vsapi->freeFrame(mvn);
 
-            ptrdiff_t maskPitch = roundUpTo64(vectors.nBlkX);
+            ptrdiff_t maskPitch = roundUpTo64(vectors.nBlkX * sizeof(PixelType));
 
             if (vectors.IsUsable(d->thscd1, d->thscd2)) {
-                std::unique_ptr<uint8_t[]> smallMask(new uint8_t[maskPitch * vectors.nBlkY]);
+                std::unique_ptr<PixelType[]> smallMask(new PixelType[maskPitch * vectors.nBlkY]);
 
                 if (d->kind == 0) {
                     vectors.MakeVectorLengthMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
@@ -129,9 +134,13 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                 }
 
                 BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), vsapi->getFrameWidth(dst, 0), vsapi->getFrameHeight(dst, 0),
-                    smallMask.get(), maskPitch, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY);
+                    smallMask.get(), maskPitch, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY, d->vi.format.bitsPerSample);
             } else {
-                memset(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, vsapi->getStride(dst, 0) * vsapi->getFrameHeight(dst, 0));
+                // FIXME
+                if constexpr (sizeof(PixelType) == 1)
+                    memset(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, vsapi->getStride(dst, 0) * vsapi->getFrameHeight(dst, 0));
+                //else
+                //    memset16
             }
 
             vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_Range", VSC_RANGE_FULL, maAppend);
@@ -141,6 +150,9 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
         } catch (std::runtime_error &e) {
             vsapi->freeFrame(dst);
             vsapi->setFilterError((d->filterName + ": " + e.what()).c_str(), frameCtx);
+        } catch (mvuzimgxx::zerror &e) {
+            vsapi->freeFrame(dst);
+            vsapi->setFilterError((d->filterName + ": " + std::string(e.msg)).c_str(), frameCtx);
         }
     }
 
@@ -229,10 +241,9 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         {d->node, rpStrictSpatial}, 
     };
 
-    vsapi->createVideoFilter(out, d->filterName.c_str(), &d->vi, maskGetFrame, filterFree<MaskData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, d->filterName.c_str(), &d->vi, d->vi.format.bitsPerSample == 8 ? maskGetFrame<uint8_t> : maskGetFrame<uint16_t>, filterFree<MaskData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
-
 
 static constexpr char filterArgs[] =
     "vectors:vnode;"

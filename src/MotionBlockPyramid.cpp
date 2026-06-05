@@ -1649,7 +1649,7 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     if (!pSrcGOF.IsCompatible(pRefGOF))
         throw MotionBlockPyramidError("The two reference frames don't have the same format");
 
-    if (!IsCompatible(pSrcGOF) || !IsCompatible(pRefGOF))
+    if (!IsCompatibleForAnalysis(pSrcGOF) || !IsCompatibleForAnalysis(pRefGOF))
         throw MotionBlockPyramidError("Incompatible frame format for motion vector search, bitdepth must match");
 
     int fieldShiftCur = (nLevelCount - 1 == 0) ? fieldShift : 0; // may be non zero for finest level only
@@ -1771,7 +1771,7 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std:
             vsapi->mapSetData(props,
                 vectorsProp.c_str(),
                 (const char *)dividedVectors.data(),
-                dividedVectors.size() * sizeof(VECTOR),
+                static_cast<int>(dividedVectors.size() * sizeof(VECTOR)),
                 dtBinary,
                 maReplace);
             if (oneLevel)
@@ -1783,7 +1783,7 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std:
             vsapi->mapSetData(props,
                 vectorsProp.c_str(),
                 (const char *)plane.vectors.data(),
-                plane.vectors.size() * sizeof(VECTOR),
+                static_cast<int>(plane.vectors.size() * sizeof(VECTOR)),
                 dtBinary,
                 maAppend);
             if (oneLevel)
@@ -1853,7 +1853,7 @@ bool MotionBlockPyramid::IsCompatible(const MotionBlockPyramid &other) const noe
     return true;
 }
 
-bool MotionBlockPyramid::IsCompatible(const FramePyramid &other) const noexcept {
+bool MotionBlockPyramid::IsCompatibleForAnalysis(const FramePyramid &other) const noexcept {
     if (nWidth != other.nWidth[0] || nHeight != other.nHeight[0] || nRealWidth != other.nRealWidth[0] || nRealHeight != other.nRealHeight[0])
         return false;
 
@@ -1879,36 +1879,51 @@ bool MotionBlockPyramid::IsCompatibleForRecalc(const FramePyramid &other) const 
     return true;
 }
 
-static uint8_t maskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma) {
+//////////////////////////
+// Mask relatted functions
+
+// FIXME, is double really needed? probably not
+template<typename PixelType>
+static PixelType MaskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma, int maxVal) {
     double norme = (double)(v.x * v.x + v.y * v.y) / (pel * pel);
 
-    double l = 255 * pow(norme * fMaskNormFactor2, fHalfGamma);
+    double l = maxVal * pow(norme * fMaskNormFactor2, fHalfGamma);
 
-    return (uint8_t)((l > 255) ? 255 : l);
+    return static_cast<PixelType>((l > maxVal) ? maxVal : l);
 }
 
-void MotionBlockPyramid::MakeVectorLengthMask(float normFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
+template<typename PixelType>
+void MotionBlockPyramid::MakeVectorLengthMask(float normFactor, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
     float halfGamma = fGamma / 2;
     normFactor = normFactor * normFactor;
+
+    int maxVal = (1 << bitsPerSample) - 1;
+    MaskPitch /= sizeof(PixelType);
+
     for (int by = 0; by < nBlkY; by++) {
         for (int bx = 0; bx < nBlkX; bx++)
-            Mask[bx] = maskLength(GetBlock(bx + by * nBlkX).vector, nPel, normFactor, halfGamma);
+            Mask[bx] = MaskLength<PixelType>(GetBlock(bx + by * nBlkX).vector, nPel, normFactor, halfGamma, maxVal);
         Mask += MaskPitch;
     }
 }
 
-static unsigned char ByteNorm(int64_t sad, float dSADNormFactor, float fGamma) {
-    float l = 255 * pow(sad * dSADNormFactor, fGamma);
-    return (unsigned char)((l > 255) ? 255 : l);
+template<typename PixelType>
+static PixelType PixelNorm(int64_t sad, float dSADNormFactor, float fGamma, int maxVal) {
+    float l = maxVal * pow(sad * dSADNormFactor, fGamma);
+    return static_cast<PixelType>((l > maxVal) ? maxVal : l);
 }
 
-void MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
+template<typename PixelType>
+void MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
     int nBlkStepX = nBlkSizeX - nOverlapX;
     int nBlkStepY = nBlkSizeY - nOverlapY;
-    dSADNormFactor = 4.0 * dSADNormFactor / (nBlkSizeX * nBlkSizeY);
+    dSADNormFactor = 4.0f * dSADNormFactor / (nBlkSizeX * nBlkSizeY);
     memset(Mask, 0, nBlkY * MaskPitch);
     int time4096X = (256 - time256) * 16 / (nBlkStepX * nPel);
     int time4096Y = (256 - time256) * 16 / (nBlkStepY * nPel);
+
+    int maxVal = (1 << bitsPerSample) - 1;
+    MaskPitch /= sizeof(PixelType);
 
     for (int by = 0; by < nBlkY; by++) {
         for (int bx = 0; bx < nBlkX; bx++) {
@@ -1924,30 +1939,34 @@ void MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, uint8_t
             }
             int i1 = bxi + byi * nBlkX;
             int64_t sad = GetBlock(i1).vector.sad >> (bitsPerSample - 8);
-            Mask[bx] = ByteNorm(sad, dSADNormFactor, fGamma);
+            Mask[bx] = PixelNorm<PixelType>(sad, dSADNormFactor, fGamma, maxVal);
         }
         Mask += MaskPitch;
     }
 }
 
-static void ByteOccMask(uint8_t &occMask, int occlusion, float occnorm, float fGamma) {
+template<typename PixelType>
+static void ByteOccMask(PixelType &occMask, int occlusion, float occnorm, float fGamma, int maxVal) {
     if (fGamma == 1.0f)
-        occMask = std::max<uint8_t>(occMask, static_cast<uint8_t>(std::min<float>(255 * occlusion * occnorm, 255)));
+        occMask = std::max<PixelType>(occMask, static_cast<PixelType>(std::min<float>(maxVal * occlusion * occnorm, maxVal)));
     else
-        occMask = std::max<uint8_t>(occMask, static_cast<uint8_t>(std::min<float>(255 * pow(occlusion * occnorm, fGamma), 255)));
+        occMask = std::max<PixelType>(occMask, static_cast<PixelType>(std::min<float>(maxVal * pow(occlusion * occnorm, fGamma), maxVal)));
 }
 
-void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, uint8_t *occMask, ptrdiff_t occMaskPitch, int time256) const noexcept {
+template<typename PixelType>
+void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept {
     int nBlkStepX = nBlkSizeX - nOverlapX;
     int nBlkStepY = nBlkSizeY - nOverlapY;
-    dMaskNormDivider = 1.0 / dMaskNormDivider;
     bool isBackward = nDeltaFrame > 0;
 
-    memset(occMask, 0, occMaskPitch * nBlkY);
+    memset(Mask, 0, MaskPitch * nBlkY);
     int time4096X = time256 * 16 / (nBlkStepX * nPel);
     int time4096Y = time256 * 16 / (nBlkStepY * nPel);
-    double occnormX = 80.0 / (dMaskNormDivider * nBlkStepX * nPel);
-    double occnormY = 80.0 / (dMaskNormDivider * nBlkStepY * nPel);
+    float occnormX = (80.0f  * dMaskNormDivider) / (nBlkStepX * nPel);
+    float occnormY = (80.0f * dMaskNormDivider) / (nBlkStepY * nPel);
+
+    int maxVal = (1 << bitsPerSample) - 1;
+    MaskPitch /= sizeof(PixelType);
 
     for (int by = 0; by < nBlkY; by++) {
         for (int bx = 0; bx < nBlkX; bx++) {
@@ -1964,7 +1983,7 @@ void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float f
                     int minb = isBackward ? std::max(0, bx + 1 - occlusion * time4096X / 4096) : bx;
                     int maxb = isBackward ? bx + 1 : std::min(bx + 1 - occlusion * time4096X / 4096, nBlkX - 1);
                     for (int bxi = minb; bxi <= maxb; bxi++)
-                        ByteOccMask(occMask[bxi + by * occMaskPitch], occlusion, occnormX, fGamma);
+                        ByteOccMask<PixelType>(Mask[bxi + by * MaskPitch], occlusion, occnormX, fGamma, maxVal);
                 }
             }
             if (by < nBlkY - 1) {
@@ -1976,9 +1995,20 @@ void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float f
                     int minb = isBackward ? std::max(0, by + 1 - occlusion * time4096Y / 4096) : by;
                     int maxb = isBackward ? by + 1 : std::min(by + 1 - occlusion * time4096Y / 4096, nBlkY - 1);
                     for (int byi = minb; byi <= maxb; byi++)
-                        ByteOccMask(occMask[bx + byi * occMaskPitch], occlusion, occnormY, fGamma);
+                        ByteOccMask<PixelType>(Mask[bx + byi * MaskPitch], occlusion, occnormY, fGamma, maxVal);
                 }
             }
         }
     }
 }
+
+// Explicit instantiations to keep the headers somewhat clean and readable
+
+template void MotionBlockPyramid::MakeVectorLengthMask<uint8_t>(float normFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+template void MotionBlockPyramid::MakeVectorLengthMask<uint16_t>(float normFactor, float fGamma, uint16_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+
+template void MotionBlockPyramid::MakeSADMask<uint8_t>(float dSADNormFactor, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+template void MotionBlockPyramid::MakeSADMask<uint16_t>(float dSADNormFactor, float fGamma, uint16_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+
+template void MotionBlockPyramid::MakeVectorOcclusionMask<uint8_t>(float dMaskNormDivider, float fGamma, uint8_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+template void MotionBlockPyramid::MakeVectorOcclusionMask<uint16_t>(float dMaskNormDivider, float fGamma, uint16_t *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;

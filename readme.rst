@@ -3,7 +3,7 @@ MVUtensils
 
 MVUtensils is a large refactoring and cleanup of the original VapourSynth MVTools port
 with the goals of fixing several long standing bugs in the original such as the right and bottom
-border not being properly processed. As a result of this many opertions should also be considerably faster since more CPU cache friendly
+border not being properly processed. As a result of this many operations should also be considerably faster since more CPU cache friendly
 algorithms are being used.
 
 Changes
@@ -45,6 +45,10 @@ Changes
 	* The clip argument was removed, it was used for nothing at all except attaching source frame properties and as such is pointless
 	
 	* Returns a grayscale full range mask only instead of the weird UV plane stuff goign on in the original
+	
+	* Supports 8-16 bit, the output format is derived entirely from the vector clip
+	
+	* The masks are actually generated at a higher bitdepth unlike avs+ where the same 8 bit mask is always upscaled
 
 * SCDetection:
     * None

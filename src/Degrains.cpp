@@ -607,7 +607,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
             if (r > 0 && !evilVectors[r]->IsCompatible(*evilVectors[r - 1]))
                 throw std::runtime_error("The motion vectors passed are not compatible with each other");
 
-            if (!evilVectors[r]->IsCompatible(evilPyramid))
+            if (!evilVectors[r]->IsCompatibleForAnalysis(evilPyramid))
                 throw std::runtime_error("The motion vectors passed are not compatible with the super clip");
 
             d->deltaFrame[r] = evilVectors[r]->nDeltaFrame;
