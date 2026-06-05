@@ -139,8 +139,8 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                 // FIXME
                 if constexpr (sizeof(PixelType) == 1)
                     memset(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, vsapi->getStride(dst, 0) * vsapi->getFrameHeight(dst, 0));
-                //else
-                //    memset16
+                else
+                    vs_memset<uint16_t>(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, (vsapi->getStride(dst, 0) / sizeof(PixelType)) * vsapi->getFrameHeight(dst, 0));
             }
 
             vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_Range", VSC_RANGE_FULL, maAppend);
@@ -203,9 +203,6 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         if (time < 0.0 || time > 100.0)
             throw std::runtime_error("time must be between 0.0 and 100.0");
 
-        if (d->nSceneChangeValue < 0 || d->nSceneChangeValue > 255)
-            throw std::runtime_error("ysc must be between 0 and 255");
-
         const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
         if (prefix)
             d->prefix = prefix;
@@ -225,6 +222,10 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         d->vi.width = vectors.nRealWidth;
         d->vi.height = vectors.nRealHeight;
         vsapi->queryVideoFormat(&d->vi.format, cfGray, stInteger, vectors.bitsPerSample, 0, 0, core);
+
+        int maxVal = (1 << vectors.bitsPerSample) - 1;
+        if (d->nSceneChangeValue < 0 || d->nSceneChangeValue > maxVal)
+            throw std::runtime_error("ysc must be between 0 and " + std::to_string(maxVal));
 
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi.format.bitsPerSample);
 
