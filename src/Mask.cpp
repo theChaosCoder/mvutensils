@@ -136,7 +136,6 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                 BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), vsapi->getFrameWidth(dst, 0), vsapi->getFrameHeight(dst, 0),
                     smallMask.get(), maskPitch, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY, d->vi.format.bitsPerSample);
             } else {
-                // FIXME
                 if constexpr (sizeof(PixelType) == 1)
                     memset(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, vsapi->getStride(dst, 0) * vsapi->getFrameHeight(dst, 0));
                 else
