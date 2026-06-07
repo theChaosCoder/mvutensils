@@ -1,5 +1,3 @@
-#if defined(MVTOOLS_X86)
-
 #include <cstdint>
 #include <stdexcept>
 #include <unordered_map>
@@ -97,5 +95,3 @@ SADFunction selectSADFunctionAVX2(unsigned width, unsigned height, unsigned bits
         return nullptr;
     }
 }
-
-#endif
