@@ -11,6 +11,23 @@
 #include "CopyCode.h"
 #include "SADFunctions.h"
 
+struct SmallVectorMasks {
+    int16_t *VXSmallY;
+    int16_t *VYSmallY;
+    ptrdiff_t pitchVSmallY;
+
+    SmallVectorMasks(int nBlkX, int nBlkY) {
+        pitchVSmallY = roundUpTo64(nBlkX * sizeof(int16_t));
+        VXSmallY = vsh::vsh_aligned_malloc<int16_t>(pitchVSmallY * nBlkY, 64);
+        VYSmallY = vsh::vsh_aligned_malloc<int16_t>(pitchVSmallY * nBlkY, 64);
+    }
+
+    ~SmallVectorMasks() {
+        vsh::vsh_aligned_free(VXSmallY);
+        vsh::vsh_aligned_free(VYSmallY);
+    }
+};
+
 class MotionBlockPyramidError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -286,5 +303,7 @@ public:
     void MakeSADMask(float dSADNormFactor, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
     template<typename PixelType>
     void MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+
+    std::unique_ptr<SmallVectorMasks> MakeVectorSmallMasks() const noexcept;
 };
 

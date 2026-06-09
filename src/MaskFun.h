@@ -24,13 +24,17 @@
 
 #include "SuperPyramid.h"
 
+/// FIXME, these 2 functions are completely useless now that we actually have motion vectors covering the whole image
 void CheckAndPadSmallY(int16_t *VXSmallY, int16_t *VYSmallY, int nBlkXP, int nBlkYP, int nBlkX, int nBlkY);
 
 void CheckAndPadMaskSmall(uint8_t *MaskSmall, int nBlkXP, int nBlkYP, int nBlkX, int nBlkY);
+///////////////
+
 
 void MakeVectorSmallMasks(const FakeGroupOfPlanes *fgop, int nX, int nY, int16_t *VXSmallY, ptrdiff_t pitchVXSmallY, int16_t *VYSmallY, ptrdiff_t pitchVYSmallY);
 void VectorSmallMaskYToHalfUV(int16_t *VSmallY, int nBlkX, int nBlkY, int16_t *VSmallUV, int ratioUV);
 
+/// FIXME, these 2 functions are probably useless along with the Finest function
 void Merge4PlanesToBig(uint8_t *pel2Plane, ptrdiff_t pel2Pitch, const uint8_t *pPlane0, const uint8_t *pPlane1,
                        const uint8_t *pPlane2, const uint8_t *pPlane3, int width, int height, ptrdiff_t pitch, int bitsPerSample);
 
@@ -40,6 +44,7 @@ void Merge16PlanesToBig(uint8_t *pel4Plane, ptrdiff_t pel4Pitch,
                         const uint8_t *pPlane8, const uint8_t *pPlane9, const uint8_t *pPlane10, const uint8_t *pPlane11,
                         const uint8_t *pPlane12, const uint8_t *pPlane13, const uint8_t *pPlane14, const uint8_t *pPlane15,
                         int width, int height, ptrdiff_t pitch, int bitsPerSample);
+///////////////
 
 void Blend(uint8_t *pdst, const uint8_t *psrc, const uint8_t *pref, int height, int width, ptrdiff_t dst_pitch, ptrdiff_t src_pitch, ptrdiff_t ref_pitch, int time256, int bitsPerSample);
 

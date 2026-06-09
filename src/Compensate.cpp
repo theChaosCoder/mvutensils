@@ -393,6 +393,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
             throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(error));
 
         MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
+        vsapi->freeFrame(evil2);
 
         int64_t nSCD1_old = d->nSCD1;
         vectors.ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
