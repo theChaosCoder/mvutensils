@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <algorithm>
 
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
@@ -28,7 +29,79 @@
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 
+// FIXME, break this out later when more resizing bits are known
 
+#define ZIMGXX_NAMESPACE mvuzimgxx
+#include <zimg++.hpp>
+
+class MaskTile {
+public:
+    // Remember to calculate shared temp space once and for all
+    int dstX;
+    int dstY;
+    int dstWidth;
+    int dstHeight;
+    mvuzimgxx::FilterGraph graph;
+};
+
+class MaskResizer {
+public:
+    constexpr static int TileSize = 64;
+    std::vector<MaskTile> tiles;
+    size_t tmpSize = 0;
+
+    void Init(int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int dstWidth, int dstHeight, int bitsPerSample) {
+        int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
+        int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
+        int nWidthTiles = (dstWidth + TileSize - 1) / TileSize;
+        int nHeightTiles = (dstHeight + TileSize - 1) / TileSize;
+        tiles.reserve(nWidthTiles * nHeightTiles);
+
+        const double srcWidthScale = static_cast<double>(nBlkX) / nWidth_B;
+        const double srcHeightScale = static_cast<double>(nBlkY) / nHeight_B;
+
+        mvuzimgxx::zfilter_graph_builder_params params;
+        params.resample_filter = ZIMG_RESIZE_BILINEAR;
+        params.cpu_type = ZIMG_CPU_AUTO_64B;
+
+        for (int y = 0; y < nHeightTiles; y++) {
+            for (int x = 0; x < nWidthTiles; x++) {
+                MaskTile tile;
+                tile.dstX = x * TileSize;
+                tile.dstY = y * TileSize;
+                tile.dstWidth = std::min(TileSize, dstWidth - tile.dstX);
+                tile.dstHeight = std::min(TileSize, dstHeight - tile.dstY);
+
+                mvuzimgxx::zimage_format srcFmt;
+                srcFmt.width = nBlkX;
+                srcFmt.height = nBlkY;
+                srcFmt.pixel_type = ZIMG_PIXEL_WORD;
+                srcFmt.color_family = ZIMG_COLOR_GREY;
+                srcFmt.pixel_range = ZIMG_RANGE_FULL;
+                srcFmt.depth = bitsPerSample;
+                srcFmt.active_region.left = tile.dstX * srcWidthScale;
+                srcFmt.active_region.top = tile.dstY * srcHeightScale;
+                srcFmt.active_region.width = tile.dstWidth * srcWidthScale;
+                srcFmt.active_region.height = tile.dstHeight * srcHeightScale;
+
+                mvuzimgxx::zimage_format dstFmt;
+                dstFmt.width = tile.dstWidth;
+                dstFmt.height = tile.dstHeight;
+                dstFmt.pixel_type = ZIMG_PIXEL_WORD;
+                dstFmt.color_family = ZIMG_COLOR_GREY;
+                dstFmt.pixel_range = ZIMG_RANGE_FULL;
+                dstFmt.depth = bitsPerSample;
+                try {
+                    tile.graph = mvuzimgxx::FilterGraph::build(srcFmt, dstFmt, &params);
+                } catch (mvuzimgxx::zerror &e) {
+                    throw std::runtime_error(std::string("Error building filter graph for mask tile: ") + e.msg);
+                }
+                tmpSize = std::max(tmpSize, tile.graph.get_tmp_size());
+                tiles.push_back(std::move(tile));
+            }
+        }
+    }
+};
 
 struct FlowData {
     VSNode *clip;
@@ -46,6 +119,9 @@ struct FlowData {
 
     int pixel_max;
 
+    MaskResizer maskResizerFull;
+    MaskResizer maskResizerSubSampled;
+
     std::string prefix;
 
     const VSAPI *vsapi;
@@ -61,10 +137,11 @@ struct FlowData {
 
 
 template <typename PixelType>
-static void flowFetch(uint8_t *pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, int16_t *VXFull, ptrdiff_t VXPitch, int16_t *VYFull, ptrdiff_t VYPitch, int width, int height, int time256) {
+static void flowFetch(uint8_t *pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const int16_t *VXFull, const int16_t *VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
     PixelType *pdst = (PixelType *)pdst8;
 
     dst_pitch /= sizeof(PixelType);
+    tilePitch /= sizeof(int16_t);
     int nPelLog = ilog2(pref.nPel);
 
     // fetch mode
@@ -75,11 +152,19 @@ static void flowFetch(uint8_t *pdst8, ptrdiff_t dst_pitch, const PyramidPlane &p
             int vy = (VYFull[w] * time256 + 128) >> 8;
             // FIXME, maybe template this on npel as well for speed?
             // FIXME, should shift w and h by ilog2(npel) to have 
-            pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer((w << nPelLog) + vx, (h << nPelLog) + vy));
+            //pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(((dstX + w) << nPelLog) + vx, ((dstY + h) << nPelLog) + vy));
+        
+            int pelX = ((dstX + w) << nPelLog) + vx;
+            int pelY = ((dstY + h) << nPelLog) + vy;
+
+            pelX = std::clamp(pelX, -pref.nHPaddingPel, (pref.nWidth + pref.nHPadding) * pref.nPel - 1);
+            pelY = std::clamp(pelY, -pref.nVPaddingPel, (pref.nHeight + pref.nVPadding) * pref.nPel - 1);
+
+            pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(pelX, pelY));
         }
         pdst += dst_pitch;
-        VXFull += VXPitch;
-        VYFull += VYPitch;
+        VXFull += tilePitch;
+        VYFull += tilePitch;
     }
 }
 
@@ -117,29 +202,17 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
             vsapi->freeFrame(propSrc);
 
-            size_t full_size = d->vi * VPitchY * sizeof(int16_t);
-            ptrdiff_t small_size_stride = roundUpTo64(vectors.nBlkX * sizeof(int16_t));
-            size_t small_size = vectors.nBlkY * small_size_stride;
+            auto smallMasks = vectors.MakeSmallVectorMasks();
 
-            int16_t *VXFullY = (int16_t *)malloc(full_size);
-            int16_t *VYFullY = (int16_t *)malloc(full_size);
-            int16_t *VXSmallY = (int16_t *)malloc(small_size);
-            int16_t *VYSmallY = (int16_t *)malloc(small_size);
-
-
-            // The output from this is always used upsized and possinly adjusted for UV as well
-            MakeVectorSmallMasks(&fgop, nBlkX, nBlkY, VXSmallY, nBlkXP, VYSmallY, nBlkXP);
-
-
+            // FIXME, this field shift and combined tff logic is a even more of a mess than usueal
             int fieldShift = 0;
             if (d->fields && vectors.nPel > 1 && ((nref - n) % 2 != 0)) {
-
                 const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
-                FramePyramid srcGOF(src, 1, d->prefix, core, vsapi);
 
                 int err;
                 const VSMap *props = vsapi->getFramePropertiesRO(src);
                 int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
+                vsapi->freeFrame(src);
                 if (err && !d->tff_exists)
                     throw std::runtime_error("_Field property not found in super frame. Therefore, you must pass tff argument");
 
@@ -158,30 +231,68 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 // vertical shift of fields for fieldbased video at finest level pel2
             }
 
-            for (int j = 0; j < nBlkYP; j++) {
-                for (int i = 0; i < nBlkXP; i++) {
-                    VYSmallY[j * nBlkXP + i] += fieldShift;
+            for (int j = 0; j < vectors.nBlkY; j++) {
+                for (int i = 0; i < vectors.nBlkX; i++) {
+                    smallMasks->VYSmallY[j * vectors.nBlkX + i] += fieldShift;
                 }
             }
 
-            d->upsizer.simpleResize_int16_t(&d->upsizer, VXFullY, VPitchY, VXSmallY, nBlkXP, 1);
-            d->upsizer.simpleResize_int16_t(&d->upsizer, VYFullY, VPitchY, VYSmallY, nBlkXP, 0);
+            std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
+                vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
+                vsh::vsh_aligned_free
+            };
 
+            ptrdiff_t dstTileStride = roundUpTo64(d->maskResizerFull.TileSize * sizeof(int16_t));
 
-            flowFetch<PixelType>(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), refGOF.GetLevel(0).planes[0],
-                    VXFullY, VPitchY, VYFullY, VPitchY,
-                    d->vi->width, d->vi->height, d->time256);
+            std::unique_ptr<int16_t, decltype(&vsh::vsh_aligned_free)> dstTileVX{
+                vsh::vsh_aligned_malloc<int16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+                vsh::vsh_aligned_free
+            };
 
-            if (d->vi->format.colorFamily != cfGray) {
-                size_t full_size_uv = nHeightPUV * VPitchUV * sizeof(int16_t);
-                size_t small_size_uv = nBlkYP * nBlkXP * sizeof(int16_t);
+            std::unique_ptr<int16_t, decltype(&vsh::vsh_aligned_free)> dstTileVY{
+                vsh::vsh_aligned_malloc<int16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+                vsh::vsh_aligned_free
+            };
 
-                int16_t *VXFullUV = (int16_t *)malloc(full_size_uv);
-                int16_t *VYFullUV = (int16_t *)malloc(full_size_uv);
+            mvuzimgxx::zimage_buffer_const srcBufVX;
+            srcBufVX.plane[0].data = smallMasks->VXSmallY;
+            srcBufVX.plane[0].stride = smallMasks->pitchVSmallY;
+            srcBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
 
-                int16_t *VXSmallUV = (int16_t *)malloc(small_size_uv);
-                int16_t *VYSmallUV = (int16_t *)malloc(small_size_uv);
+            mvuzimgxx::zimage_buffer_const srcBufVY;
+            srcBufVY.plane[0].data = smallMasks->VYSmallY;
+            srcBufVY.plane[0].stride = smallMasks->pitchVSmallY;
+            srcBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
 
+            mvuzimgxx::zimage_buffer dstBufVX;
+            dstBufVX.plane[0].data = dstTileVX.get();
+            dstBufVX.plane[0].stride = dstTileStride;
+            dstBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer dstBufVY;
+            dstBufVY.plane[0].data = dstTileVY.get();
+            dstBufVY.plane[0].stride = dstTileStride;
+            dstBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
+            uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
+
+            for (auto &tile : d->maskResizerFull.tiles) {
+                tile.graph.process(srcBufVX, dstBufVX, tmp.get());
+                tile.graph.process(srcBufVY, dstBufVY, tmp.get());
+
+                flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
+                    dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                    tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
+            }
+
+            if (d->vi->format.numPlanes == 3) {
+                memset(vsapi->getWritePtr(dst, 1), 128, vsapi->getStride(dst, 1) * vsapi->getFrameHeight(dst, 1));
+                memset(vsapi->getWritePtr(dst, 2), 128, vsapi->getStride(dst, 2) *vsapi->getFrameHeight(dst, 2));
+            }
+
+            /*
+            if (d->vi->format.numPlanes == 3) {
                 // This divides the vectors by the subsampling in both directions, memcpy if no subsampling
                 VectorSmallMaskYToHalfUV(VXSmallY, nBlkXP, nBlkYP, VXSmallUV, xRatioUV);
                 VectorSmallMaskYToHalfUV(VYSmallY, nBlkXP, nBlkYP, VYSmallUV, yRatioUV);
@@ -197,16 +308,8 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                         VXFullUV, VPitchUV, VYFullUV, VPitchUV,
                         nWidthUV, nHeightUV, time256);
 
-                free(VXFullUV);
-                free(VYFullUV);
-                free(VXSmallUV);
-                free(VYSmallUV);
             }
-
-            free(VXFullY);
-            free(VYFullY);
-            free(VXSmallY);
-            free(VYSmallY);
+            */
 
             return dst;
         } else { // not usable
@@ -286,11 +389,12 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         if (!vectors.IsCompatibleForAnalysis(super))
             throw std::runtime_error("wrong source or super clip frame size");
 
-        // FIXME
-        //simpleInit(&d.upsizer, d.nWidthP, d.nHeightP, d.nBlkXP, d.nBlkYP, d.vectors_data.nWidth, d.vectors_data.nHeight, d.vectors_data.nPel, d.opt);
-        //if (d.vi->format.colorFamily != cfGray)
-        //    simpleInit(&d.upsizerUV, d.nWidthPUV, d.nHeightPUV, d.nBlkXP, d.nBlkYP, d.nWidthUV, d.nHeightUV, d.vectors_data.nPel, d.opt);
+        d->maskResizerFull.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY,
+            d->vi->width, d->vi->height, d->vi->format.bitsPerSample);
 
+        if (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0)
+            d->maskResizerSubSampled.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY,
+                d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH, d->vi->format.bitsPerSample);
 
     } catch (std::runtime_error &e) {
         vsapi->mapSetError(out, ("Flow: " + std::string(e.what())).c_str());

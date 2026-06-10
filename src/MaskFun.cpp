@@ -22,58 +22,12 @@
 #include <algorithm>
 #include <VSHelper4.h>
 
-#include "CommonFunctions.h"
+#include "Common.h"
 #include "MaskFun.h"
 
 
 
-// Note on restrict: this function appears to always be fed memory from separate malloc calls
-void CheckAndPadSmallY(int16_t * VS_RESTRICT VXSmallY, int16_t * VS_RESTRICT VYSmallY, int nBlkXP, int nBlkYP, int nBlkX, int nBlkY) {
-    if (nBlkXP > nBlkX) { // fill right
-        for (int j = 0; j < nBlkY; j++) {
-            int16_t VXright = std::min(VXSmallY[j * nBlkXP + nBlkX - 1], (int16_t)0); // not positive
-            int16_t VYright = VYSmallY[j * nBlkXP + nBlkX - 1];
-            // clone: multiple 2.7.30-
-            for (int dx = nBlkX; dx < nBlkXP; dx++) {
-                VXSmallY[j * nBlkXP + dx] = VXright;
-                VYSmallY[j * nBlkXP + dx] = VYright;
-            }
-        }
-    }
-    if (nBlkYP > nBlkY) { // fill bottom
-        for (int i = 0; i < nBlkXP; i++) {
-            int16_t VXbottom = VXSmallY[nBlkXP * (nBlkY - 1) + i];
-            int16_t VYbottom = std::min(VYSmallY[nBlkXP * (nBlkY - 1) + i], (int16_t)0);
-            for (int dy = nBlkY; dy < nBlkYP; dy++) {
-                VXSmallY[nBlkXP * dy + i] = VXbottom;
-                VYSmallY[nBlkXP * dy + i] = VYbottom;
-            }
-        }
-    }
-}
-
-
-void CheckAndPadMaskSmall(uint8_t * VS_RESTRICT MaskSmall, int nBlkXP, int nBlkYP, int nBlkX, int nBlkY) {
-    if (nBlkXP > nBlkX) { // fill right
-        for (int j = 0; j < nBlkY; j++) {
-            uint8_t right = MaskSmall[j * nBlkXP + nBlkX - 1];
-            // clone: multiple 2.7.30-
-            for (int dx = nBlkX; dx < nBlkXP; dx++) {
-                MaskSmall[j * nBlkXP + dx] = right;
-            }
-        }
-    }
-    if (nBlkYP > nBlkY) { // fill bottom
-        for (int i = 0; i < nBlkXP; i++) {
-            uint8_t bottom = MaskSmall[nBlkXP * (nBlkY - 1) + i];
-            // clone: multiple 2.7.30-
-            for (int dy = nBlkY; dy < nBlkYP; dy++) {
-                MaskSmall[nBlkXP * dy + i] = bottom;
-            }
-        }
-    }
-}
-
+// Note on restrict: 
 // Note about restrict: it appears that this function is always called with memory allocated from different malloc calls
 void MakeVectorSmallMasks(const FakeGroupOfPlanes *fgop, int nBlkX, int nBlkY, int16_t * VS_RESTRICT VXSmallY, ptrdiff_t pitchVXSmallY, int16_t * VS_RESTRICT VYSmallY, ptrdiff_t pitchVYSmallY) {
     // make  vector vx and vy small masks

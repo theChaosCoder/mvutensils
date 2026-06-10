@@ -25,6 +25,8 @@
 #include <VSHelper4.h>
 #include <VSConstants4.h>
 
+// FIXME, break this out later when more resizing bits are known
+
 #define ZIMGXX_NAMESPACE mvuzimgxx
 #include <zimg++.hpp>
 

@@ -6,10 +6,17 @@
 #include <string>
 #include <cassert>
 #include <stdexcept>
+#include <memory>
 #include <VapourSynth4.h>
+#include <VSHelper4.h>
 #include "SuperPyramid.h"
 #include "CopyCode.h"
 #include "SADFunctions.h"
+#include "Common.h"
+
+class MotionBlockPyramidError : public std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 struct SmallVectorMasks {
     int16_t *VXSmallY;
@@ -26,10 +33,6 @@ struct SmallVectorMasks {
         vsh::vsh_aligned_free(VXSmallY);
         vsh::vsh_aligned_free(VYSmallY);
     }
-};
-
-class MotionBlockPyramidError : public std::runtime_error {
-    using std::runtime_error::runtime_error;
 };
 
 struct VECTOR {
@@ -304,6 +307,6 @@ public:
     template<typename PixelType>
     void MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
 
-    std::unique_ptr<SmallVectorMasks> MakeVectorSmallMasks() const noexcept;
+    std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks() const noexcept;
 };
 

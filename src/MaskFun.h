@@ -24,13 +24,6 @@
 
 #include "SuperPyramid.h"
 
-/// FIXME, these 2 functions are completely useless now that we actually have motion vectors covering the whole image
-void CheckAndPadSmallY(int16_t *VXSmallY, int16_t *VYSmallY, int nBlkXP, int nBlkYP, int nBlkX, int nBlkY);
-
-void CheckAndPadMaskSmall(uint8_t *MaskSmall, int nBlkXP, int nBlkYP, int nBlkX, int nBlkY);
-///////////////
-
-
 void MakeVectorSmallMasks(const FakeGroupOfPlanes *fgop, int nX, int nY, int16_t *VXSmallY, ptrdiff_t pitchVXSmallY, int16_t *VYSmallY, ptrdiff_t pitchVYSmallY);
 void VectorSmallMaskYToHalfUV(int16_t *VSmallY, int nBlkX, int nBlkY, int16_t *VSmallUV, int ratioUV);
 
