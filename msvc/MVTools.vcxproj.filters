@@ -62,7 +62,7 @@
     <ClCompile Include="..\src\MVFlowBlur.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVFlow.cpp">
+    <ClCompile Include="..\src\Flow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Degrains.cpp">
