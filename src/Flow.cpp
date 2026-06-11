@@ -137,7 +137,7 @@ struct FlowData {
 
 
 template <typename PixelType>
-static void flowFetch(uint8_t *pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const uint16_t *VXFull, const uint16_t *VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
+static void flowFetch(uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const uint16_t *VS_RESTRICT VXFull, const uint16_t *VS_RESTRICT VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
     PixelType *pdst = (PixelType *)pdst8;
 
     dst_pitch /= sizeof(PixelType);
