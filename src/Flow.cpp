@@ -137,7 +137,7 @@ struct FlowData {
 
 
 template <typename PixelType>
-static void flowFetch(uint8_t *pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const int16_t *VXFull, const int16_t *VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
+static void flowFetch(uint8_t *pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const uint16_t *VXFull, const uint16_t *VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
     PixelType *pdst = (PixelType *)pdst8;
 
     dst_pitch /= sizeof(PixelType);
@@ -148,8 +148,8 @@ static void flowFetch(uint8_t *pdst8, ptrdiff_t dst_pitch, const PyramidPlane &p
     for (int h = 0; h < height; h++) {
         for (int w = 0; w < width; w++) {
             // use interpolated image
-            int vx = (VXFull[w] * time256 + 128) >> 8;
-            int vy = (VYFull[w] * time256 + 128) >> 8;
+            int vx = ((int(VXFull[w]) - (1 << 15)) * time256 + 128) >> 8;
+            int vy = ((int(VYFull[w]) - (1 << 15)) * time256 + 128) >> 8;
             // FIXME, maybe template this on npel as well for speed?
             // FIXME, should shift w and h by ilog2(npel) to have 
             //pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(((dstX + w) << nPelLog) + vx, ((dstY + h) << nPelLog) + vy));
@@ -202,7 +202,6 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
             vsapi->freeFrame(propSrc);
 
-            auto smallMasks = vectors.MakeSmallVectorMasks();
 
             // FIXME, this field shift and combined tff logic is a even more of a mess than usueal
             int fieldShift = 0;
@@ -231,26 +230,22 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 // vertical shift of fields for fieldbased video at finest level pel2
             }
 
-            for (int j = 0; j < vectors.nBlkY; j++) {
-                for (int i = 0; i < vectors.nBlkX; i++) {
-                    smallMasks->VYSmallY[j * vectors.nBlkX + i] += fieldShift;
-                }
-            }
+            auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift);
 
             std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
                 vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
                 vsh::vsh_aligned_free
             };
 
-            ptrdiff_t dstTileStride = roundUpTo64(d->maskResizerFull.TileSize * sizeof(int16_t));
+            ptrdiff_t dstTileStride = roundUpTo64(d->maskResizerFull.TileSize * sizeof(uint16_t));
 
-            std::unique_ptr<int16_t, decltype(&vsh::vsh_aligned_free)> dstTileVX{
-                vsh::vsh_aligned_malloc<int16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVX{
+                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
                 vsh::vsh_aligned_free
             };
 
-            std::unique_ptr<int16_t, decltype(&vsh::vsh_aligned_free)> dstTileVY{
-                vsh::vsh_aligned_malloc<int16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVY{
+                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
                 vsh::vsh_aligned_free
             };
 
@@ -280,6 +275,10 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             for (auto &tile : d->maskResizerFull.tiles) {
                 tile.graph.process(srcBufVX, dstBufVX, tmp.get());
                 tile.graph.process(srcBufVY, dstBufVY, tmp.get());
+
+                //for (int h = 0; h < tile.dstHeight; h++)
+                //    memcpy(vsapi->getWritePtr(dst, 0) + (tile.dstY + h) * dstStrideY + tile.dstX, dstTileVX.get() + h * (dstTileStride / sizeof(int16_t)), tile.dstWidth * sizeof(int16_t));
+
 
                 flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
                     dstTileVX.get(), dstTileVY.get(), dstTileStride,

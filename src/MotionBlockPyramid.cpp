@@ -2003,9 +2003,9 @@ void MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float f
     }
 }
 
-std::unique_ptr<SmallVectorMasks> MotionBlockPyramid::MakeSmallVectorMasks() const noexcept {
+std::unique_ptr<SmallVectorMasks> MotionBlockPyramid::MakeSmallVectorMasks(int fieldOffset) const noexcept {
     std::unique_ptr<SmallVectorMasks> masks = std::make_unique<SmallVectorMasks>(nBlkX, nBlkY);
-    ptrdiff_t pitchVSmallY = masks->pitchVSmallY / sizeof(int16_t);
+    ptrdiff_t pitchVSmallY = masks->pitchVSmallY / sizeof(uint16_t);
 
     for (int by = 0; by < nBlkY; by++) {
         for (int bx = 0; bx < nBlkX; bx++) {
@@ -2013,8 +2013,8 @@ std::unique_ptr<SmallVectorMasks> MotionBlockPyramid::MakeSmallVectorMasks() con
             const BlockData block = GetBlock(i);
             int vx = block.vector.x;
             int vy = block.vector.y;
-            masks->VXSmallY[bx + by * pitchVSmallY] = vx;
-            masks->VYSmallY[bx + by * pitchVSmallY] = vy;
+            masks->VXSmallY[bx + by * pitchVSmallY] = vx + (1 << 15);
+            masks->VYSmallY[bx + by * pitchVSmallY] = vy + (1 << 15) + fieldOffset;
         }
     }
 

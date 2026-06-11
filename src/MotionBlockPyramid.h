@@ -18,15 +18,16 @@ class MotionBlockPyramidError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+// Note that to accomodate resizing the masks are offset by +(1 << 15)
 struct SmallVectorMasks {
-    int16_t *VXSmallY;
-    int16_t *VYSmallY;
+    uint16_t *VXSmallY;
+    uint16_t *VYSmallY;
     ptrdiff_t pitchVSmallY;
 
     SmallVectorMasks(int nBlkX, int nBlkY) {
-        pitchVSmallY = roundUpTo64(nBlkX * sizeof(int16_t));
-        VXSmallY = vsh::vsh_aligned_malloc<int16_t>(pitchVSmallY * nBlkY, 64);
-        VYSmallY = vsh::vsh_aligned_malloc<int16_t>(pitchVSmallY * nBlkY, 64);
+        pitchVSmallY = roundUpTo64(nBlkX * sizeof(uint16_t));
+        VXSmallY = vsh::vsh_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
+        VYSmallY = vsh::vsh_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
     }
 
     ~SmallVectorMasks() {
@@ -307,6 +308,6 @@ public:
     template<typename PixelType>
     void MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
 
-    std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks() const noexcept;
+    std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks(int fieldOffset) const noexcept;
 };
 
