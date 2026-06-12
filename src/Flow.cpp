@@ -50,7 +50,7 @@ public:
     std::vector<MaskTile> tiles;
     size_t tmpSize = 0;
 
-    void Init(int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int dstWidth, int dstHeight, int bitsPerSample) {
+    void Init(int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int dstWidth, int dstHeight) {
         int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
         int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
         int nWidthTiles = (dstWidth + TileSize - 1) / TileSize;
@@ -78,7 +78,6 @@ public:
                 srcFmt.pixel_type = ZIMG_PIXEL_WORD;
                 srcFmt.color_family = ZIMG_COLOR_GREY;
                 srcFmt.pixel_range = ZIMG_RANGE_FULL;
-                srcFmt.depth = bitsPerSample;
                 srcFmt.active_region.left = tile.dstX * srcWidthScale;
                 srcFmt.active_region.top = tile.dstY * srcHeightScale;
                 srcFmt.active_region.width = tile.dstWidth * srcWidthScale;
@@ -90,7 +89,6 @@ public:
                 dstFmt.pixel_type = ZIMG_PIXEL_WORD;
                 dstFmt.color_family = ZIMG_COLOR_GREY;
                 dstFmt.pixel_range = ZIMG_RANGE_FULL;
-                dstFmt.depth = bitsPerSample;
                 try {
                     tile.graph = mvuzimgxx::FilterGraph::build(srcFmt, dstFmt, &params);
                 } catch (mvuzimgxx::zerror &e) {
@@ -230,7 +228,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 // vertical shift of fields for fieldbased video at finest level pel2
             }
 
-            auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift);
+            auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
 
             std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
                 vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
@@ -389,11 +387,11 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
             throw std::runtime_error("wrong source or super clip frame size");
 
         d->maskResizerFull.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY,
-            d->vi->width, d->vi->height, d->vi->format.bitsPerSample);
+            d->vi->width, d->vi->height);
 
         if (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0)
             d->maskResizerSubSampled.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY,
-                d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH, d->vi->format.bitsPerSample);
+                d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
 
     } catch (std::runtime_error &e) {
         vsapi->mapSetError(out, ("Flow: " + std::string(e.what())).c_str());
