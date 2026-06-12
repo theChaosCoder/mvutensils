@@ -22,6 +22,8 @@ Changes
 * Super:
     * Now takes blksizeh/v and overlaph/v values to properly pad the source frame so the edges also are processed and not generate excessive levels that are unused, these are basically mandatory and may be changed to be later
 
+	* Reduced memory usage
+
 * Analyse/Recalculate:
     * The dct argument was replaced with satd (true/false), satd=false is equivalent to dct=0 and satd=true is the same as dct=5 in the original mvtools
 
@@ -49,6 +51,15 @@ Changes
 	* Supports 8-16 bit, the output format is derived entirely from the vector clip
 	
 	* The masks are actually generated at a higher bitdepth unlike avs+ where the same 8 bit mask is always upscaled
+
+* Flow:
+	* 8-16 bit support
+	
+	* Improved internal mask resizing quality
+	
+	* Reduced memory usage
+	
+	* Mode=1 was dropped since nobody used it, since only mode=0 remains and of course the mode argument was removed
 
 * SCDetection:
     * None

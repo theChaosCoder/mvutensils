@@ -101,6 +101,28 @@ public:
     }
 };
 
+static void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) {
+    ptrdiff_t pitch = masks.pitchVSmallY / sizeof(uint16_t);
+
+    if (subSamplingW > 0) {
+        uint16_t *VXSmallY = masks.VXSmallY;
+        for (int by = 0; by < nBlkY; by++) {
+            for (int bx = 0; bx < nBlkX; bx++)
+                VXSmallY[bx] = (static_cast<int16_t>(VXSmallY[bx] - (1 << 15)) >> subSamplingW) + (1 << 15);
+            VXSmallY += pitch;
+        }
+    }
+
+    if (subSamplingH > 0) {
+        uint16_t *VYSmallY = masks.VXSmallY;
+        for (int by = 0; by < nBlkY; by++) {
+            for (int bx = 0; bx < nBlkX; bx++)
+                VYSmallY[bx] = (static_cast<int16_t>(VYSmallY[bx] - (1 << 15)) >> subSamplingH) + (1 << 15);
+            VYSmallY += pitch;
+        }
+    }
+}
+
 struct FlowData {
     VSNode *clip;
     VSNode *super;
@@ -228,7 +250,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 // vertical shift of fields for fieldbased video at finest level pel2
             }
 
-            auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+            auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift);
 
             std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
                 vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
@@ -274,39 +296,32 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 tile.graph.process(srcBufVX, dstBufVX, tmp.get());
                 tile.graph.process(srcBufVY, dstBufVY, tmp.get());
 
-                //for (int h = 0; h < tile.dstHeight; h++)
-                //    memcpy(vsapi->getWritePtr(dst, 0) + (tile.dstY + h) * dstStrideY + tile.dstX, dstTileVX.get() + h * (dstTileStride / sizeof(int16_t)), tile.dstWidth * sizeof(int16_t));
-
-
                 flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
                     dstTileVX.get(), dstTileVY.get(), dstTileStride,
                     tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
             }
 
             if (d->vi->format.numPlanes == 3) {
-                memset(vsapi->getWritePtr(dst, 1), 128, vsapi->getStride(dst, 1) * vsapi->getFrameHeight(dst, 1));
-                memset(vsapi->getWritePtr(dst, 2), 128, vsapi->getStride(dst, 2) *vsapi->getFrameHeight(dst, 2));
+                AdjustSmallVectorMaskSubSampling(*smallMasks, vectors.nBlkX, vectors.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+
+                ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
+                ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
+                uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
+                uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
+
+                for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                    tile.graph.process(srcBufVX, dstBufVX, tmp.get());
+                    tile.graph.process(srcBufVY, dstBufVY, tmp.get());
+
+                    flowFetch<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
+                        dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                        tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
+
+                    flowFetch<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                        dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                        tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
+                }
             }
-
-            /*
-            if (d->vi->format.numPlanes == 3) {
-                // This divides the vectors by the subsampling in both directions, memcpy if no subsampling
-                VectorSmallMaskYToHalfUV(VXSmallY, nBlkXP, nBlkYP, VXSmallUV, xRatioUV);
-                VectorSmallMaskYToHalfUV(VYSmallY, nBlkXP, nBlkYP, VYSmallUV, yRatioUV);
-
-                d->upsizerUV.simpleResize_int16_t(&d->upsizerUV, VXFullUV, VPitchUV, VXSmallUV, nBlkXP, 1);
-                d->upsizerUV.simpleResize_int16_t(&d->upsizerUV, VYFullUV, VPitchUV, VYSmallUV, nBlkXP, 0);
-
-
-                flowFetch<PixelType>(vsapi->getWritePtr(dst, 1), vsapi->getStride(dst, 1), refGOF.GetLevel(0).planes[1],
-                        VXFullUV, VPitchUV, VYFullUV, VPitchUV,
-                        nWidthUV, nHeightUV, time256);
-                flowFetch<PixelType>(vsapi->getWritePtr(dst, 2), vsapi->getStride(dst, 2), refGOF.GetLevel(0).planes[2],
-                        VXFullUV, VPitchUV, VYFullUV, VPitchUV,
-                        nWidthUV, nHeightUV, time256);
-
-            }
-            */
 
             return dst;
         } else { // not usable
@@ -390,7 +405,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
             d->vi->width, d->vi->height);
 
         if (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0)
-            d->maskResizerSubSampled.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY,
+            d->maskResizerSubSampled.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX >> d->vi->format.subSamplingW, vectors.nBlkSizeY >> d->vi->format.subSamplingH, vectors.nOverlapX >> d->vi->format.subSamplingW, vectors.nOverlapY >> d->vi->format.subSamplingH,
                 d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
 
     } catch (std::runtime_error &e) {
