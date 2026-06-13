@@ -17,7 +17,6 @@ Changes
     * blksize has been renamed to blksizeh and overlap to overlaph, they still implicitly set blksizev and overlapv like before
     
     * Frame properties are now consistently propagated, this means that many functions that previously only requested frames from super now also request from the original clip
-    
 
 * Super:
     * Now takes blksizeh/v and overlaph/v values to properly pad the source frame so the edges also are processed and not generate excessive levels that are unused, these are basically mandatory and may be changed to be later
@@ -59,7 +58,7 @@ Changes
 	
 	* Reduced memory usage
 	
-	* Mode=1 was dropped since nobody used it, since only mode=0 remains and of course the mode argument was removed
+	* Mode=1 was dropped since nobody used it, since only mode=0 remains the mode argument was removed
 
 * SCDetection:
     * None

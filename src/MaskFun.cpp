@@ -26,46 +26,6 @@
 #include "MaskFun.h"
 
 
-
-// Note on restrict: 
-// Note about restrict: it appears that this function is always called with memory allocated from different malloc calls
-void MakeVectorSmallMasks(const FakeGroupOfPlanes *fgop, int nBlkX, int nBlkY, int16_t * VS_RESTRICT VXSmallY, ptrdiff_t pitchVXSmallY, int16_t * VS_RESTRICT VYSmallY, ptrdiff_t pitchVYSmallY) {
-    // make  vector vx and vy small masks
-    for (int by = 0; by < nBlkY; by++) {
-        for (int bx = 0; bx < nBlkX; bx++) {
-            int i = bx + by * nBlkX;
-            const FakeBlockData *block = fgopGetBlock(fgop, 0, i);
-            int vx = block->vector.x;
-            int vy = block->vector.y;
-            VXSmallY[bx + by * pitchVXSmallY] = vx; // luma
-            VYSmallY[bx + by * pitchVYSmallY] = vy; // luma
-        }
-    }
-}
-
-void VectorSmallMaskYToHalfUV(int16_t * VS_RESTRICT VSmallY, int nBlkX, int nBlkY, int16_t *VS_RESTRICT VSmallUV, int ratioUV) {
-    if (ratioUV == 2) {
-        // YV12 colorformat
-        for (int by = 0; by < nBlkY; by++) {
-            for (int bx = 0; bx < nBlkX; bx++) {
-                VSmallUV[bx] = VSmallY[bx] >> 1; // chroma
-            }
-            VSmallY += nBlkX;
-            VSmallUV += nBlkX;
-        }
-    } else { // ratioUV==1
-        // Height YUY2 colorformat
-        for (int by = 0; by < nBlkY; by++) {
-            for (int bx = 0; bx < nBlkX; bx++) {
-                VSmallUV[bx] = VSmallY[bx]; // chroma
-            }
-            VSmallY += nBlkX;
-            VSmallUV += nBlkX;
-        }
-    }
-}
-
-
 // copy refined planes to big one plane
 template <typename PixelType>
 static void RealMerge4PlanesToBig(uint8_t *pel2Plane_u8, ptrdiff_t pel2Pitch, const uint8_t *pPlane0_u8, const uint8_t *pPlane1_u8,

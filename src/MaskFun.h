@@ -24,9 +24,6 @@
 
 #include "SuperPyramid.h"
 
-void MakeVectorSmallMasks(const FakeGroupOfPlanes *fgop, int nX, int nY, int16_t *VXSmallY, ptrdiff_t pitchVXSmallY, int16_t *VYSmallY, ptrdiff_t pitchVYSmallY);
-void VectorSmallMaskYToHalfUV(int16_t *VSmallY, int nBlkX, int nBlkY, int16_t *VSmallUV, int ratioUV);
-
 /// FIXME, these 2 functions are probably useless along with the Finest function
 void Merge4PlanesToBig(uint8_t *pel2Plane, ptrdiff_t pel2Pitch, const uint8_t *pPlane0, const uint8_t *pPlane1,
                        const uint8_t *pPlane2, const uint8_t *pPlane3, int width, int height, ptrdiff_t pitch, int bitsPerSample);

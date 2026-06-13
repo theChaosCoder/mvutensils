@@ -108,16 +108,16 @@ static void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX,
         uint16_t *VXSmallY = masks.VXSmallY;
         for (int by = 0; by < nBlkY; by++) {
             for (int bx = 0; bx < nBlkX; bx++)
-                VXSmallY[bx] = (static_cast<int16_t>(VXSmallY[bx] - (1 << 15)) >> subSamplingW) + (1 << 15);
+                VXSmallY[bx] = ((static_cast<int>(VXSmallY[bx]) - (1 << 15)) >> subSamplingW) + (1 << 15);
             VXSmallY += pitch;
         }
     }
 
     if (subSamplingH > 0) {
-        uint16_t *VYSmallY = masks.VXSmallY;
+        uint16_t *VYSmallY = masks.VYSmallY;
         for (int by = 0; by < nBlkY; by++) {
             for (int bx = 0; bx < nBlkX; bx++)
-                VYSmallY[bx] = (static_cast<int16_t>(VYSmallY[bx] - (1 << 15)) >> subSamplingH) + (1 << 15);
+                VYSmallY[bx] = ((static_cast<int>(VYSmallY[bx]) - (1 << 15)) >> subSamplingH) + (1 << 15);
             VYSmallY += pitch;
         }
     }
@@ -168,19 +168,10 @@ static void flowFetch(uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const Pyr
     for (int h = 0; h < height; h++) {
         for (int w = 0; w < width; w++) {
             // use interpolated image
-            int vx = ((int(VXFull[w]) - (1 << 15)) * time256 + 128) >> 8;
-            int vy = ((int(VYFull[w]) - (1 << 15)) * time256 + 128) >> 8;
+            int vx = ((static_cast<int>(VXFull[w]) - (1 << 15)) * time256 + 128) >> 8;
+            int vy = ((static_cast<int>(VYFull[w]) - (1 << 15)) * time256 + 128) >> 8;
             // FIXME, maybe template this on npel as well for speed?
-            // FIXME, should shift w and h by ilog2(npel) to have 
-            //pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(((dstX + w) << nPelLog) + vx, ((dstY + h) << nPelLog) + vy));
-        
-            int pelX = ((dstX + w) << nPelLog) + vx;
-            int pelY = ((dstY + h) << nPelLog) + vy;
-
-            pelX = std::clamp(pelX, -pref.nHPaddingPel, (pref.nWidth + pref.nHPadding) * pref.nPel - 1);
-            pelY = std::clamp(pelY, -pref.nVPaddingPel, (pref.nHeight + pref.nVPadding) * pref.nPel - 1);
-
-            pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(pelX, pelY));
+            pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(((dstX + w) << nPelLog) + vx, ((dstY + h) << nPelLog) + vy));
         }
         pdst += dst_pitch;
         VXFull += tilePitch;
@@ -222,111 +213,121 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
             vsapi->freeFrame(propSrc);
 
+            try {
 
-            // FIXME, this field shift and combined tff logic is a even more of a mess than usueal
-            int fieldShift = 0;
-            if (d->fields && vectors.nPel > 1 && ((nref - n) % 2 != 0)) {
-                const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
+                // FIXME, this field shift and combined tff logic is a even more of a mess than usueal
+                int fieldShift = 0;
+                if (d->fields && vectors.nPel > 1 && ((nref - n) % 2 != 0)) {
+                    const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
 
-                int err;
-                const VSMap *props = vsapi->getFramePropertiesRO(src);
-                int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                vsapi->freeFrame(src);
-                if (err && !d->tff_exists)
-                    throw std::runtime_error("_Field property not found in super frame. Therefore, you must pass tff argument");
+                    int err;
+                    const VSMap *props = vsapi->getFramePropertiesRO(src);
+                    int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
+                    vsapi->freeFrame(src);
+                    if (err && !d->tff_exists)
+                        throw std::runtime_error("_Field property not found in super frame. Therefore, you must pass tff argument");
 
-                if (d->tff_exists)
-                    src_top_field = d->tff ^ (n % 2);
+                    if (d->tff_exists)
+                        src_top_field = d->tff ^ (n % 2);
 
-                props = vsapi->getFramePropertiesRO(ref);
-                int ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                if (err && !d->tff_exists) 
-                    throw std::runtime_error("_Field property not found in super frame. Therefore, you must pass tff argument");
+                    props = vsapi->getFramePropertiesRO(ref);
+                    int ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
+                    if (err && !d->tff_exists)
+                        throw std::runtime_error("_Field property not found in super frame. Therefore, you must pass tff argument");
 
-                if (d->tff_exists)
-                    ref_top_field = d->tff ^ (nref % 2);
+                    if (d->tff_exists)
+                        ref_top_field = d->tff ^ (nref % 2);
 
-                fieldShift = (src_top_field && !ref_top_field) ? vectors.nPel / 2 : ((ref_top_field && !src_top_field) ? -(vectors.nPel / 2) : 0);
-                // vertical shift of fields for fieldbased video at finest level pel2
-            }
+                    fieldShift = (src_top_field && !ref_top_field) ? vectors.nPel / 2 : ((ref_top_field && !src_top_field) ? -(vectors.nPel / 2) : 0);
+                    // vertical shift of fields for fieldbased video at finest level pel2
+                }
 
-            auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift);
+                auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift);
 
-            std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
-                vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
-                vsh::vsh_aligned_free
-            };
+                std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
+                    vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
+                    vsh::vsh_aligned_free
+                };
 
-            ptrdiff_t dstTileStride = roundUpTo64(d->maskResizerFull.TileSize * sizeof(uint16_t));
+                ptrdiff_t dstTileStride = roundUpTo64(d->maskResizerFull.TileSize * sizeof(uint16_t));
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVX{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVX{
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+                    vsh::vsh_aligned_free
+                };
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVY{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVY{
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+                    vsh::vsh_aligned_free
+                };
 
-            mvuzimgxx::zimage_buffer_const srcBufVX;
-            srcBufVX.plane[0].data = smallMasks->VXSmallY;
-            srcBufVX.plane[0].stride = smallMasks->pitchVSmallY;
-            srcBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer_const srcBufVX;
+                srcBufVX.plane[0].data = smallMasks->VXSmallY;
+                srcBufVX.plane[0].stride = smallMasks->pitchVSmallY;
+                srcBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer_const srcBufVY;
-            srcBufVY.plane[0].data = smallMasks->VYSmallY;
-            srcBufVY.plane[0].stride = smallMasks->pitchVSmallY;
-            srcBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer_const srcBufVY;
+                srcBufVY.plane[0].data = smallMasks->VYSmallY;
+                srcBufVY.plane[0].stride = smallMasks->pitchVSmallY;
+                srcBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer dstBufVX;
-            dstBufVX.plane[0].data = dstTileVX.get();
-            dstBufVX.plane[0].stride = dstTileStride;
-            dstBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer dstBufVX;
+                dstBufVX.plane[0].data = dstTileVX.get();
+                dstBufVX.plane[0].stride = dstTileStride;
+                dstBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer dstBufVY;
-            dstBufVY.plane[0].data = dstTileVY.get();
-            dstBufVY.plane[0].stride = dstTileStride;
-            dstBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer dstBufVY;
+                dstBufVY.plane[0].data = dstTileVY.get();
+                dstBufVY.plane[0].stride = dstTileStride;
+                dstBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
-            uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
+                ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
+                uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
 
-            for (auto &tile : d->maskResizerFull.tiles) {
-                tile.graph.process(srcBufVX, dstBufVX, tmp.get());
-                tile.graph.process(srcBufVY, dstBufVY, tmp.get());
-
-                flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
-                    dstTileVX.get(), dstTileVY.get(), dstTileStride,
-                    tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
-            }
-
-            if (d->vi->format.numPlanes == 3) {
-                AdjustSmallVectorMaskSubSampling(*smallMasks, vectors.nBlkX, vectors.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
-
-                ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
-                ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
-                uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
-                uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
-
-                for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                for (auto &tile : d->maskResizerFull.tiles) {
                     tile.graph.process(srcBufVX, dstBufVX, tmp.get());
                     tile.graph.process(srcBufVY, dstBufVY, tmp.get());
 
-                    flowFetch<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
-                        dstTileVX.get(), dstTileVY.get(), dstTileStride,
-                        tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
-
-                    flowFetch<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                    flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
                         dstTileVX.get(), dstTileVY.get(), dstTileStride,
                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                 }
+
+                if (d->vi->format.numPlanes == 3) {
+                    AdjustSmallVectorMaskSubSampling(*smallMasks, vectors.nBlkX, vectors.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+
+                    ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
+                    ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
+                    uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
+                    uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
+
+                    for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                        tile.graph.process(srcBufVX, dstBufVX, tmp.get());
+                        tile.graph.process(srcBufVY, dstBufVY, tmp.get());
+
+                        flowFetch<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
+                            dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                            tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
+
+                        flowFetch<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                            dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                            tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
+                    }
+                }
+
+                return dst;
+
+                        }
+                        catch (std::runtime_error &e) {
+                            vsapi->setFilterError(("Flow: " + std::string(e.what())).c_str(), frameCtx);
+                            vsapi->freeFrame(dst);
+                            return nullptr;
+                        }
+            } else { // not usable
+                return vsapi->getFrameFilter(n, d->clip, frameCtx);
             }
 
-            return dst;
-        } else { // not usable
-            return vsapi->getFrameFilter(n, d->clip, frameCtx);
-        }
+
     }
 
     return nullptr;
