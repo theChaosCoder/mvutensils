@@ -30,28 +30,6 @@
 #include "MotionBlockPyramid.h"
 #include "MaskResize.h"
 
-static void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) {
-    ptrdiff_t pitch = masks.pitchVSmallY / sizeof(uint16_t);
-
-    if (subSamplingW > 0) {
-        uint16_t *VXSmallY = masks.VXSmallY;
-        for (int by = 0; by < nBlkY; by++) {
-            for (int bx = 0; bx < nBlkX; bx++)
-                VXSmallY[bx] = ((static_cast<int>(VXSmallY[bx]) - (1 << 15)) >> subSamplingW) + (1 << 15);
-            VXSmallY += pitch;
-        }
-    }
-
-    if (subSamplingH > 0) {
-        uint16_t *VYSmallY = masks.VYSmallY;
-        for (int by = 0; by < nBlkY; by++) {
-            for (int bx = 0; bx < nBlkX; bx++)
-                VYSmallY[bx] = ((static_cast<int>(VYSmallY[bx]) - (1 << 15)) >> subSamplingH) + (1 << 15);
-            VYSmallY += pitch;
-        }
-    }
-}
-
 struct FlowData {
     VSNode *clip;
     VSNode *super;
@@ -108,9 +86,7 @@ static void flowFetch(uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const Pyr
     }
 }
 
-
-typedef uint8_t PixelType;
-
+template<typename PixelType>
 static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     FlowData *d =  reinterpret_cast<FlowData *>(instanceData);
 
@@ -178,15 +154,15 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                     vsh::vsh_aligned_free
                 };
 
-                ptrdiff_t dstTileStride = roundUpTo64(d->maskResizerFull.TileSize * sizeof(uint16_t));
+                constexpr ptrdiff_t dstTileStride = roundUpTo64(MaskResizer::TileSize * sizeof(uint16_t));
 
                 std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVX{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
                     vsh::vsh_aligned_free
                 };
 
                 std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVY{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * d->maskResizerFull.TileSize, 64),
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
                     vsh::vsh_aligned_free
                 };
 
@@ -234,11 +210,11 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                         tile.graph.process(srcBufVX, dstBufVX, tmp.get());
                         tile.graph.process(srcBufVY, dstBufVY, tmp.get());
 
-                        flowFetch<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
+                        flowFetch<PixelType>(vsapi->getWritePtr(dst, 1) + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
                             dstTileVX.get(), dstTileVY.get(), dstTileStride,
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
 
-                        flowFetch<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                        flowFetch<PixelType>(vsapi->getWritePtr(dst, 2) + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
                             dstTileVX.get(), dstTileVY.get(), dstTileStride,
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                     }
@@ -246,17 +222,15 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
 
                 return dst;
 
-                        }
-                        catch (std::runtime_error &e) {
-                            vsapi->setFilterError(("Flow: " + std::string(e.what())).c_str(), frameCtx);
-                            vsapi->freeFrame(dst);
-                            return nullptr;
-                        }
-            } else { // not usable
-                return vsapi->getFrameFilter(n, d->clip, frameCtx);
             }
-
-
+            catch (std::runtime_error &e) {
+                vsapi->setFilterError(("Flow: " + std::string(e.what())).c_str(), frameCtx);
+                vsapi->freeFrame(dst);
+                return nullptr;
+            }
+        } else {
+            return vsapi->getFrameFilter(n, d->clip, frameCtx);
+        }
     }
 
     return nullptr;
@@ -302,12 +276,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-        char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
-        if (!evil)
-            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
-
-        FramePyramid super(evil, 0, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, core, vsapi);
 
         d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
@@ -317,12 +286,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("source clip isn't compatible with super clip");
 
-        const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, errorMsg, ERROR_SIZE);
-        if (!evil2)
-            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(errorMsg));
-
-        MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
-        vsapi->freeFrame(evil2);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
 
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
 
@@ -349,7 +313,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         {d->vectors, rpStrictSpatial},
     };
 
-    vsapi->createVideoFilter(out, "Flow", d->vi, flowGetFrame, filterFree<FlowData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "Flow", d->vi, (d->vi->format.bitsPerSample == 8) ? flowGetFrame<uint8_t> : flowGetFrame<uint16_t>, filterFree<FlowData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 

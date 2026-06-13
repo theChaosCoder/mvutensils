@@ -1,4 +1,5 @@
 #include "SuperPyramid.h"
+#include "Common.h"
 
 #include <VSHelper4.h>
 #include <cassert>
@@ -832,10 +833,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
     }
 }
 
-
-FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
-: core(core), vsapi(vsapi) {
-
+void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix) {
     if (!srcFrame)
         throw SuperPyramidError("Invalid source frame");
 
@@ -857,7 +855,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
 
     nPel = vsapi->mapGetIntSaturated(props, (prefix + "SuperPel").c_str(), 0, &err);
     int levels = vsapi->mapGetIntSaturated(props, (prefix + "SuperLevels").c_str(), 0, &err);
-    chroma = !!vsapi->mapGetInt(props, (prefix + "SuperChroma").c_str(), 0, &err );
+    chroma = !!vsapi->mapGetInt(props, (prefix + "SuperChroma").c_str(), 0, &err);
 
     if (xRatioUV < 1 || yRatioUV < 1 || xRatioUV > 2 || yRatioUV > 2 || nRealWidth[0] > nWidth[0] || nRealHeight[0] > nHeight[0]
         || nVPad[0] < 0 || nHPad[0] < 0 || nRealHeight[0] < 1 || nRealWidth[0] < 1 || levels < 1 || (nPel != 1 && nPel != 2 && nPel != 4)
@@ -930,6 +928,23 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::str
         FreeFrames();
         throw;
     }
+
+}
+
+FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
+: core(core), vsapi(vsapi) {
+    LoadFrameData(srcFrame, maxLevel, prefix);
+}
+
+FramePyramid::FramePyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
+    : core(core), vsapi(vsapi) {
+
+    char errorMsg[ERROR_SIZE] = {};
+    const VSFrame *srcFrame = vsapi->getFrame(0, node, errorMsg, ERROR_SIZE);
+    if (!srcFrame)
+        throw std::runtime_error("Failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
+
+    LoadFrameData(srcFrame, 0, prefix);
 }
 
 void FramePyramid::FreeFrames() noexcept {

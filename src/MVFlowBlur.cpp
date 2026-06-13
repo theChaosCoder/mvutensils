@@ -17,28 +17,20 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
-#include <climits>
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
+#include <algorithm>
 
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "CommonFunctions.h"
-#include "Fakery.h"
-#include "MaskFun.h"
-#include "MVAnalysisData.h"
-#include "SimpleResize.h"
-#include "CommonMacros.h"
+#include "Common.h"
+#include "SuperPyramid.h"
+#include "MotionBlockPyramid.h"
+#include "MaskResize.h"
 
-
-
-typedef struct MVFlowBlurData {
+struct FlowBlurData {
     VSNode *node;
     const VSVideoInfo *vi;
-
-    VSNode *finest;
     VSNode *super;
     VSNode *mvbw;
     VSNode *mvfw;
@@ -47,52 +39,53 @@ typedef struct MVFlowBlurData {
     int prec;
     int64_t thscd1;
     int thscd2;
-    int opt;
-
-    MVAnalysisData mvbw_data;
-    MVAnalysisData mvfw_data;
-
-    int nSuperHPad;
-
-    int nWidthUV;
-    int nHeightUV;
-    int nVPaddingUV;
-    int nHPaddingUV;
-    int VPitchY;
-    int VPitchUV;
 
     int blur256;
 
-    SimpleResize upsizer;
-    SimpleResize upsizerUV;
-} MVFlowBlurData;
+    int deltaFrame;
+
+    MaskResizer maskResizerFull;
+    MaskResizer maskResizerSubSampled;
+
+    std::string prefix;
+
+    const VSAPI *vsapi;
+
+    FlowBlurData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~FlowBlurData() {
+        vsapi->freeNode(node);
+        vsapi->freeNode(super);
+        vsapi->freeNode(mvbw);
+        vsapi->freeNode(mvfw);
+    }
+};
 
 template<typename PixelType>
-static void RealFlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const uint8_t * VS_RESTRICT pref8, ptrdiff_t ref_pitch,
-                         const int16_t *VXFullB, const int16_t *VXFullF, const int16_t *VYFullB, const int16_t *VYFullF,
-                         int VPitch, int width, int height, int blur256, int prec, int nPel) {
-    const PixelType *pref = (const PixelType *)pref8;
+static void FlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref,
+                         const uint16_t * VS_RESTRICT VXFullB, const uint16_t *VS_RESTRICT VXFullF, const uint16_t *VS_RESTRICT VYFullB, const uint16_t *VS_RESTRICT VYFullF,
+                         int tilePitch, int dstX, int dstY, int width, int height, int blur256, int prec) {
     PixelType *pdst = (PixelType *)pdst8;
 
-    ref_pitch /= sizeof(PixelType);
     dst_pitch /= sizeof(PixelType);
-
-    int nPelLog = ilog2(nPel);
+    tilePitch /= sizeof(int16_t);
+    int nPelLog = ilog2(pref.nPel);
 
     /* very slow, but precise motion blur */
     for (int h = 0; h < height; h++) {
         for (int w = 0; w < width; w++) {
-            int bluredsum = pref[w << nPelLog];
+            // FIXME, only accesses pel1 data, maybe add a faster function to access it
+            int bluredsum = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((w + dstX) << nPelLog, (h + dstY) << nPelLog));
             int vxF0 = VXFullF[w] * blur256;
             int vyF0 = VYFullF[w] * blur256;
-            int mF = (VSMAX(abs(vxF0), abs(vyF0)) / prec) >> 8;
+            int mF = (std::max(abs(vxF0), abs(vyF0)) / prec) >> 8;
             if (mF > 0) {
                 vxF0 /= mF;
                 vyF0 /= mF;
                 int vxF = vxF0;
                 int vyF = vyF0;
                 for (int i = 0; i < mF; i++) {
-                    int dstF = pref[(vyF >> 8) * ref_pitch + (vxF >> 8) + (w << nPelLog)];
+                    int dstF = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((vxF >> 8) + ((w + dstX) << nPelLog), (vyF >> 8) + ((h + dstY) << nPelLog)));
                     bluredsum += dstF;
                     vxF += vxF0;
                     vyF += vyF0;
@@ -100,14 +93,14 @@ static void RealFlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const
             }
             int vxB0 = VXFullB[w] * blur256;
             int vyB0 = VYFullB[w] * blur256;
-            int mB = (VSMAX(abs(vxB0), abs(vyB0)) / prec) >> 8;
+            int mB = (std::max(abs(vxB0), abs(vyB0)) / prec) >> 8;
             if (mB > 0) {
                 vxB0 /= mB;
                 vyB0 /= mB;
                 int vxB = vxB0;
                 int vyB = vyB0;
                 for (int i = 0; i < mB; i++) {
-                    int dstB = pref[(vyB >> 8) * ref_pitch + (vxB >> 8) + (w << nPelLog)];
+                    int dstB = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((vxB >> 8) + ((w + dstX) << nPelLog), (vyB >> 8) + ((h + dstY) << nPelLog)));
                     bluredsum += dstB;
                     vxB += vxB0;
                     vyB += vyB0;
@@ -116,437 +109,243 @@ static void RealFlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const
             pdst[w] = bluredsum / (mF + mB + 1);
         }
         pdst += dst_pitch;
-        pref += (ref_pitch << nPelLog);
-        VXFullB += VPitch;
-        VYFullB += VPitch;
-        VXFullF += VPitch;
-        VYFullF += VPitch;
+        VXFullB += tilePitch;
+        VYFullB += tilePitch;
+        VXFullF += tilePitch;
+        VYFullF += tilePitch;
     }
 }
 
-
-static void FlowBlur(uint8_t *pdst, ptrdiff_t dst_pitch, const uint8_t *pref, ptrdiff_t ref_pitch,
-                     const int16_t *VXFullB, const int16_t *VXFullF, const int16_t *VYFullB, const int16_t *VYFullF,
-                     int VPitch, int width, int height, int blur256, int prec, int nPel, int bitsPerSample) {
-    if (bitsPerSample == 8)
-        RealFlowBlur<uint8_t>(pdst, dst_pitch, pref, ref_pitch, VXFullB, VXFullF, VYFullB, VYFullF, VPitch, width, height, blur256, prec, nPel);
-    else
-        RealFlowBlur<uint16_t>(pdst, dst_pitch, pref, ref_pitch, VXFullB, VXFullF, VYFullB, VYFullF, VPitch, width, height, blur256, prec, nPel);
-}
-
-
-static const VSFrame *VS_CC mvflowblurGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
-
-    MVFlowBlurData *d = (MVFlowBlurData *)instanceData;
+template<typename PixelType>
+static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+    FlowBlurData *d = reinterpret_cast<FlowBlurData *>(instanceData);
 
     if (activationReason == arInitial) {
-        int off = d->mvbw_data.nDeltaFrame; // integer offset of reference frame
+        int off = d->deltaFrame; // integer offset of reference frame
 
         if (n - off >= 0 && n + off < d->vi->numFrames) {
             vsapi->requestFrameFilter(n - off, d->mvbw, frameCtx);
             vsapi->requestFrameFilter(n + off, d->mvfw, frameCtx);
         }
 
-        vsapi->requestFrameFilter(n, d->finest, frameCtx);
+        vsapi->requestFrameFilter(n, d->super, frameCtx);
         vsapi->requestFrameFilter(n, d->node, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        uint8_t *pDst[3];
-        const uint8_t *pRef[3];
-        ptrdiff_t nDstPitches[3];
-        ptrdiff_t nRefPitches[3];
+        int off = d->deltaFrame;
+        bool vectorsLoadFrame = (n - off >= 0 && n + off < d->vi->numFrames);
 
-        FakeGroupOfPlanes fgopF, fgopB;
+        const VSFrame *mvF = vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvfw, frameCtx) : nullptr;
+        MotionBlockPyramid vectorsfw(mvF, 1, d->prefix, core, vsapi);
+        vsapi->freeFrame(mvF);
+            
+        const VSFrame *mvB = vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvbw, frameCtx) : nullptr;
+        MotionBlockPyramid vectorsbw(mvB, 1, d->prefix, core, vsapi);
+        vsapi->freeFrame(mvB);
 
-        fgopInit(&fgopF, &d->mvfw_data);
-        fgopInit(&fgopB, &d->mvbw_data);
+        if (vectorsfw.IsUsable(d->thscd1, d->thscd2) && vectorsbw.IsUsable(d->thscd1, d->thscd2)) {
+            const VSFrame *ref = vsapi->getFrameFilter(n, d->super, frameCtx);
+            FramePyramid refGOF(ref, 1, d->prefix, core, vsapi);
+            
+            const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
+            VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
+            vsapi->freeFrame(src);
 
-        int isUsableB = 0;
-        int isUsableF = 0;
+            auto smallMasksFw = vectorsfw.MakeSmallVectorMasks();
+            auto smallMasksBw = vectorsbw.MakeSmallVectorMasks();
 
-        int off = d->mvbw_data.nDeltaFrame; // integer offset of reference frame
+            std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
+                vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
+                vsh::vsh_aligned_free
+            };
 
-        if (n - off >= 0 && n + off < d->vi->numFrames) {
-            const VSFrame *mvF = vsapi->getFrameFilter(n + off, d->mvfw, frameCtx);
-            const VSMap *mvprops = vsapi->getFramePropertiesRO(mvF);
-            fgopUpdate(&fgopF, (const uint8_t *)vsapi->mapGetData(mvprops, prop_MVTools_vectors, 0, NULL));
-            isUsableF = fgopIsUsable(&fgopF, d->thscd1, d->thscd2);
-            vsapi->freeFrame(mvF);
+            constexpr ptrdiff_t dstTileStride = roundUpTo64(MaskResizer::TileSize * sizeof(uint16_t));
 
-            const VSFrame *mvB = vsapi->getFrameFilter(n - off, d->mvbw, frameCtx);
-            mvprops = vsapi->getFramePropertiesRO(mvB);
-            fgopUpdate(&fgopB, (const uint8_t *)vsapi->mapGetData(mvprops, prop_MVTools_vectors, 0, NULL));
-            isUsableB = fgopIsUsable(&fgopB, d->thscd1, d->thscd2);
-            vsapi->freeFrame(mvB);
-        }
+            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXFw{
+                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                vsh::vsh_aligned_free
+            };
 
+            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYFw{
+                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                vsh::vsh_aligned_free
+            };
 
-        if (isUsableB && isUsableF) {
-            const VSFrame *ref = vsapi->getFrameFilter(n, d->finest, frameCtx); //  ref for  compensation
-            VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, ref, core);
+            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXBw{
+                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                vsh::vsh_aligned_free
+            };
 
-            for (int i = 0; i < d->vi->format.numPlanes; i++) {
-                pDst[i] = vsapi->getWritePtr(dst, i);
-                pRef[i] = vsapi->getReadPtr(ref, i);
-                nDstPitches[i] = vsapi->getStride(dst, i);
-                nRefPitches[i] = vsapi->getStride(ref, i);
+            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYBw{
+                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                vsh::vsh_aligned_free
+            };
+
+            mvuzimgxx::zimage_buffer_const srcBufVXFw;
+            srcBufVXFw.plane[0].data = smallMasksFw->VXSmallY;
+            srcBufVXFw.plane[0].stride = smallMasksFw->pitchVSmallY;
+            srcBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer_const srcBufVYFw;
+            srcBufVYFw.plane[0].data = smallMasksFw->VYSmallY;
+            srcBufVYFw.plane[0].stride = smallMasksFw->pitchVSmallY;
+            srcBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer_const srcBufVXBw;
+            srcBufVXBw.plane[0].data = smallMasksBw->VXSmallY;
+            srcBufVXBw.plane[0].stride = smallMasksBw->pitchVSmallY;
+            srcBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer_const srcBufVYBw;
+            srcBufVYBw.plane[0].data = smallMasksBw->VYSmallY;
+            srcBufVYBw.plane[0].stride = smallMasksBw->pitchVSmallY;
+            srcBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer dstBufVXFw;
+            dstBufVXFw.plane[0].data = dstTileVXFw.get();
+            dstBufVXFw.plane[0].stride = dstTileStride;
+            dstBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer dstBufVYFw;
+            dstBufVYFw.plane[0].data = dstTileVYFw.get();
+            dstBufVYFw.plane[0].stride = dstTileStride;
+            dstBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer dstBufVXBw;
+            dstBufVXBw.plane[0].data = dstTileVXBw.get();
+            dstBufVXBw.plane[0].stride = dstTileStride;
+            dstBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            mvuzimgxx::zimage_buffer dstBufVYBw;
+            dstBufVYBw.plane[0].data = dstTileVYBw.get();
+            dstBufVYBw.plane[0].stride = dstTileStride;
+            dstBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
+
+            ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
+            uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
+
+            for (auto &tile : d->maskResizerFull.tiles) {
+                tile.graph.process(srcBufVXFw, dstBufVXFw, tmp.get());
+                tile.graph.process(srcBufVYFw, dstBufVYFw, tmp.get());
+                tile.graph.process(srcBufVXBw, dstBufVXBw, tmp.get());
+                tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
+
+                FlowBlur<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
+                         dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
             }
 
-            const int nWidth = d->mvbw_data.nWidth;
-            const int nHeight = d->mvbw_data.nHeight;
-            const int nWidthUV = d->nWidthUV;
-            const int nHeightUV = d->nHeightUV;
-            const int xRatioUV = d->mvbw_data.xRatioUV;
-            const int yRatioUV = d->mvbw_data.yRatioUV;
-            const int nBlkX = d->mvbw_data.nBlkX;
-            const int nBlkY = d->mvbw_data.nBlkY;
-            const int nVPadding = d->mvbw_data.nVPadding;
-            const int nHPadding = d->mvbw_data.nHPadding;
-            const int nVPaddingUV = d->nVPaddingUV;
-            const int nHPaddingUV = d->nHPaddingUV;
-            const int nPel = d->mvbw_data.nPel;
-            const int blur256 = d->blur256;
-            const int prec = d->prec;
-            const int VPitchY = d->VPitchY;
-            const int VPitchUV = d->VPitchUV;
+            if (d->vi->format.numPlanes == 3) {
+                AdjustSmallVectorMaskSubSampling(*smallMasksFw, vectorsfw.nBlkX, vectorsfw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+                AdjustSmallVectorMaskSubSampling(*smallMasksBw, vectorsbw.nBlkX, vectorsbw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
 
-            int bitsPerSample = d->vi->format.bitsPerSample;
-            int bytesPerSample = d->vi->format.bytesPerSample;
+                ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
+                ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
+                uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
+                uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
 
-            ptrdiff_t nOffsetY = nRefPitches[0] * nVPadding * nPel + nHPadding * bytesPerSample * nPel;
-            ptrdiff_t nOffsetUV = nRefPitches[1] * nVPaddingUV * nPel + nHPaddingUV * bytesPerSample * nPel;
+                for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                    tile.graph.process(srcBufVXFw, dstBufVXFw, tmp.get());
+                    tile.graph.process(srcBufVYFw, dstBufVYFw, tmp.get());
+                    tile.graph.process(srcBufVXBw, dstBufVXBw, tmp.get());
+                    tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
 
-
-            size_t full_size = nHeight * VPitchY * sizeof(int16_t);
-            size_t small_size = nBlkY * nBlkX * sizeof(int16_t);
-
-            int16_t *VXFullYB = (int16_t *)malloc(full_size);
-            int16_t *VYFullYB = (int16_t *)malloc(full_size);
-            int16_t *VXFullYF = (int16_t *)malloc(full_size);
-            int16_t *VYFullYF = (int16_t *)malloc(full_size);
-            int16_t *VXSmallYB = (int16_t *)malloc(small_size);
-            int16_t *VYSmallYB = (int16_t *)malloc(small_size);
-            int16_t *VXSmallYF = (int16_t *)malloc(small_size);
-            int16_t *VYSmallYF = (int16_t *)malloc(small_size);
-
-            // make  vector vx and vy small masks
-            MakeVectorSmallMasks(&fgopB, nBlkX, nBlkY, VXSmallYB, nBlkX, VYSmallYB, nBlkX);
-            MakeVectorSmallMasks(&fgopF, nBlkX, nBlkY, VXSmallYF, nBlkX, VYSmallYF, nBlkX);
-
-            // analyse vectors field to detect occlusion
-
-            // upsize (bilinear interpolate) vector masks to fullframe size
-
-
-            d->upsizer.simpleResize_int16_t(&d->upsizer, VXFullYB, VPitchY, VXSmallYB, nBlkX, 1);
-            d->upsizer.simpleResize_int16_t(&d->upsizer, VYFullYB, VPitchY, VYSmallYB, nBlkX, 0);
-            d->upsizer.simpleResize_int16_t(&d->upsizer, VXFullYF, VPitchY, VXSmallYF, nBlkX, 1);
-            d->upsizer.simpleResize_int16_t(&d->upsizer, VYFullYF, VPitchY, VYSmallYF, nBlkX, 0);
-
-            FlowBlur(pDst[0], nDstPitches[0], pRef[0] + nOffsetY, nRefPitches[0],
-                     VXFullYB, VXFullYF, VYFullYB, VYFullYF, VPitchY,
-                     nWidth, nHeight, blur256, prec, nPel, bitsPerSample);
-
-            if (d->vi->format.colorFamily != cfGray) {
-                size_t full_size_uv = nHeightUV * VPitchUV * sizeof(int16_t);
-                size_t small_size_uv = nBlkY * nBlkX * sizeof(int16_t);
-
-                int16_t *VXFullUVB = (int16_t *)malloc(full_size_uv);
-                int16_t *VYFullUVB = (int16_t *)malloc(full_size_uv);
-
-                int16_t *VXFullUVF = (int16_t *)malloc(full_size_uv);
-                int16_t *VYFullUVF = (int16_t *)malloc(full_size_uv);
-
-                int16_t *VXSmallUVB = (int16_t *)malloc(small_size_uv);
-                int16_t *VYSmallUVB = (int16_t *)malloc(small_size_uv);
-
-                int16_t *VXSmallUVF = (int16_t *)malloc(small_size_uv);
-                int16_t *VYSmallUVF = (int16_t *)malloc(small_size_uv);
-
-                VectorSmallMaskYToHalfUV(VXSmallYB, nBlkX, nBlkY, VXSmallUVB, xRatioUV);
-                VectorSmallMaskYToHalfUV(VYSmallYB, nBlkX, nBlkY, VYSmallUVB, yRatioUV);
-
-                VectorSmallMaskYToHalfUV(VXSmallYF, nBlkX, nBlkY, VXSmallUVF, xRatioUV);
-                VectorSmallMaskYToHalfUV(VYSmallYF, nBlkX, nBlkY, VYSmallUVF, yRatioUV);
-
-                d->upsizerUV.simpleResize_int16_t(&d->upsizerUV, VXFullUVB, VPitchUV, VXSmallUVB, nBlkX, 1);
-                d->upsizerUV.simpleResize_int16_t(&d->upsizerUV, VYFullUVB, VPitchUV, VYSmallUVB, nBlkX, 0);
-
-                d->upsizerUV.simpleResize_int16_t(&d->upsizerUV, VXFullUVF, VPitchUV, VXSmallUVF, nBlkX, 1);
-                d->upsizerUV.simpleResize_int16_t(&d->upsizerUV, VYFullUVF, VPitchUV, VYSmallUVF, nBlkX, 0);
-
-
-                FlowBlur(pDst[1], nDstPitches[1], pRef[1] + nOffsetUV, nRefPitches[1],
-                         VXFullUVB, VXFullUVF, VYFullUVB, VYFullUVF, VPitchUV,
-                         nWidthUV, nHeightUV, blur256, prec, nPel, bitsPerSample);
-                FlowBlur(pDst[2], nDstPitches[2], pRef[2] + nOffsetUV, nRefPitches[2],
-                         VXFullUVB, VXFullUVF, VYFullUVB, VYFullUVF, VPitchUV,
-                         nWidthUV, nHeightUV, blur256, prec, nPel, bitsPerSample);
-
-                free(VXFullUVB);
-                free(VYFullUVB);
-                free(VXSmallUVB);
-                free(VYSmallUVB);
-                free(VXFullUVF);
-                free(VYFullUVF);
-                free(VXSmallUVF);
-                free(VYSmallUVF);
+                    FlowBlur<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
+                         dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
+                    FlowBlur<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                         dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
+                }
             }
-
-            free(VXFullYB);
-            free(VYFullYB);
-            free(VXSmallYB);
-            free(VYSmallYB);
-            free(VXFullYF);
-            free(VYFullYF);
-            free(VXSmallYF);
-            free(VYSmallYF);
 
             vsapi->freeFrame(ref);
 
-            fgopDeinit(&fgopF);
-            fgopDeinit(&fgopB);
-
             return dst;
-        } else { // not usable
-            fgopDeinit(&fgopF);
-            fgopDeinit(&fgopB);
-
+        } else {
             return vsapi->getFrameFilter(n, d->node, frameCtx);
         }
     }
 
-    return 0;
+    return nullptr;
 }
 
-
-static void VS_CC mvflowblurFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
-    MVFlowBlurData *d = (MVFlowBlurData *)instanceData;
-
-    simpleDeinit(&d->upsizer);
-    if (d->vi->format.colorFamily != cfGray)
-        simpleDeinit(&d->upsizerUV);
-
-    vsapi->freeNode(d->finest);
-    vsapi->freeNode(d->super);
-    vsapi->freeNode(d->mvfw);
-    vsapi->freeNode(d->mvbw);
-    vsapi->freeNode(d->node);
-    free(d);
-}
-
-
-static void VS_CC mvflowblurCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
-
-    MVFlowBlurData d;
-    MVFlowBlurData *data;
-
+static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+    std::unique_ptr<FlowBlurData> d(new FlowBlurData(vsapi));
     int err;
 
-    d.blur = (float)vsapi->mapGetFloat(in, "blur", 0, &err);
+    d->blur = (float)vsapi->mapGetFloat(in, "blur", 0, &err);
     if (err)
-        d.blur = 50.0f;
+        d->blur = 50.0f;
 
-    d.prec = vsapi->mapGetIntSaturated(in, "prec", 0, &err);
+    d->prec = vsapi->mapGetIntSaturated(in, "prec", 0, &err);
     if (err)
-        d.prec = 1;
+        d->prec = 1;
 
-    d.thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
+    d->thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
     if (err)
-        d.thscd1 = MV_DEFAULT_SCD1;
+        d->thscd1 = MV_DEFAULT_SCD1;
 
-    d.thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
+    d->thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
     if (err)
-        d.thscd2 = MV_DEFAULT_SCD2;
+        d->thscd2 = MV_DEFAULT_SCD2;
 
-    d.opt = !!vsapi->mapGetInt(in, "opt", 0, &err);
-    if (err)
-        d.opt = 1;
+    const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+    if (prefix)
+        d->prefix = prefix;
+    else
+        d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
+    if (d->blur < 0.0f || d->blur > 200.0f)
+        throw std::runtime_error("blur must be between 0 and 200");
 
-    if (d.blur < 0.0f || d.blur > 200.0f) {
-        vsapi->mapSetError(out, "FlowBlur: blur must be between 0 and 200 % (inclusive).");
-        return;
-    }
+    if (d->prec < 1)
+        throw std::runtime_error("prec must be at least 1");
 
-    if (d.prec < 1) {
-        vsapi->mapSetError(out, "FlowBlur: prec must be at least 1.");
-        return;
-    }
+    d->blur256 = (int)(d->blur * 256.0f / 200.0f);
 
-    d.blur256 = (int)(d.blur * 256.0f / 200.0f);
+    d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
+    FramePyramid super(d->super, d->prefix, core, vsapi);
 
-    d.super = vsapi->mapGetNode(in, "super", 0, NULL);
+    d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+    d->vi = vsapi->getVideoInfo(d->node);
 
-#define ERROR_SIZE 1024
-    char errorMsg[ERROR_SIZE] = "FlowBlur: failed to retrieve first frame from super clip. Error message: ";
-    size_t errorLen = strlen(errorMsg);
-    const VSFrame *evil = vsapi->getFrame(0, d.super, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
-#undef ERROR_SIZE
-    if (!evil) {
-        vsapi->mapSetError(out, errorMsg);
-        vsapi->freeNode(d.super);
-        return;
-    }
-    const VSMap *props = vsapi->getFramePropertiesRO(evil);
-    int evil_err[3];
-    int nHeightS = vsapi->mapGetIntSaturated(props, "Super_height", 0, &evil_err[0]);
-    d.nSuperHPad = vsapi->mapGetIntSaturated(props, "Super_hpad", 0, &evil_err[1]);
-    int nSuperPel = vsapi->mapGetIntSaturated(props, "Super_pel", 0, &evil_err[2]);
-    vsapi->freeFrame(evil);
+    if (!super.IsCompatibleWithSource(d->vi))
+        throw std::runtime_error("source clip isn't compatible with super clip");
 
-    for (int i = 0; i < 2; i++)
-        if (evil_err[i]) {
-            vsapi->mapSetError(out, "FlowBlur: required properties not found in first frame of super clip. Maybe clip didn't come from mv.Super? Was the first frame trimmed away?");
-            vsapi->freeNode(d.super);
-            return;
-        }
+    MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
+    MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
 
+    vectorsFw.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
 
-    d.mvbw = vsapi->mapGetNode(in, "mvbw", 0, NULL);
-    d.mvfw = vsapi->mapGetNode(in, "mvfw", 0, NULL);
+    d->deltaFrame = vectorsFw.nDeltaFrame;
 
-#define ERROR_SIZE 512
-    char error[ERROR_SIZE + 1] = { 0 };
-    const char *filter_name = "FlowBlur";
+    if (!vectorsFw.IsCompatibleForAnalysis(super))
+        throw std::runtime_error("wrong source or super clip frame size");
 
-    adataFromVectorClip(&d.mvbw_data, d.mvbw, filter_name, "mvbw", vsapi, error, ERROR_SIZE);
-    adataFromVectorClip(&d.mvfw_data, d.mvfw, filter_name, "mvfw", vsapi, error, ERROR_SIZE);
+    if (vectorsFw.IsCompatible(vectorsBw) || (vectorsBw.nDeltaFrame != -vectorsFw.nDeltaFrame) || vectorsFw.nDeltaFrame > 0 || vectorsBw.nDeltaFrame < 0)
+        throw std::runtime_error("mvfw and mvbw must be compatible with each other and have opposite sign delta");
 
-    scaleThSCD(&d.thscd1, &d.thscd2, &d.mvbw_data, filter_name, error, ERROR_SIZE);
+    d->maskResizerFull.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX, vectorsFw.nBlkSizeY, vectorsFw.nOverlapX, vectorsFw.nOverlapY,
+        d->vi->width, d->vi->height);
 
-    adataCheckSimilarity(&d.mvbw_data, &d.mvfw_data, filter_name, "mvbw", "mvfw", error, ERROR_SIZE);
-#undef ERROR_SIZE
+    if (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0)
+        d->maskResizerSubSampled.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX >> d->vi->format.subSamplingW, vectorsFw.nBlkSizeY >> d->vi->format.subSamplingH, vectorsFw.nOverlapX >> d->vi->format.subSamplingW, vectorsFw.nOverlapY >> d->vi->format.subSamplingH,
+            d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
 
-    if (error[0]) {
-        vsapi->mapSetError(out, error);
-
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-
-    if (d.mvbw_data.nDeltaFrame <= 0 || d.mvfw_data.nDeltaFrame <= 0) {
-        vsapi->mapSetError(out, "FlowBlur: cannot use motion vectors with absolute frame references.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-    // XXX Alternatively, use both clips' delta as offsets in GetFrame.
-    if (d.mvfw_data.nDeltaFrame != d.mvbw_data.nDeltaFrame) {
-        vsapi->mapSetError(out, "FlowBlur: mvbw and mvfw must be generated with the same delta.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-    // Make sure the motion vector clips are correct.
-    if (!d.mvbw_data.isBackward || d.mvfw_data.isBackward) {
-        if (!d.mvbw_data.isBackward)
-            vsapi->mapSetError(out, "FlowBlur: mvbw must be generated with isb=True.");
-        else
-            vsapi->mapSetError(out, "FlowBlur: mvfw must be generated with isb=False.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-
-    if (d.mvbw_data.nPel == 1)
-        d.finest = vsapi->addNodeRef(d.super); // v2.0.9.1
-    else {
-        VSPlugin *mvtoolsPlugin = vsapi->getPluginByID("com.nodame.mvtools", core);
-
-        VSMap *args = vsapi->createMap();
-        vsapi->mapSetNode(args, "super", d.super, maReplace);
-        vsapi->mapSetInt(args, "opt", d.opt, maReplace);
-        VSMap *ret = vsapi->invoke(mvtoolsPlugin, "Finest", args);
-        if (vsapi->mapGetError(ret)) {
-#define ERROR_SIZE 512
-            char error_msg[ERROR_SIZE + 1] = { 0 };
-            snprintf(error_msg, ERROR_SIZE, "FlowBlur: %s", vsapi->mapGetError(ret));
-#undef ERROR_SIZE
-            vsapi->mapSetError(out, error_msg);
-
-            vsapi->freeNode(d.super);
-            vsapi->freeNode(d.mvfw);
-            vsapi->freeNode(d.mvbw);
-            vsapi->freeMap(args);
-            vsapi->freeMap(ret);
-            return;
-        }
-        d.finest = vsapi->mapGetNode(ret, "clip", 0, NULL);
-        vsapi->freeMap(args);
-        vsapi->freeMap(ret);
-    }
-
-    d.node = vsapi->mapGetNode(in, "clip", 0, 0);
-    d.vi = vsapi->getVideoInfo(d.node);
-
-    const VSVideoInfo *supervi = vsapi->getVideoInfo(d.super);
-    int nSuperWidth = supervi->width;
-
-    if (d.mvbw_data.nHeight != nHeightS || d.mvbw_data.nWidth != nSuperWidth - d.nSuperHPad * 2 || d.mvbw_data.nPel != nSuperPel) {
-        vsapi->mapSetError(out, "FlowBlur: wrong source or super clip frame size.");
-        vsapi->freeNode(d.finest);
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        vsapi->freeNode(d.node);
-        return;
-    }
-
-    if (!vsh::isConstantVideoFormat(d.vi) || d.vi->format.bitsPerSample > 16 || d.vi->format.sampleType != stInteger || d.vi->format.subSamplingW > 1 || d.vi->format.subSamplingH > 1 || (d.vi->format.colorFamily != cfYUV && d.vi->format.colorFamily != cfGray)) {
-        vsapi->mapSetError(out, "FlowBlur: input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.finest);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        vsapi->freeNode(d.node);
-        return;
-    }
-
-
-    d.nHeightUV = d.mvbw_data.nHeight / d.mvbw_data.yRatioUV;
-    d.nWidthUV = d.mvbw_data.nWidth / d.mvbw_data.xRatioUV;
-    d.nHPaddingUV = d.mvbw_data.nHPadding / d.mvbw_data.xRatioUV;
-    //d.nVPaddingUV = d.mvbw_data.nHPadding / d.mvbw_data.yRatioUV; // original looks wrong
-    d.nVPaddingUV = d.mvbw_data.nVPadding / d.mvbw_data.yRatioUV;
-
-    d.VPitchY = d.mvbw_data.nWidth;
-    d.VPitchUV = d.nWidthUV;
-
-    simpleInit(&d.upsizer, d.mvbw_data.nWidth, d.mvbw_data.nHeight, d.mvbw_data.nBlkX, d.mvbw_data.nBlkY, d.mvbw_data.nWidth, d.mvbw_data.nHeight, d.mvbw_data.nPel, d.opt);
-    if (d.vi->format.colorFamily != cfGray)
-        simpleInit(&d.upsizerUV, d.nWidthUV, d.nHeightUV, d.mvbw_data.nBlkX, d.mvbw_data.nBlkY, d.nWidthUV, d.nHeightUV, d.mvbw_data.nPel, d.opt);
-
-
-    data = (MVFlowBlurData *)malloc(sizeof(d));
-    *data = d;
 
     VSFilterDependency deps[4] = { 
-        {data->node, rpStrictSpatial}, 
-        // {data->super, rpStrictSpatial}, //MVFlowBlur doesn't actually request any frames from the super.
-        {data->finest, rpStrictSpatial}, 
-        {data->mvbw, rpGeneral}, 
-        {data->mvfw, rpGeneral}, 
+        {d->node, rpStrictSpatial}, 
+        {d->super, rpStrictSpatial},
+        {d->mvbw, rpGeneral}, 
+        {d->mvfw, rpGeneral}, 
     };
 
-    vsapi->createVideoFilter(out, "FlowBlur", data->vi, mvflowblurGetFrame, mvflowblurFree, fmParallel, deps, ARRAY_SIZE(deps), data, core);
+    vsapi->createVideoFilter(out, "FlowBlur", d->vi, (d->vi->format.bitsPerSample == 8) ? flowblurGetFrame<uint8_t> : flowblurGetFrame<uint16_t>, filterFree<FlowBlurData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    d.release();
 }
 
-
-void mvflowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void flowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("FlowBlur",
                  "clip:vnode;"
                  "super:vnode;"
@@ -556,7 +355,7 @@ void mvflowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "prec:int:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"
-                 "opt:int:opt;",
+                 "prefix:data:opt;",
                  "clip:vnode;",
-                 mvflowblurCreate, 0, plugin);
+                 flowblurCreate, 0, plugin);
 }

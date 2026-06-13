@@ -266,6 +266,7 @@ private:
     DivideExtra divideExtra = DivideExtra::No;
     std::vector<VECTOR> dividedVectors;
     std::vector<MotionBlockLevel> pyramidLevels;
+    void LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi);
 public:
     // The FramePyramid in src is only used as a template for the internal data structures, the actual motion estimation is performed on the frames passed to SearchMVs
     MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int nLevels, bool chroma, int deltaFrame);
@@ -274,6 +275,10 @@ public:
     // positive numbers mean that many levels are loaded. When loading from clips passing 1 is usually enough.
     // Object can be in an invalid or limited state after this constructor
     MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept;
+
+    // Constructor to load metadata and do nothing else
+    MotionBlockPyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
+
     void ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept; // serialization to a frame, oneLevel means that only the finest level is exported, otherwise all levels are exported as separate properties
 
     void SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
@@ -296,11 +301,11 @@ public:
     void ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const;
     State GetState() const noexcept;
     bool HasMotionVectors() const noexcept;
+    // FIXME, maybe have all IsCompatible funtions throw an exception if they're not compatible instead of returning false
     bool IsCompatible(const MotionBlockPyramid &other) const noexcept;
     bool IsCompatibleForAnalysis(const FramePyramid &other) const noexcept;
     bool IsCompatibleForRecalc(const FramePyramid &other) const noexcept;
 
-    // FIXME, use float instead of double
     template<typename PixelType>
     void MakeVectorLengthMask(float normFactor, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
     template<typename PixelType>
@@ -308,6 +313,8 @@ public:
     template<typename PixelType>
     void MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
 
-    std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks(int fieldOffset) const noexcept;
+    std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks(int fieldOffset = 0) const noexcept;
 };
 
+// FIXME, turn into member function?
+void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) noexcept;

@@ -1558,12 +1558,12 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
     state = State::ReadyForSearch;
 }
 
-MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept {
-    if (!src)
+void MotionBlockPyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi) {
+    if (!srcFrame)
         return;
 
-    const VSVideoFormat *vi = vsapi->getVideoFrameFormat(src);
-    auto props = vsapi->getFramePropertiesRO(src);
+    const VSVideoFormat *vi = vsapi->getVideoFrameFormat(srcFrame);
+    auto props = vsapi->getFramePropertiesRO(srcFrame);
     int err;
     nWidth = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisWidth").c_str(), 0, &err);
     nHeight = vsapi->mapGetIntSaturated(props, (prefix + "AnalysisHeight").c_str(), 0, &err);
@@ -1603,7 +1603,6 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
 
     int loadLevels = (maxLevel < 0) ? nLevelCount : std::min(maxLevel, nLevelCount);
 
-
     if (loadLevels > 0) {
         pyramidLevels.resize(loadLevels);
 
@@ -1637,6 +1636,18 @@ MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const s
     }
 }
 
+MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept {
+    LoadFrameData(src, maxLevel, prefix, vsapi);
+}
+
+MotionBlockPyramid::MotionBlockPyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi) {
+    char errorMsg[ERROR_SIZE] = {};
+    const VSFrame *srcFrame = vsapi->getFrame(0, node, errorMsg, ERROR_SIZE);
+    if (!srcFrame)
+        throw std::runtime_error("Failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
+    LoadFrameData(srcFrame, 0, prefix, vsapi);
+    vsapi->freeFrame(srcFrame);
+}
 
 void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
     SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
@@ -2019,6 +2030,28 @@ std::unique_ptr<SmallVectorMasks> MotionBlockPyramid::MakeSmallVectorMasks(int f
     }
 
     return masks;
+}
+
+void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) noexcept {
+    ptrdiff_t pitch = masks.pitchVSmallY / sizeof(uint16_t);
+
+    if (subSamplingW > 0) {
+        uint16_t *VXSmallY = masks.VXSmallY;
+        for (int by = 0; by < nBlkY; by++) {
+            for (int bx = 0; bx < nBlkX; bx++)
+                VXSmallY[bx] = ((static_cast<int>(VXSmallY[bx]) - (1 << 15)) >> subSamplingW) + (1 << 15);
+            VXSmallY += pitch;
+        }
+    }
+
+    if (subSamplingH > 0) {
+        uint16_t *VYSmallY = masks.VYSmallY;
+        for (int by = 0; by < nBlkY; by++) {
+            for (int bx = 0; bx < nBlkX; bx++)
+                VYSmallY[bx] = ((static_cast<int>(VYSmallY[bx]) - (1 << 15)) >> subSamplingH) + (1 << 15);
+            VYSmallY += pitch;
+        }
+    }
 }
 
 // Explicit instantiations to keep the headers somewhat clean and readable

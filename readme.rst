@@ -60,6 +60,13 @@ Changes
 	
 	* Mode=1 was dropped since nobody used it, since only mode=0 remains the mode argument was removed
 
+* FlowBlur
+	* 8-16 bit support
+	
+	* Improved internal mask resizing quality
+	
+	* Reduced memory usage
+
 * SCDetection:
     * None
 
