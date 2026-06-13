@@ -28,78 +28,7 @@
 #include "Common.h"
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
-
-// FIXME, break this out later when more resizing bits are known
-
-#define ZIMGXX_NAMESPACE mvuzimgxx
-#include <zimg++.hpp>
-
-class MaskTile {
-public:
-    // Remember to calculate shared temp space once and for all
-    int dstX;
-    int dstY;
-    int dstWidth;
-    int dstHeight;
-    mvuzimgxx::FilterGraph graph;
-};
-
-class MaskResizer {
-public:
-    constexpr static int TileSize = 64;
-    std::vector<MaskTile> tiles;
-    size_t tmpSize = 0;
-
-    void Init(int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int dstWidth, int dstHeight) {
-        int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
-        int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
-        int nWidthTiles = (dstWidth + TileSize - 1) / TileSize;
-        int nHeightTiles = (dstHeight + TileSize - 1) / TileSize;
-        tiles.reserve(nWidthTiles * nHeightTiles);
-
-        const double srcWidthScale = static_cast<double>(nBlkX) / nWidth_B;
-        const double srcHeightScale = static_cast<double>(nBlkY) / nHeight_B;
-
-        mvuzimgxx::zfilter_graph_builder_params params;
-        params.resample_filter = ZIMG_RESIZE_BILINEAR;
-        params.cpu_type = ZIMG_CPU_AUTO_64B;
-
-        for (int y = 0; y < nHeightTiles; y++) {
-            for (int x = 0; x < nWidthTiles; x++) {
-                MaskTile tile;
-                tile.dstX = x * TileSize;
-                tile.dstY = y * TileSize;
-                tile.dstWidth = std::min(TileSize, dstWidth - tile.dstX);
-                tile.dstHeight = std::min(TileSize, dstHeight - tile.dstY);
-
-                mvuzimgxx::zimage_format srcFmt;
-                srcFmt.width = nBlkX;
-                srcFmt.height = nBlkY;
-                srcFmt.pixel_type = ZIMG_PIXEL_WORD;
-                srcFmt.color_family = ZIMG_COLOR_GREY;
-                srcFmt.pixel_range = ZIMG_RANGE_FULL;
-                srcFmt.active_region.left = tile.dstX * srcWidthScale;
-                srcFmt.active_region.top = tile.dstY * srcHeightScale;
-                srcFmt.active_region.width = tile.dstWidth * srcWidthScale;
-                srcFmt.active_region.height = tile.dstHeight * srcHeightScale;
-
-                mvuzimgxx::zimage_format dstFmt;
-                dstFmt.width = tile.dstWidth;
-                dstFmt.height = tile.dstHeight;
-                dstFmt.pixel_type = ZIMG_PIXEL_WORD;
-                dstFmt.color_family = ZIMG_COLOR_GREY;
-                dstFmt.pixel_range = ZIMG_RANGE_FULL;
-                try {
-                    tile.graph = mvuzimgxx::FilterGraph::build(srcFmt, dstFmt, &params);
-                } catch (mvuzimgxx::zerror &e) {
-                    throw std::runtime_error(std::string("Error building filter graph for mask tile: ") + e.msg);
-                }
-                tmpSize = std::max(tmpSize, tile.graph.get_tmp_size());
-                tiles.push_back(std::move(tile));
-            }
-        }
-    }
-};
+#include "MaskResize.h"
 
 static void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) {
     ptrdiff_t pitch = masks.pitchVSmallY / sizeof(uint16_t);

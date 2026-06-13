@@ -51,6 +51,9 @@
     <ClInclude Include="..\src\MotionBlockPyramid.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\MaskResize.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\MVFlowInter.cpp">
@@ -129,6 +132,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\MotionBlockPyramid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\MaskResize.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

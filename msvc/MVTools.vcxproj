@@ -98,6 +98,7 @@
     <ClInclude Include="..\src\CopyCode.h" />
     <ClInclude Include="..\src\CPU.h" />
     <ClInclude Include="..\src\MaskFun.h" />
+    <ClInclude Include="..\src\MaskResize.h" />
     <ClInclude Include="..\src\MotionBlockPyramid.h" />
     <ClInclude Include="..\src\Degrains.h" />
     <ClInclude Include="..\src\MVFlowFPSHelper.h" />
@@ -114,6 +115,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\src\MaskResize.cpp" />
     <ClCompile Include="..\src\MotionBlockPyramid.cpp" />
     <ClCompile Include="..\src\Analyse.cpp" />
     <ClCompile Include="..\src\MVBlockFPS.cpp">
