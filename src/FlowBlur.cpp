@@ -154,72 +154,22 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                 auto smallMasksFw = vectorsfw.MakeSmallVectorMasks();
                 auto smallMasksBw = vectorsbw.MakeSmallVectorMasks();
 
-                std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
-                    vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
-                    vsh::vsh_aligned_free
-                };
+                auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
-                constexpr ptrdiff_t dstTileStride = roundUpTo64(MaskResizer::TileSize * sizeof(uint16_t));
+                auto dstTileVXFw = MaskResizer::GetTileBuffer();
+                auto dstTileVYFw = MaskResizer::GetTileBuffer();
+                auto dstTileVXBw = MaskResizer::GetTileBuffer();
+                auto dstTileVYBw = MaskResizer::GetTileBuffer();
 
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXFw{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
+                auto srcBufVXFw = MaskResizer::MakeSrcBuffer(smallMasksFw->VXSmallY, smallMasksFw->pitchVSmallY);
+                auto srcBufVYFw = MaskResizer::MakeSrcBuffer(smallMasksFw->VYSmallY, smallMasksFw->pitchVSmallY);
+                auto srcBufVXBw = MaskResizer::MakeSrcBuffer(smallMasksBw->VXSmallY, smallMasksBw->pitchVSmallY);
+                auto srcBufVYBw = MaskResizer::MakeSrcBuffer(smallMasksBw->VYSmallY, smallMasksBw->pitchVSmallY);
 
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYFw{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
-
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXBw{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
-
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYBw{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
-
-                mvuzimgxx::zimage_buffer_const srcBufVXFw;
-                srcBufVXFw.plane[0].data = smallMasksFw->VXSmallY;
-                srcBufVXFw.plane[0].stride = smallMasksFw->pitchVSmallY;
-                srcBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer_const srcBufVYFw;
-                srcBufVYFw.plane[0].data = smallMasksFw->VYSmallY;
-                srcBufVYFw.plane[0].stride = smallMasksFw->pitchVSmallY;
-                srcBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer_const srcBufVXBw;
-                srcBufVXBw.plane[0].data = smallMasksBw->VXSmallY;
-                srcBufVXBw.plane[0].stride = smallMasksBw->pitchVSmallY;
-                srcBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer_const srcBufVYBw;
-                srcBufVYBw.plane[0].data = smallMasksBw->VYSmallY;
-                srcBufVYBw.plane[0].stride = smallMasksBw->pitchVSmallY;
-                srcBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufVXFw;
-                dstBufVXFw.plane[0].data = dstTileVXFw.get();
-                dstBufVXFw.plane[0].stride = dstTileStride;
-                dstBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufVYFw;
-                dstBufVYFw.plane[0].data = dstTileVYFw.get();
-                dstBufVYFw.plane[0].stride = dstTileStride;
-                dstBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufVXBw;
-                dstBufVXBw.plane[0].data = dstTileVXBw.get();
-                dstBufVXBw.plane[0].stride = dstTileStride;
-                dstBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufVYBw;
-                dstBufVYBw.plane[0].data = dstTileVYBw.get();
-                dstBufVYBw.plane[0].stride = dstTileStride;
-                dstBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
+                auto dstBufVXFw = MaskResizer::MakeDstBuffer(dstTileVXFw.get(), MaskResizer::GetTileBufferStride());
+                auto dstBufVYFw = MaskResizer::MakeDstBuffer(dstTileVYFw.get(), MaskResizer::GetTileBufferStride());
+                auto dstBufVXBw = MaskResizer::MakeDstBuffer(dstTileVXBw.get(), MaskResizer::GetTileBufferStride());
+                auto dstBufVYBw = MaskResizer::MakeDstBuffer(dstTileVYBw.get(), MaskResizer::GetTileBufferStride());
 
                 ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
                 uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
@@ -231,7 +181,7 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                     tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
 
                     FlowBlur<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
-                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), MaskResizer::GetTileBufferStride(),
                              tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
                 }
 
@@ -251,10 +201,10 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                         tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
 
                         FlowBlur<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
-                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), MaskResizer::GetTileBufferStride(),
                              tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
                         FlowBlur<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
-                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), MaskResizer::GetTileBufferStride(),
                              tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
                     }
                 }

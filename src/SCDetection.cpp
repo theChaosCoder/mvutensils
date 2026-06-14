@@ -27,7 +27,6 @@
 #include "Common.h"
 
 
-
 struct SCDetectionDataExtra {
     const VSVideoInfo *vi;
 
@@ -104,12 +103,7 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData,
     d->vi = vsapi->getVideoInfo(d->node1);
 
     try {
-        char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg, ERROR_SIZE);
-        if (!evil2)
-            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(errorMsg));
-
-        MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->node2, d->prefix, core, vsapi);
 
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
     } catch (std::runtime_error &e) {

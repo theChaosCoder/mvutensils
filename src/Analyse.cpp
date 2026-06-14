@@ -291,16 +291,11 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8))
             throw std::runtime_error("blksize and blksizev must be at least 8 when divide>0");
 
-
         d->nSearchParam = std::max(d->searchparam, 1);
-
 
         d->node = vsapi->mapGetNode(in, "super", 0, 0);
         d->supervi = vsapi->getVideoInfo(d->node);
         d->vi = d->supervi;
-
-        if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray))
-            throw std::runtime_error("Input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant format and dimensions");
 
         if (d->vi->format.colorFamily == cfGray)
             d->chroma = false;
@@ -315,8 +310,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
             d->nOverlapY % (1 << d->vi->format.subSamplingH))
-            throw std::runtime_error("The requested overlap is incompatible with the super clip's subsampling");
-       
+            throw std::runtime_error("The requested overlap is incompatible with the super clip's subsampling"); 
 
         if ((d->divideExtra != MotionBlockPyramid::DivideExtra::No) && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
                               d->nOverlapY % (2 << d->vi->format.subSamplingH)))
@@ -325,12 +319,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->deltaFrame == 0)
             throw std::runtime_error("delta can't be 0");
 
-        char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil = vsapi->getFrame(0, d->node, errorMsg, ERROR_SIZE);
-        if (!evil)
-            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
-
-        FramePyramid super(evil, -1, d->prefix, core, vsapi);
+        FramePyramid super(d->node, d->prefix, core, vsapi);
 
         if (d->nPelSearch <= 0)
             d->nPelSearch = super.nPel;

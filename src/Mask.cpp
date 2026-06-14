@@ -69,21 +69,18 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
             MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
             vsapi->freeFrame(mvn);
 
-            ptrdiff_t maskPitch = roundUpTo64(vectors.nBlkX * sizeof(PixelType));
-
             if (vectors.IsUsable(d->thscd1, d->thscd2)) {
-                std::unique_ptr<PixelType[]> smallMask(new PixelType[maskPitch * vectors.nBlkY]);
-
+                std::unique_ptr<BlockMask<PixelType>> Mask;
                 if (d->kind == 0) {
-                    vectors.MakeVectorLengthMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
+                    Mask = vectors.MakeVectorLengthMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256);
                 } else if (d->kind == 1) {
-                    vectors.MakeSADMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
+                    Mask = vectors.MakeSADMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256);
                 } else if (d->kind == 2) {
-                    vectors.MakeVectorOcclusionMask(d->fMaskNormFactor, d->fGamma, smallMask.get(), maskPitch, d->time256);
+                    Mask = vectors.MakeVectorOcclusionMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256);
                 }
 
                 BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), vsapi->getFrameWidth(dst, 0), vsapi->getFrameHeight(dst, 0),
-                    smallMask.get(), maskPitch, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY, d->vi.format.bitsPerSample);
+                    Mask->mask, Mask->stride, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY, d->vi.format.bitsPerSample);
             } else {
                 if constexpr (sizeof(PixelType) == 1)
                     memset(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, vsapi->getStride(dst, 0) * vsapi->getFrameHeight(dst, 0));
@@ -158,13 +155,7 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
             d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
         d->node = vsapi->mapGetNode(in, "vectors", 0, nullptr);
-
-        char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil2 = vsapi->getFrame(0, d->node, errorMsg, ERROR_SIZE);
-        if (!evil2)
-            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(errorMsg));
-
-        MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->node, d->prefix, core, vsapi);
 
         d->vi = *vsapi->getVideoInfo(d->node);
         d->vi.width = vectors.nRealWidth;

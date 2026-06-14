@@ -149,42 +149,16 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
 
                 auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift);
 
-                std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
-                    vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
-                    vsh::vsh_aligned_free
-                };
+                auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
-                constexpr ptrdiff_t dstTileStride = roundUpTo64(MaskResizer::TileSize * sizeof(uint16_t));
+                auto dstTileVX = MaskResizer::GetTileBuffer();
+                auto dstTileVY = MaskResizer::GetTileBuffer();
 
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVX{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
+                auto srcBufVX = MaskResizer::MakeSrcBuffer(smallMasks->VXSmallY, smallMasks->pitchVSmallY);
+                auto srcBufVY = MaskResizer::MakeSrcBuffer(smallMasks->VYSmallY, smallMasks->pitchVSmallY);
 
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVY{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
-
-                mvuzimgxx::zimage_buffer_const srcBufVX;
-                srcBufVX.plane[0].data = smallMasks->VXSmallY;
-                srcBufVX.plane[0].stride = smallMasks->pitchVSmallY;
-                srcBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer_const srcBufVY;
-                srcBufVY.plane[0].data = smallMasks->VYSmallY;
-                srcBufVY.plane[0].stride = smallMasks->pitchVSmallY;
-                srcBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufVX;
-                dstBufVX.plane[0].data = dstTileVX.get();
-                dstBufVX.plane[0].stride = dstTileStride;
-                dstBufVX.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufVY;
-                dstBufVY.plane[0].data = dstTileVY.get();
-                dstBufVY.plane[0].stride = dstTileStride;
-                dstBufVY.plane[0].mask = ZIMG_BUFFER_MAX;
+                auto dstBufVX = MaskResizer::MakeDstBuffer(dstTileVX.get());
+                auto dstBufVY = MaskResizer::MakeDstBuffer(dstTileVY.get());
 
                 ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
                 uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
@@ -194,7 +168,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                     tile.graph.process(srcBufVY, dstBufVY, tmp.get());
 
                     flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
-                        dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                        dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                 }
 
@@ -211,11 +185,11 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                         tile.graph.process(srcBufVY, dstBufVY, tmp.get());
 
                         flowFetch<PixelType>(vsapi->getWritePtr(dst, 1) + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
-                            dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                            dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
 
                         flowFetch<PixelType>(vsapi->getWritePtr(dst, 2) + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
-                            dstTileVX.get(), dstTileVY.get(), dstTileStride,
+                            dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                     }
                 }
@@ -235,7 +209,6 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
 
     return nullptr;
 }
-
 
 static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<FlowData> d(new FlowData(vsapi));
@@ -261,10 +234,8 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
     try {
 
-        if (time < 0.0 || time > 100.0) {
-            vsapi->mapSetError(out, "Flow: time must be between 0 and 100 % (inclusive).");
-            return;
-        }
+        if (time < 0.0 || time > 100.0)
+            throw std::runtime_error("time must be between 0 and 100%");
 
         d->time256 = (int)(time * 256.0 / 100.0);
 

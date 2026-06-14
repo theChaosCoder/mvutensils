@@ -371,13 +371,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-        char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
-        if (!evil)
-            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
-
-
-        FramePyramid super(evil, 0, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, core, vsapi);
 
         d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
@@ -387,13 +381,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("source clip isn't compatible with super clip");
 
-        char error[ERROR_SIZE] = {};
-        const VSFrame *evil2 = vsapi->getFrame(0, d->vectors, error, ERROR_SIZE);
-        if (!evil2)
-            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(error));
-
-        MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
-        vsapi->freeFrame(evil2);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
 
         int64_t nSCD1_old = d->nSCD1;
         vectors.ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);

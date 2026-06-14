@@ -144,27 +144,8 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
             auto SmallB = vectorsB.MakeSmallVectorMasks();
             auto SmallF = vectorsF.MakeSmallVectorMasks();
 
-            ptrdiff_t occlusionMaskPitch = roundUpTo64(vectorsB.nBlkX * sizeof(uint16_t));
-
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> MaskSmallB{
-                vsh::vsh_aligned_malloc<uint16_t>(occlusionMaskPitch * vectorsB.nBlkY, 64),
-                vsh::vsh_aligned_free
-            };
-
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> MaskSmallF{
-                vsh::vsh_aligned_malloc<uint16_t>(occlusionMaskPitch * vectorsF.nBlkY, 64),
-                vsh::vsh_aligned_free
-            };
-
-            // analyse vectors field to detect occlusion
-            //        double occNormB = (256-time256)/(256*ml);
-            //        MakeVectorOcclusionMask(mvClipB, nBlkX, nBlkY, occNormB, 1.0, nPel, MaskSmallB, nBlkXP);
-            vectorsB.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, MaskSmallB.get(), occlusionMaskPitch, (256 - time256));
-
-            // analyse vectors field to detect occlusion
-            //        double occNormF = time256/(256*ml);
-            //        MakeVectorOcclusionMask(mvClipF, nBlkX, nBlkY, occNormF, 1.0, nPel, MaskSmallF, nBlkXP);
-            vectorsF.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, MaskSmallF.get(), occlusionMaskPitch, (256 - time256));
+            auto MaskSmallB = vectorsB.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - time256));
+            auto MaskSmallF = vectorsF.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - time256));
 
             auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
@@ -175,8 +156,8 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
             auto dstTileXB = MaskResizer::GetTileBuffer();
             auto dstTileYB = MaskResizer::GetTileBuffer();
 
-            auto srcBufMaskF = MaskResizer::MakeSrcBuffer(MaskSmallF.get(), occlusionMaskPitch);
-            auto srcBufMaskB = MaskResizer::MakeSrcBuffer(MaskSmallB.get(), occlusionMaskPitch);
+            auto srcBufMaskF = MaskResizer::MakeSrcBuffer(MaskSmallF->mask, MaskSmallF->stride);
+            auto srcBufMaskB = MaskResizer::MakeSrcBuffer(MaskSmallB->mask, MaskSmallB->stride);
 
             auto srcBufSmallFX = MaskResizer::MakeSrcBuffer(SmallF->VXSmallY, SmallF->pitchVSmallY);
             auto srcBufSmallFY = MaskResizer::MakeSrcBuffer(SmallF->VYSmallY, SmallF->pitchVSmallY);

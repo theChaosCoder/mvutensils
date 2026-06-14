@@ -226,7 +226,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8))
             throw std::runtime_error("blksize and blksizev must be at least 8 when divide>0");
 
-        d->node1 = vsapi->mapGetNode(in, "super", 0, 0);
+        d->node1 = vsapi->mapGetNode(in, "super", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node1);
 
         if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
@@ -237,21 +237,11 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
             d->nOverlapY % (2 << d->vi->format.subSamplingH)))
             throw std::runtime_error("overlaph and overlapv must be multiples of 2 or 4 when divide>0, depending on the super clip's subsampling");
 
-        char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil = vsapi->getFrame(0, d->node1, errorMsg, ERROR_SIZE);
-
-        if (!evil)
-            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
-
-        FramePyramid evilPyramid(evil, 0, d->prefix, core, vsapi);
+        FramePyramid super(d->node1, d->prefix, core, vsapi);
 
         d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
-        const VSFrame *evil2 = vsapi->getFrame(0, d->node2, errorMsg, ERROR_SIZE);
-        if (!evil2)
-            throw std::runtime_error("failed to retrieve first frame from vectors clip. Error message: " + std::string(errorMsg));
-
-        MotionBlockPyramid vectors(evil2, 0, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->node2, d->prefix, core, vsapi);
 
         d->deltaFrame = vectors.nDeltaFrame;
 
@@ -268,9 +258,9 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         if (d->chroma)
             d->thSAD += d->thSAD / (vectors.xRatioUV * vectors.yRatioUV) * 2;
 
-        d->nPel = evilPyramid.nPel;
+        d->nPel = super.nPel;
 
-        if (!vectors.IsCompatibleForAnalysis(evilPyramid))
+        if (!vectors.IsCompatibleForAnalysis(super))
             throw std::runtime_error("wrong source or super clip frame size");
 
     } catch (std::runtime_error &e) {

@@ -36,6 +36,21 @@ struct SmallVectorMasks {
     }
 };
 
+template<typename PixelType>
+struct BlockMask {
+    PixelType *mask;
+    ptrdiff_t stride;
+
+    BlockMask(int nBlkX, int nBlkY) {
+        stride = roundUpTo64(nBlkX * sizeof(PixelType));
+        mask = vsh::vsh_aligned_malloc<PixelType>(stride * nBlkY, 64);
+    }
+
+    ~BlockMask() {
+        vsh::vsh_aligned_free(mask);
+    }
+};
+
 struct VECTOR {
     int x;
     int y;
@@ -308,11 +323,11 @@ public:
     bool IsCompatibleForRecalc(const FramePyramid &other) const noexcept;
 
     template<typename PixelType>
-    void MakeVectorLengthMask(float normFactor, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+    std::unique_ptr<BlockMask<PixelType>> MakeVectorLengthMask(float normFactor, float fGamma, int time256) const noexcept;
     template<typename PixelType>
-    void MakeSADMask(float dSADNormFactor, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+    std::unique_ptr<BlockMask<PixelType>> MakeSADMask(float dSADNormFactor, float fGamma, int time256) const noexcept;
     template<typename PixelType>
-    void MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, PixelType *Mask, ptrdiff_t MaskPitch, int time256) const noexcept;
+    std::unique_ptr<BlockMask<PixelType>> MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256) const noexcept;
 
     std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks(int fieldOffset = 0) const noexcept;
 };

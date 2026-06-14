@@ -35,10 +35,7 @@ void BilinearUpsizeBlockMask(uint8_t *dst, ptrdiff_t dststride, int dstwidth, in
 
     mvuzimgxx::FilterGraph graph = mvuzimgxx::FilterGraph::build(srcFmt, dstFmt, &params);
 
-    std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
-        vsh::vsh_aligned_malloc(graph.get_tmp_size(), 64),
-        vsh::vsh_aligned_free
-    };
+    auto tmp = MaskResizer::GetTmpBuffer(graph.get_tmp_size());
 
     mvuzimgxx::zimage_buffer_const srcBuf;
     srcBuf.plane[0].data = src;

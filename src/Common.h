@@ -17,6 +17,7 @@ static void VS_CC filterFree(void *instanceData, VSCore *core, const VSAPI *vsap
     delete reinterpret_cast<T *>(instanceData);
 }
 
+// FIXME, just use std::fill instead of this
 template<typename T>
 static inline void vs_memset(void *ptr, T value, size_t num) {
     T *dstPtr = reinterpret_cast<T *>(ptr);

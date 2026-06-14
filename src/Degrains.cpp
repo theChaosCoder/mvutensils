@@ -578,12 +578,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node);
 
-        char errorMsg[ERROR_SIZE] = {};
-        const VSFrame *evil = vsapi->getFrame(0, d->super, errorMsg, ERROR_SIZE);
-        if (!evil)
-            throw std::runtime_error("failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
-
-        FramePyramid evilPyramid(evil, 0, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, core, vsapi);
 
         int numVectors = vsapi->mapNumElements(in, "vectors");
         if (numVectors != radius * 2)
@@ -594,26 +589,18 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         for (int r = 0; r < radius * 2; r++) {
             d->vectors[r] = vsapi->mapGetNode(in, "vectors", r, nullptr);
 
-            if (vsapi->getNodeType(d->vectors[r]) != mtVideo)
-                throw std::runtime_error("invalid vector clip type");
-
-            const VSFrame *vecFrame = vsapi->getFrame(0, d->vectors[r], errorMsg, ERROR_SIZE);
-            if (!vecFrame)
-                throw std::runtime_error("Failed to retrieve first frame from vector clip " + std::to_string(r) + ": " + std::string(errorMsg));
-
-            evilVectors[r].emplace(vecFrame, 0, d->prefix, core, vsapi);
-            vsapi->freeFrame(vecFrame);
+            evilVectors[r].emplace(d->vectors[r], d->prefix, core, vsapi);
 
             if (r > 0 && !evilVectors[r]->IsCompatible(*evilVectors[r - 1]))
                 throw std::runtime_error("The motion vectors passed are not compatible with each other");
 
-            if (!evilVectors[r]->IsCompatibleForAnalysis(evilPyramid))
+            if (!evilVectors[r]->IsCompatibleForAnalysis(super))
                 throw std::runtime_error("The motion vectors passed are not compatible with the super clip");
 
             d->deltaFrame[r] = evilVectors[r]->nDeltaFrame;
         }
 
-        if (!evilPyramid.IsCompatibleWithSource(d->vi))
+        if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("super clip is not compatible with the source clip");
 
         int64_t nSCD1_old = d->nSCD1;
@@ -663,15 +650,6 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
             throw std::runtime_error("with this block size and video format, thsad" + std::string(c ? "c" : "") + " must not exceed " + std::to_string(maximum) + " or some calculations would overflow");
         }
-
-        const VSVideoInfo *supervi = vsapi->getVideoInfo(d->super);
-        int nSuperWidth = supervi->width;
-
-        if (evilVectors[0]->nHeight != evilPyramid.nHeight[0] || evilVectors[0]->nRealHeight != d->vi->height || evilVectors[0]->nWidth != evilPyramid.nWidth[0] || evilVectors[0]->nRealWidth != d->vi->width || evilVectors[0]->nPel != evilPyramid.nPel)
-            throw std::runtime_error("wrong source or super clip frame size");
-
-        if (!vsh::isConstantVideoFormat(d->vi) || d->vi->format.bitsPerSample > 16 || d->vi->format.sampleType != stInteger || d->vi->format.subSamplingW > 1 || d->vi->format.subSamplingH > 1 || (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray))
-            throw std::runtime_error("input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions");
 
         int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
 
