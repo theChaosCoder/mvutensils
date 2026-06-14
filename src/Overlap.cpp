@@ -38,9 +38,9 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
     this->size = nx * ny;
 
     //  windows
-    fWin1UVx = (float *)malloc(nx * sizeof(float));
-    fWin1UVxfirst = (float *)malloc(nx * sizeof(float));
-    fWin1UVxlast = (float *)malloc(nx * sizeof(float));
+    fWin1UVx.resize(nx);
+    fWin1UVxfirst.resize(nx);
+    fWin1UVxlast.resize(nx);
     for (int i = 0; i < ox; i++) {
         fWin1UVx[i] = cosf(M_PI * (i - ox + 0.5f) / (ox * 2));
         fWin1UVx[i] = fWin1UVx[i] * fWin1UVx[i];  // left window (rised cosine)
@@ -59,9 +59,9 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
         fWin1UVxlast[i] = 1;                                  // very last
     }
 
-    fWin1UVy = (float *)malloc(ny * sizeof(float));
-    fWin1UVyfirst = (float *)malloc(ny * sizeof(float));
-    fWin1UVylast = (float *)malloc(ny * sizeof(float));
+    fWin1UVy.resize(ny);
+    fWin1UVyfirst.resize(ny);
+    fWin1UVylast.resize(ny);
     for (int i = 0; i < oy; i++) {
         fWin1UVy[i] = cosf(M_PI * (i - oy + 0.5f) / (oy * 2));
         fWin1UVy[i] = fWin1UVy[i] * fWin1UVy[i];  // left window (rised cosine)
@@ -80,17 +80,17 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
         fWin1UVylast[i] = 1;                                  // very last
     }
 
-    Overlap9Windows = (int16_t *)malloc(size * 9 * sizeof(int16_t));
+    Overlap9Windows.resize(size * 9);
 
-    int16_t *winOverUVTL = Overlap9Windows;
-    int16_t *winOverUVTM = Overlap9Windows + size;
-    int16_t *winOverUVTR = Overlap9Windows + size * 2;
-    int16_t *winOverUVML = Overlap9Windows + size * 3;
-    int16_t *winOverUVMM = Overlap9Windows + size * 4;
-    int16_t *winOverUVMR = Overlap9Windows + size * 5;
-    int16_t *winOverUVBL = Overlap9Windows + size * 6;
-    int16_t *winOverUVBM = Overlap9Windows + size * 7;
-    int16_t *winOverUVBR = Overlap9Windows + size * 8;
+    int16_t *winOverUVTL = Overlap9Windows.data();
+    int16_t *winOverUVTM = Overlap9Windows.data() + size;
+    int16_t *winOverUVTR = Overlap9Windows.data() + size * 2;
+    int16_t *winOverUVML = Overlap9Windows.data() + size * 3;
+    int16_t *winOverUVMM = Overlap9Windows.data() + size * 4;
+    int16_t *winOverUVMR = Overlap9Windows.data() + size * 5;
+    int16_t *winOverUVBL = Overlap9Windows.data() + size * 6;
+    int16_t *winOverUVBM = Overlap9Windows.data() + size * 7;
+    int16_t *winOverUVBR = Overlap9Windows.data() + size * 8;
 
     for (int j = 0; j < ny; j++) {
         for (int i = 0; i < nx; i++) {
@@ -118,15 +118,7 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
 
 
 
-OverlapWindows::~OverlapWindows() {
-    free(Overlap9Windows);
-    free(fWin1UVx);
-    free(fWin1UVxfirst);
-    free(fWin1UVxlast);
-    free(fWin1UVy);
-    free(fWin1UVyfirst);
-    free(fWin1UVylast);
-}
+// OverlapWindows owns its buffers via std::vector; no explicit destructor needed.
 
 
 template <unsigned blockWidth, unsigned blockHeight, typename PixelType2, typename PixelType>
