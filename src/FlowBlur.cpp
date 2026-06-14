@@ -76,8 +76,8 @@ static void FlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const Pyr
         for (int w = 0; w < width; w++) {
             // FIXME, only accesses pel1 data, maybe add a faster function to access it
             int bluredsum = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((w + dstX) << nPelLog, (h + dstY) << nPelLog));
-            int vxF0 = VXFullF[w] * blur256;
-            int vyF0 = VYFullF[w] * blur256;
+            int vxF0 = (static_cast<int>(VXFullF[w]) - (1 << 15)) * blur256;
+            int vyF0 = (static_cast<int>(VYFullF[w]) - (1 << 15)) * blur256;
             int mF = (std::max(abs(vxF0), abs(vyF0)) / prec) >> 8;
             if (mF > 0) {
                 vxF0 /= mF;
@@ -91,8 +91,8 @@ static void FlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const Pyr
                     vyF += vyF0;
                 }
             }
-            int vxB0 = VXFullB[w] * blur256;
-            int vyB0 = VYFullB[w] * blur256;
+            int vxB0 = (static_cast<int>(VXFullB[w]) - (1 << 15)) * blur256;
+            int vyB0 = (static_cast<int>(VYFullB[w]) - (1 << 15)) * blur256;
             int mB = (std::max(abs(vxB0), abs(vyB0)) / prec) >> 8;
             if (mB > 0) {
                 vxB0 /= mB;
