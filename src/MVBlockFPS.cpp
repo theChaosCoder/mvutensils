@@ -1018,7 +1018,7 @@ void mvblockfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "blend:int:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"
-                 "opt:int:opt;",
+                 "prefix:data:opt;",
                  "clip:vnode;",
                  mvblockfpsCreate, 0, plugin);
 }

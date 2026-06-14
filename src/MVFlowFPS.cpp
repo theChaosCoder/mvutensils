@@ -907,7 +907,7 @@ static void VS_CC mvflowfpsCreate(const VSMap *in, VSMap *out, void *userData, V
     vsapi->freeNode(node);
 }
 
-
+// FIXME, effectively only mask=2 and maybe a bit mask=1 are ever used
 void mvflowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("FlowFPS",
                  "clip:vnode;"
@@ -921,7 +921,7 @@ void mvflowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "blend:int:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"
-                 "opt:int:opt;",
+                 "prefix:data:opt;",
                  "clip:vnode;",
                  mvflowfpsCreate, 0, plugin);
 }

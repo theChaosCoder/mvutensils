@@ -123,142 +123,149 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
     if (activationReason == arInitial) {
         int off = d->deltaFrame; // integer offset of reference frame
 
-        if (n - off >= 0 && n + off < d->vi->numFrames) {
-            vsapi->requestFrameFilter(n - off, d->mvbw, frameCtx);
-            vsapi->requestFrameFilter(n + off, d->mvfw, frameCtx);
+        if (n + off >= 0 && n - off < d->vi->numFrames) {
+            vsapi->requestFrameFilter(n + off, d->mvbw, frameCtx);
+            vsapi->requestFrameFilter(n - off, d->mvfw, frameCtx);
         }
 
         vsapi->requestFrameFilter(n, d->super, frameCtx);
         vsapi->requestFrameFilter(n, d->node, frameCtx);
     } else if (activationReason == arAllFramesReady) {
         int off = d->deltaFrame;
-        bool vectorsLoadFrame = (n - off >= 0 && n + off < d->vi->numFrames);
+        bool vectorsLoadFrame = (n + off >= 0 && n - off < d->vi->numFrames);
 
-        const VSFrame *mvF = vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvfw, frameCtx) : nullptr;
+        const VSFrame *mvF = vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvfw, frameCtx) : nullptr;
         MotionBlockPyramid vectorsfw(mvF, 1, d->prefix, core, vsapi);
         vsapi->freeFrame(mvF);
             
-        const VSFrame *mvB = vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvbw, frameCtx) : nullptr;
+        const VSFrame *mvB = vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvbw, frameCtx) : nullptr;
         MotionBlockPyramid vectorsbw(mvB, 1, d->prefix, core, vsapi);
         vsapi->freeFrame(mvB);
 
         if (vectorsfw.IsUsable(d->thscd1, d->thscd2) && vectorsbw.IsUsable(d->thscd1, d->thscd2)) {
-            const VSFrame *ref = vsapi->getFrameFilter(n, d->super, frameCtx);
-            FramePyramid refGOF(ref, 1, d->prefix, core, vsapi);
-            
             const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
             VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
             vsapi->freeFrame(src);
 
-            auto smallMasksFw = vectorsfw.MakeSmallVectorMasks();
-            auto smallMasksBw = vectorsbw.MakeSmallVectorMasks();
+            try {
+                const VSFrame *ref = vsapi->getFrameFilter(n, d->super, frameCtx);
+                FramePyramid refGOF(ref, 1, d->prefix, core, vsapi);
 
-            std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
-                vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
-                vsh::vsh_aligned_free
-            };
+                auto smallMasksFw = vectorsfw.MakeSmallVectorMasks();
+                auto smallMasksBw = vectorsbw.MakeSmallVectorMasks();
 
-            constexpr ptrdiff_t dstTileStride = roundUpTo64(MaskResizer::TileSize * sizeof(uint16_t));
+                std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
+                    vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
+                    vsh::vsh_aligned_free
+                };
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXFw{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+                constexpr ptrdiff_t dstTileStride = roundUpTo64(MaskResizer::TileSize * sizeof(uint16_t));
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYFw{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXFw{
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                    vsh::vsh_aligned_free
+                };
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXBw{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYFw{
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                    vsh::vsh_aligned_free
+                };
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYBw{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVXBw{
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                    vsh::vsh_aligned_free
+                };
 
-            mvuzimgxx::zimage_buffer_const srcBufVXFw;
-            srcBufVXFw.plane[0].data = smallMasksFw->VXSmallY;
-            srcBufVXFw.plane[0].stride = smallMasksFw->pitchVSmallY;
-            srcBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
+                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileVYBw{
+                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
+                    vsh::vsh_aligned_free
+                };
 
-            mvuzimgxx::zimage_buffer_const srcBufVYFw;
-            srcBufVYFw.plane[0].data = smallMasksFw->VYSmallY;
-            srcBufVYFw.plane[0].stride = smallMasksFw->pitchVSmallY;
-            srcBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer_const srcBufVXFw;
+                srcBufVXFw.plane[0].data = smallMasksFw->VXSmallY;
+                srcBufVXFw.plane[0].stride = smallMasksFw->pitchVSmallY;
+                srcBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer_const srcBufVXBw;
-            srcBufVXBw.plane[0].data = smallMasksBw->VXSmallY;
-            srcBufVXBw.plane[0].stride = smallMasksBw->pitchVSmallY;
-            srcBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer_const srcBufVYFw;
+                srcBufVYFw.plane[0].data = smallMasksFw->VYSmallY;
+                srcBufVYFw.plane[0].stride = smallMasksFw->pitchVSmallY;
+                srcBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer_const srcBufVYBw;
-            srcBufVYBw.plane[0].data = smallMasksBw->VYSmallY;
-            srcBufVYBw.plane[0].stride = smallMasksBw->pitchVSmallY;
-            srcBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer_const srcBufVXBw;
+                srcBufVXBw.plane[0].data = smallMasksBw->VXSmallY;
+                srcBufVXBw.plane[0].stride = smallMasksBw->pitchVSmallY;
+                srcBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer dstBufVXFw;
-            dstBufVXFw.plane[0].data = dstTileVXFw.get();
-            dstBufVXFw.plane[0].stride = dstTileStride;
-            dstBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer_const srcBufVYBw;
+                srcBufVYBw.plane[0].data = smallMasksBw->VYSmallY;
+                srcBufVYBw.plane[0].stride = smallMasksBw->pitchVSmallY;
+                srcBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer dstBufVYFw;
-            dstBufVYFw.plane[0].data = dstTileVYFw.get();
-            dstBufVYFw.plane[0].stride = dstTileStride;
-            dstBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer dstBufVXFw;
+                dstBufVXFw.plane[0].data = dstTileVXFw.get();
+                dstBufVXFw.plane[0].stride = dstTileStride;
+                dstBufVXFw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer dstBufVXBw;
-            dstBufVXBw.plane[0].data = dstTileVXBw.get();
-            dstBufVXBw.plane[0].stride = dstTileStride;
-            dstBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer dstBufVYFw;
+                dstBufVYFw.plane[0].data = dstTileVYFw.get();
+                dstBufVYFw.plane[0].stride = dstTileStride;
+                dstBufVYFw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            mvuzimgxx::zimage_buffer dstBufVYBw;
-            dstBufVYBw.plane[0].data = dstTileVYBw.get();
-            dstBufVYBw.plane[0].stride = dstTileStride;
-            dstBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
+                mvuzimgxx::zimage_buffer dstBufVXBw;
+                dstBufVXBw.plane[0].data = dstTileVXBw.get();
+                dstBufVXBw.plane[0].stride = dstTileStride;
+                dstBufVXBw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
-            uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
+                mvuzimgxx::zimage_buffer dstBufVYBw;
+                dstBufVYBw.plane[0].data = dstTileVYBw.get();
+                dstBufVYBw.plane[0].stride = dstTileStride;
+                dstBufVYBw.plane[0].mask = ZIMG_BUFFER_MAX;
 
-            for (auto &tile : d->maskResizerFull.tiles) {
-                tile.graph.process(srcBufVXFw, dstBufVXFw, tmp.get());
-                tile.graph.process(srcBufVYFw, dstBufVYFw, tmp.get());
-                tile.graph.process(srcBufVXBw, dstBufVXBw, tmp.get());
-                tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
+                ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
+                uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
 
-                FlowBlur<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
-                         dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
-                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
-            }
-
-            if (d->vi->format.numPlanes == 3) {
-                AdjustSmallVectorMaskSubSampling(*smallMasksFw, vectorsfw.nBlkX, vectorsfw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
-                AdjustSmallVectorMaskSubSampling(*smallMasksBw, vectorsbw.nBlkX, vectorsbw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
-
-                ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
-                ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
-                uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
-                uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
-
-                for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                for (auto &tile : d->maskResizerFull.tiles) {
                     tile.graph.process(srcBufVXFw, dstBufVXFw, tmp.get());
                     tile.graph.process(srcBufVYFw, dstBufVYFw, tmp.get());
                     tile.graph.process(srcBufVXBw, dstBufVXBw, tmp.get());
                     tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
 
-                    FlowBlur<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
-                         dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
-                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
-                    FlowBlur<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
-                         dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
-                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
+                    FlowBlur<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
+                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
                 }
-            }
 
-            vsapi->freeFrame(ref);
+                if (d->vi->format.numPlanes == 3) {
+                    AdjustSmallVectorMaskSubSampling(*smallMasksFw, vectorsfw.nBlkX, vectorsfw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+                    AdjustSmallVectorMaskSubSampling(*smallMasksBw, vectorsbw.nBlkX, vectorsbw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+
+                    ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
+                    ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
+                    uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
+                    uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
+
+                    for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                        tile.graph.process(srcBufVXFw, dstBufVXFw, tmp.get());
+                        tile.graph.process(srcBufVYFw, dstBufVYFw, tmp.get());
+                        tile.graph.process(srcBufVXBw, dstBufVXBw, tmp.get());
+                        tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
+
+                        FlowBlur<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
+                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
+                        FlowBlur<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                             dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), dstTileStride,
+                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
+                    }
+                }
+
+                vsapi->freeFrame(ref);
+
+            } catch (std::runtime_error &e) {
+                vsapi->freeFrame(dst);
+                vsapi->setFilterError(("FlowBlur: " + std::string(e.what())).c_str(), frameCtx);
+                return nullptr;
+            }
 
             return dst;
         } else {
@@ -295,44 +302,53 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VS
     else
         d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-    if (d->blur < 0.0f || d->blur > 200.0f)
-        throw std::runtime_error("blur must be between 0 and 200");
+    try {
 
-    if (d->prec < 1)
-        throw std::runtime_error("prec must be at least 1");
+        if (d->blur < 0.0f || d->blur > 200.0f)
+            throw std::runtime_error("blur must be between 0 and 200");
 
-    d->blur256 = (int)(d->blur * 256.0f / 200.0f);
+        if (d->prec < 1)
+            throw std::runtime_error("prec must be at least 1");
 
-    d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
+        d->blur256 = (int)(d->blur * 256.0f / 200.0f);
 
-    FramePyramid super(d->super, d->prefix, core, vsapi);
+        d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-    d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
-    d->vi = vsapi->getVideoInfo(d->node);
+        FramePyramid super(d->super, d->prefix, core, vsapi);
 
-    if (!super.IsCompatibleWithSource(d->vi))
-        throw std::runtime_error("source clip isn't compatible with super clip");
+        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = vsapi->getVideoInfo(d->node);
 
-    MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
-    MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
+        if (!super.IsCompatibleWithSource(d->vi))
+            throw std::runtime_error("source clip isn't compatible with super clip");
 
-    vectorsFw.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
+        d->mvfw = vsapi->mapGetNode(in, "mvfw", 0, nullptr);
+        d->mvbw = vsapi->mapGetNode(in, "mvbw", 0, nullptr);
 
-    d->deltaFrame = vectorsFw.nDeltaFrame;
+        MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
+        MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
 
-    if (!vectorsFw.IsCompatibleForAnalysis(super))
-        throw std::runtime_error("wrong source or super clip frame size");
+        vectorsFw.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
 
-    if (vectorsFw.IsCompatible(vectorsBw) || (vectorsBw.nDeltaFrame != -vectorsFw.nDeltaFrame) || vectorsFw.nDeltaFrame > 0 || vectorsBw.nDeltaFrame < 0)
-        throw std::runtime_error("mvfw and mvbw must be compatible with each other and have opposite sign delta");
+        d->deltaFrame = vectorsFw.nDeltaFrame;
 
-    d->maskResizerFull.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX, vectorsFw.nBlkSizeY, vectorsFw.nOverlapX, vectorsFw.nOverlapY,
-        d->vi->width, d->vi->height);
+        if (!vectorsFw.IsCompatibleForAnalysis(super))
+            throw std::runtime_error("wrong source or super clip frame size");
 
-    if (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0)
-        d->maskResizerSubSampled.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX >> d->vi->format.subSamplingW, vectorsFw.nBlkSizeY >> d->vi->format.subSamplingH, vectorsFw.nOverlapX >> d->vi->format.subSamplingW, vectorsFw.nOverlapY >> d->vi->format.subSamplingH,
-            d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
+        if (!vectorsFw.IsCompatible(vectorsBw) || (vectorsBw.nDeltaFrame != -vectorsFw.nDeltaFrame) || vectorsFw.nDeltaFrame > 0 || vectorsBw.nDeltaFrame < 0)
+            throw std::runtime_error("mvfw and mvbw must be compatible with each other and have opposite sign delta");
 
+        d->maskResizerFull.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX, vectorsFw.nBlkSizeY, vectorsFw.nOverlapX, vectorsFw.nOverlapY,
+            d->vi->width, d->vi->height);
+
+        if (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0)
+            d->maskResizerSubSampled.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX >> d->vi->format.subSamplingW, vectorsFw.nBlkSizeY >> d->vi->format.subSamplingH, vectorsFw.nOverlapX >> d->vi->format.subSamplingW, vectorsFw.nOverlapY >> d->vi->format.subSamplingH,
+                d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
+
+    } catch (std::runtime_error &e) {
+        vsapi->mapSetError(out, ("FlowBlur: " + std::string(e.what())).c_str());
+        return;
+    }
 
     VSFilterDependency deps[4] = { 
         {d->node, rpStrictSpatial}, 

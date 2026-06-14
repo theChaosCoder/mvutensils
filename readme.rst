@@ -18,6 +18,8 @@ Changes
     
     * Frame properties are now consistently propagated, this means that many functions that previously only requested frames from super now also request from the original clip
 
+	* The opt argument was dropped from all functions
+
 * Super:
     * Now takes blksizeh/v and overlaph/v values to properly pad the source frame so the edges also are processed and not generate excessive levels that are unused, these are basically mandatory and may be changed to be later
 

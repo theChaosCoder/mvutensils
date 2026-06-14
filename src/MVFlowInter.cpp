@@ -706,7 +706,7 @@ void mvflowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "blend:int:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"
-                 "opt:int:opt;",
+                 "prefix:data:opt;",
                  "clip:vnode;",
                  mvflowinterCreate, 0, plugin);
 }
