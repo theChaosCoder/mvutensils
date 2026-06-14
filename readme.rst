@@ -23,7 +23,7 @@ Changes
 * Super:
     * Now takes blksizeh/v and overlaph/v values to properly pad the source frame so the edges also are processed and not generate excessive levels that are unused, these are basically mandatory and may be changed to be later
 
-	* Reduced memory usage
+	* Greatly reduced memory usage
 
 * Analyse/Recalculate:
     * The dct argument was replaced with satd (true/false), satd=false is equivalent to dct=0 and satd=true is the same as dct=5 in the original mvtools
@@ -42,7 +42,7 @@ Changes
 * DegrainN:
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors
 
-	* Reduced memory usage
+	* Greatly reduced memory usage
 
 * Mask:
 	* Split into 3 functions that correspond to kind 0-2 called VectorLengthMask, SADMask and OcclusionMask, obviously the kind argument has been removed
@@ -55,21 +55,24 @@ Changes
 	
 	* The masks are actually generated at a higher bitdepth unlike avs+ where the same 8 bit mask is always upscaled
 
-* Flow:
-	* 8-16 bit support
-	
+* Flow:	
 	* Improved internal mask resizing quality
 	
 	* Greatly reduced memory usage
 	
 	* Mode=1 was dropped since nobody used it, since only mode=0 remains the mode argument was removed
 
-* FlowBlur
-	* 8-16 bit support
-	
+* FlowBlur	
 	* Improved internal mask resizing quality
 	
 	* Greatly reduced memory usage
+	
+* FlowFPS
+	* Improved internal mask resizing quality
+	
+	* Greatly reduced memory usage
+
+	* The mask argument was replaced with extramask=True/False, extramask=False is the same as mask=1 and extramask=True is equivalent to mask=2
 
 * SCDetection:
     * None
