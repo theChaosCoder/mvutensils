@@ -547,37 +547,38 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                          dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
                          tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
 
-                    if (d->vi.format.numPlanes == 3) {
-                        AdjustSmallVectorMaskSubSampling(*SmallF, vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                        AdjustSmallVectorMaskSubSampling(*SmallB, vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                }
 
-                        ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
-                        ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
-                        uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
-                        uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
+                if (d->vi.format.numPlanes == 3) {
+                    AdjustSmallVectorMaskSubSampling(*SmallF, vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                    AdjustSmallVectorMaskSubSampling(*SmallB, vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
 
-                        for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
-                            tile.graph.process(srcBufMaskF, dstBufMaskF, tmp.get());
-                            tile.graph.process(srcBufMaskB, dstBufMaskB, tmp.get());
+                    ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
+                    ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
+                    uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
+                    uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
 
-                            tile.graph.process(srcBufSmallFX, dstBufSmallXF, tmp.get());
-                            tile.graph.process(srcBufSmallFY, dstBufSmallYF, tmp.get());
+                    for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                        tile.graph.process(srcBufMaskF, dstBufMaskF, tmp.get());
+                        tile.graph.process(srcBufMaskB, dstBufMaskB, tmp.get());
 
-                            tile.graph.process(srcBufSmallBX, dstBufSmallXB, tmp.get());
-                            tile.graph.process(srcBufSmallBY, dstBufSmallYB, tmp.get());
+                        tile.graph.process(srcBufSmallFX, dstBufSmallXF, tmp.get());
+                        tile.graph.process(srcBufSmallFY, dstBufSmallYF, tmp.get());
 
-                            FlowInter<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
-                                 ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
-                                 dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                                 dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
-                                 tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
+                        tile.graph.process(srcBufSmallBX, dstBufSmallXB, tmp.get());
+                        tile.graph.process(srcBufSmallBY, dstBufSmallYB, tmp.get());
 
-                            FlowInter<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
-                                 ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
-                                 dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                                 dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
-                                 tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
-                        }
+                        FlowInter<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
+                                ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
+                                dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                                dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                                tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
+
+                        FlowInter<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
+                                ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
+                                dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                                dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                                tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
                     }
                 }
             }
