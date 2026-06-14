@@ -1407,6 +1407,8 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
 
     nLevelCount = nLevels > 0 ? nLevels : nLevelsMax + nLevels;
     nLevelCount = std::min(nLevelCount, static_cast<int>(src.pyramidLevels.size()));
+    if (nLevelCount < 1)
+        throw MotionBlockPyramidError("the levels argument resolves to a non-positive level count");
     pyramidLevels.resize(nLevelCount);
 
     for (int i = 0; i < nLevelCount; i++) {
