@@ -146,15 +146,15 @@ static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t 
 
     for (int y = 0; y < nHeight; y++) {
         for (int x = 0; x < nWidth; x += 16) {
-            __m128i m0 = _mm_load_si128((const __m128i *)&pSrc[x]);
-            __m128i m1 = _mm_load_si128((const __m128i *)&pDst[x]);
+            __m128i m0 = _mm_loadu_si128((const __m128i *)&pSrc[x]);
+            __m128i m1 = _mm_loadu_si128((const __m128i *)&pDst[x]);
 
             __m128i lower = _mm_subs_epu8(m0, bytes_limit);
             __m128i upper = _mm_adds_epu8(m0, bytes_limit);
 
             m0 = _mm_min_epu8(_mm_max_epu8(lower, m1), upper);
 
-            _mm_store_si128((__m128i *)&pDst[x], m0);
+            _mm_storeu_si128((__m128i *)&pDst[x], m0);
         }
 
         pSrc += nSrcPitch;
