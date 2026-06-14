@@ -97,6 +97,7 @@
     <ClInclude Include="..\src\Common.h" />
     <ClInclude Include="..\src\CopyCode.h" />
     <ClInclude Include="..\src\CPU.h" />
+    <ClInclude Include="..\src\FlowShared.h" />
     <ClInclude Include="..\src\MaskResize.h" />
     <ClInclude Include="..\src\MotionBlockPyramid.h" />
     <ClInclude Include="..\src\Degrains.h" />

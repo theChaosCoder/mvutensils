@@ -17,74 +17,56 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
-#include <climits>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
-
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "Fakery.h"
-#include "MaskFun.h"
-#include "MVAnalysisData.h"
-#include "SimpleResize.h"
-#include "CommonMacros.h"
+#include "Common.h"
+#include "SuperPyramid.h"
+#include "MotionBlockPyramid.h"
+#include "MaskResize.h"
+#include "FlowShared.h"
 
-
-
-typedef struct MVFlowInterData {
+struct FlowInterData {
     VSNode *node;
     const VSVideoInfo *vi;
 
-    VSNode *finest;
     VSNode *super;
     VSNode *mvbw;
     VSNode *mvfw;
 
     float time;
     float ml;
-    int blend;
+    bool blend;
     int64_t thscd1;
     int thscd2;
-    int opt;
-
-    MVAnalysisData mvbw_data;
-    MVAnalysisData mvfw_data;
-
-    int nSuperHPad;
-
-    int nBlkXP;
-    int nBlkYP;
-    int nWidthP;
-    int nHeightP;
-    int nWidthPUV;
-    int nHeightPUV;
-    int nWidthUV;
-    int nHeightUV;
-    int nVPaddingUV;
-    int nHPaddingUV;
-    int VPitchY;
-    int VPitchUV;
 
     int time256;
 
-    SimpleResize upsizer;
-    SimpleResize upsizerUV;
+    int deltaFrame;
 
-    FlowInterSimpleFunction FlowInterSimple;
-    FlowInterFunction FlowInter;
-    FlowInterExtraFunction FlowInterExtra;
-} MVFlowInterData;
+    MaskResizer maskResizerFull;
+    MaskResizer maskResizerSubSampled;
 
+    std::string prefix;
 
-static const VSFrame *VS_CC mvflowinterGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
+    const VSAPI *vsapi;
 
-    MVFlowInterData *d = (MVFlowInterData *)instanceData;
+    FlowInterData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~FlowInterData() {
+        vsapi->freeNode(node);
+        vsapi->freeNode(super);
+        vsapi->freeNode(mvbw);
+        vsapi->freeNode(mvfw);
+    }
+};
+
+typedef uint8_t PixelType;
+static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+    FlowInterData *d = reinterpret_cast<FlowInterData *>(instanceData);
 
     if (activationReason == arInitial) {
-        int off = d->mvbw_data.nDeltaFrame; // integer offset of reference frame
+        int off = -d->deltaFrame;
 
         if (n + off < d->vi->numFrames) {
             vsapi->requestFrameFilter(n, d->mvfw, frameCtx);
@@ -93,28 +75,20 @@ static const VSFrame *VS_CC mvflowinterGetFrame(int n, int activationReason, voi
             vsapi->requestFrameFilter(n, d->mvbw, frameCtx);
             vsapi->requestFrameFilter(n + off, d->mvbw, frameCtx);
 
-            vsapi->requestFrameFilter(n, d->finest, frameCtx);
-            vsapi->requestFrameFilter(n + off, d->finest, frameCtx);
+            vsapi->requestFrameFilter(n, d->super, frameCtx);
+            vsapi->requestFrameFilter(n + off, d->super, frameCtx);
         }
 
         vsapi->requestFrameFilter(n, d->node, frameCtx);
         vsapi->requestFrameFilter(VSMIN(n + off, d->vi->numFrames - 1), d->node, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        uint8_t *pDst[3];
-        const uint8_t *pRef[3], *pSrc[3];
-        ptrdiff_t nDstPitches[3];
-        ptrdiff_t nRefPitches[3];
-        ptrdiff_t nSrcPitches[3];
-
-        FakeGroupOfPlanes fgopF, fgopB;
-
         fgopInit(&fgopF, &d->mvfw_data);
         fgopInit(&fgopB, &d->mvbw_data);
 
         int isUsableB = 0;
         int isUsableF = 0;
 
-        int off = d->mvbw_data.nDeltaFrame; // integer offset of reference frame
+        int off = -d->deltaFrame;
 
         if (n + off < d->vi->numFrames) {
             const VSFrame *mvF = vsapi->getFrameFilter(n + off, d->mvfw, frameCtx);
@@ -334,25 +308,8 @@ static const VSFrame *VS_CC mvflowinterGetFrame(int n, int activationReason, voi
                                       MaskFullUVB, MaskFullUVF, VPitchUV,
                                       nWidthUV, nHeightUV, time256, nPel,
                                       VXFullUVBB, VXFullUVFF, VYFullUVBB, VYFullUVFF);
-
-                    free(VXFullUVBB);
-                    free(VYFullUVBB);
-                    free(VXSmallUVBB);
-                    free(VYSmallUVBB);
-                    free(VXFullUVFF);
-                    free(VYFullUVFF);
-                    free(VXSmallUVFF);
-                    free(VYSmallUVFF);
                 }
 
-                free(VXFullYBB);
-                free(VYFullYBB);
-                free(VXSmallYBB);
-                free(VYSmallYBB);
-                free(VXFullYFF);
-                free(VYFullYFF);
-                free(VXSmallYFF);
-                free(VYSmallYFF);
             } else { // bad extra frames, use old method without extra frames
                 d->FlowInter(pDst[0], nDstPitches[0],
                              pRef[0] + nOffsetY, pSrc[0] + nOffsetY, nRefPitches[0],
@@ -374,326 +331,118 @@ static const VSFrame *VS_CC mvflowinterGetFrame(int n, int activationReason, voi
             }
 
 
-            free(VXFullYB);
-            free(VYFullYB);
-            free(VXSmallYB);
-            free(VYSmallYB);
-            free(VXFullYF);
-            free(VYFullYF);
-            free(VXSmallYF);
-            free(VYSmallYF);
-            free(MaskSmallB);
-            free(MaskFullYB);
-            free(MaskSmallF);
-            free(MaskFullYF);
-
-            if (d->vi->format.colorFamily != cfGray) {
-                free(VXFullUVB);
-                free(VYFullUVB);
-                free(VXSmallUVB);
-                free(VYSmallUVB);
-                free(VXFullUVF);
-                free(VYFullUVF);
-                free(VXSmallUVF);
-                free(VYSmallUVF);
-                free(MaskFullUVB);
-                free(MaskFullUVF);
-            }
-
-            vsapi->freeFrame(src);
-            vsapi->freeFrame(ref);
-
-            fgopDeinit(&fgopF);
-            fgopDeinit(&fgopB);
-
             return dst;
-        } else { // not usable
-            // poor estimation
-
-            fgopDeinit(&fgopF);
-            fgopDeinit(&fgopB);
-
-            const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
-
-            if (blend) //let's blend src with ref frames like ConvertFPS
-            {
+        } else {
+            if (d->blend) {
+                const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
                 const VSFrame *ref = vsapi->getFrameFilter(VSMIN(n + off, d->vi->numFrames - 1), d->node, frameCtx);
-
                 VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
 
-                for (int i = 0; i < d->vi->format.numPlanes; i++) {
-                    pDst[i] = vsapi->getWritePtr(dst, i);
-                    pRef[i] = vsapi->getReadPtr(ref, i);
-                    pSrc[i] = vsapi->getReadPtr(src, i);
-                    nDstPitches[i] = vsapi->getStride(dst, i);
-                    nRefPitches[i] = vsapi->getStride(ref, i);
-                    nSrcPitches[i] = vsapi->getStride(src, i);
-                }
-
-                // blend with time weight
-                Blend(pDst[0], pSrc[0], pRef[0], nHeight, nWidth, nDstPitches[0], nSrcPitches[0], nRefPitches[0], time256, bitsPerSample);
-                if (d->vi->format.colorFamily != cfGray) {
-                    Blend(pDst[1], pSrc[1], pRef[1], nHeightUV, nWidthUV, nDstPitches[1], nSrcPitches[1], nRefPitches[1], time256, bitsPerSample);
-                    Blend(pDst[2], pSrc[2], pRef[2], nHeightUV, nWidthUV, nDstPitches[2], nSrcPitches[2], nRefPitches[2], time256, bitsPerSample);
-                }
+                for (int plane = 0; plane < d->vi->format.numPlanes; plane++)
+                    Blend<PixelType>(vsapi->getWritePtr(dst, plane), vsapi->getReadPtr(src, plane), vsapi->getReadPtr(ref, plane), vsapi->getFrameHeight(dst, plane), vsapi->getFrameWidth(dst, plane), vsapi->getStride(dst, plane), time256);
 
                 vsapi->freeFrame(src);
                 vsapi->freeFrame(ref);
 
                 return dst;
-            } else { // no blend
-                return src; // like ChangeFPS
+            } else {
+                return vsapi->getFrameFilter(n, d->node, frameCtx);
             }
         }
     }
 
-    return 0;
+    return nullptr;
 }
 
-
-static void VS_CC mvflowinterFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
-    MVFlowInterData *d = (MVFlowInterData *)instanceData;
-
-    simpleDeinit(&d->upsizer);
-    if (d->vi->format.colorFamily != cfGray)
-        simpleDeinit(&d->upsizerUV);
-
-    vsapi->freeNode(d->finest);
-    vsapi->freeNode(d->super);
-    vsapi->freeNode(d->mvfw);
-    vsapi->freeNode(d->mvbw);
-    vsapi->freeNode(d->node);
-    free(d);
-}
-
-
-static void VS_CC mvflowinterCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
-
-    MVFlowInterData d;
-    MVFlowInterData *data;
-
+static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+    std::unique_ptr<FlowInterData> d(new FlowInterData(vsapi));
     int err;
 
-    d.time = (float)vsapi->mapGetFloat(in, "time", 0, &err);
+    d->time = vsapi->mapGetFloatSaturated(in, "time", 0, &err);
     if (err)
-        d.time = 50.0f;
+        d->time = 50.0f;
 
-    d.ml = (float)vsapi->mapGetFloat(in, "ml", 0, &err);
+    d->ml = vsapi->mapGetFloatSaturated(in, "ml", 0, &err);
     if (err)
-        d.ml = 100.0f;
+        d->ml = 100.0f;
 
-    d.blend = !!vsapi->mapGetInt(in, "blend", 0, &err);
+    d->blend = !!vsapi->mapGetInt(in, "blend", 0, &err);
     if (err)
-        d.blend = 1;
+        d->blend = true;
 
-    d.thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
+    d->thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
     if (err)
-        d.thscd1 = MV_DEFAULT_SCD1;
+        d->thscd1 = MV_DEFAULT_SCD1;
 
-    d.thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
+    d->thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
     if (err)
-        d.thscd2 = MV_DEFAULT_SCD2;
+        d->thscd2 = MV_DEFAULT_SCD2;
 
-    d.opt = !!vsapi->mapGetInt(in, "opt", 0, &err);
-    if (err)
-        d.opt = 1;
+    const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+    if (prefix)
+        d->prefix = prefix;
+    else
+        d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
+    try {
 
-    if (d.time < 0.0f || d.time > 100.0f) {
-        vsapi->mapSetError(out, "FlowInter: time must be between 0 and 100 % (inclusive).");
+        if (d->time < 0.0f || d->time > 100.0f)
+            throw std::runtime_error("time must be between 0 and 100%");
+
+        if (d->ml <= 0.0f)
+            throw std::runtime_error("ml must be greater than 0");
+
+        d->time256 = (int)(d->time * 256.0f / 100.0f);
+
+        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = vsapi->getVideoInfo(d->node);
+
+        d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
+
+        FramePyramid super(d->super, d->prefix, core, vsapi);
+
+        if (!super.IsCompatibleWithSource(d->vi))
+            throw std::runtime_error("super clip is not compatible with source clip");
+
+        d->mvbw = vsapi->mapGetNode(in, "mvbw", 0, nullptr);
+        d->mvfw = vsapi->mapGetNode(in, "mvfw", 0, nullptr);
+
+        MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
+        MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
+
+        vectorsFw.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
+
+        d->deltaFrame = vectorsFw.nDeltaFrame;
+
+        if (!vectorsFw.IsCompatibleForAnalysis(super))
+            throw std::runtime_error("wrong source or super clip frame size");
+
+        if (!vectorsFw.IsCompatible(vectorsBw) || (vectorsBw.nDeltaFrame != -vectorsFw.nDeltaFrame) || vectorsFw.nDeltaFrame > 0 || vectorsBw.nDeltaFrame < 0)
+            throw std::runtime_error("mvfw and mvbw must be compatible with each other and have opposite sign delta");
+
+        d->maskResizerFull.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX, vectorsFw.nBlkSizeY, vectorsFw.nOverlapX, vectorsFw.nOverlapY,
+            d->vi->width, d->vi->height);
+
+        if (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0)
+            d->maskResizerSubSampled.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX >> d->vi->format.subSamplingW, vectorsFw.nBlkSizeY >> d->vi->format.subSamplingH, vectorsFw.nOverlapX >> d->vi->format.subSamplingW, vectorsFw.nOverlapY >> d->vi->format.subSamplingH,
+                d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
+
+    } catch (std::runtime_error &e) {
+        vsapi->mapSetError(out, ("FlowInter: " + std::string(e.what())).c_str());
         return;
     }
 
-    if (d.ml <= 0.0f) {
-        vsapi->mapSetError(out, "FlowInter: ml must be greater than 0.");
-        return;
-    }
-
-    d.time256 = (int)(d.time * 256.0f / 100.0f);
-
-
-    d.super = vsapi->mapGetNode(in, "super", 0, NULL);
-
-#define ERROR_SIZE 1024
-    char errorMsg[ERROR_SIZE] = "FlowInter: failed to retrieve first frame from super clip. Error message: ";
-    size_t errorLen = strlen(errorMsg);
-    const VSFrame *evil = vsapi->getFrame(0, d.super, errorMsg + errorLen, ERROR_SIZE - (int)errorLen);
-#undef ERROR_SIZE
-    if (!evil) {
-        vsapi->mapSetError(out, errorMsg);
-        vsapi->freeNode(d.super);
-        return;
-    }
-    const VSMap *props = vsapi->getFramePropertiesRO(evil);
-    int evil_err[3];
-    int nHeightS = vsapi->mapGetIntSaturated(props, "Super_height", 0, &evil_err[0]);
-    d.nSuperHPad = vsapi->mapGetIntSaturated(props, "Super_hpad", 0, &evil_err[1]);
-    int nSuperPel = vsapi->mapGetIntSaturated(props, "Super_pel", 0, &evil_err[2]);
-    vsapi->freeFrame(evil);
-
-    for (int i = 0; i < 2; i++)
-        if (evil_err[i]) {
-            vsapi->mapSetError(out, "FlowInter: required properties not found in first frame of super clip. Maybe clip didn't come from mv.Super? Was the first frame trimmed away?");
-            vsapi->freeNode(d.super);
-            return;
-        }
-
-
-    d.mvbw = vsapi->mapGetNode(in, "mvbw", 0, NULL);
-    d.mvfw = vsapi->mapGetNode(in, "mvfw", 0, NULL);
-
-#define ERROR_SIZE 512
-    char error[ERROR_SIZE + 1] = { 0 };
-    const char *filter_name = "FlowInter";
-
-    adataFromVectorClip(&d.mvbw_data, d.mvbw, filter_name, "mvbw", vsapi, error, ERROR_SIZE);
-    adataFromVectorClip(&d.mvfw_data, d.mvfw, filter_name, "mvfw", vsapi, error, ERROR_SIZE);
-
-    scaleThSCD(&d.thscd1, &d.thscd2, &d.mvbw_data, filter_name, error, ERROR_SIZE);
-
-    adataCheckSimilarity(&d.mvbw_data, &d.mvfw_data, filter_name, "mvbw", "mvfw", error, ERROR_SIZE);
-#undef ERROR_SIZE
-
-    if (error[0]) {
-        vsapi->mapSetError(out, error);
-
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-
-    if (d.mvbw_data.nDeltaFrame <= 0 || d.mvfw_data.nDeltaFrame <= 0) {
-        vsapi->mapSetError(out, "FlowInter: cannot use motion vectors with absolute frame references.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-    // XXX Alternatively, use both clips' delta as offsets in GetFrame.
-    if (d.mvfw_data.nDeltaFrame != d.mvbw_data.nDeltaFrame) {
-        vsapi->mapSetError(out, "FlowInter: mvbw and mvfw must be generated with the same delta.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-    // Make sure the motion vector clips are correct.
-    if (!d.mvbw_data.isBackward || d.mvfw_data.isBackward) {
-        if (!d.mvbw_data.isBackward)
-            vsapi->mapSetError(out, "FlowInter: mvbw must be generated with isb=True.");
-        else
-            vsapi->mapSetError(out, "FlowInter: mvfw must be generated with isb=False.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        return;
-    }
-
-    if (d.mvbw_data.nPel == 1)
-        d.finest = vsapi->addNodeRef(d.super); // v2.0.9.1
-    else {
-        VSPlugin *mvtoolsPlugin = vsapi->getPluginByID("com.nodame.mvtools", core);
-
-        VSMap *args = vsapi->createMap();
-        vsapi->mapSetNode(args, "super", d.super, maReplace);
-        vsapi->mapSetInt(args, "opt", d.opt, maReplace);
-        VSMap *ret = vsapi->invoke(mvtoolsPlugin, "Finest", args);
-        if (vsapi->mapGetError(ret)) {
-#define ERROR_SIZE 512
-            char error_msg[ERROR_SIZE + 1] = { 0 };
-            snprintf(error_msg, ERROR_SIZE, "FlowInter: %s", vsapi->mapGetError(ret));
-#undef ERROR_SIZE
-            vsapi->mapSetError(out, error_msg);
-
-            vsapi->freeNode(d.super);
-            vsapi->freeNode(d.mvfw);
-            vsapi->freeNode(d.mvbw);
-            vsapi->freeMap(args);
-            vsapi->freeMap(ret);
-            return;
-        }
-        d.finest = vsapi->mapGetNode(ret, "clip", 0, NULL);
-        vsapi->freeMap(args);
-        vsapi->freeMap(ret);
-    }
-
-    d.node = vsapi->mapGetNode(in, "clip", 0, 0);
-    d.vi = vsapi->getVideoInfo(d.node);
-
-    const VSVideoInfo *supervi = vsapi->getVideoInfo(d.super);
-    int nSuperWidth = supervi->width;
-
-    if (d.mvbw_data.nHeight != nHeightS || d.mvbw_data.nWidth != nSuperWidth - d.nSuperHPad * 2 || d.mvbw_data.nPel != nSuperPel) {
-        vsapi->mapSetError(out, "FlowInter: wrong source or super clip frame size.");
-        vsapi->freeNode(d.finest);
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        vsapi->freeNode(d.node);
-        return;
-    }
-
-    if (!vsh::isConstantVideoFormat(d.vi) || d.vi->format.bitsPerSample > 16 || d.vi->format.sampleType != stInteger || d.vi->format.subSamplingW > 1 || d.vi->format.subSamplingH > 1 || (d.vi->format.colorFamily != cfYUV && d.vi->format.colorFamily != cfGray)) {
-        vsapi->mapSetError(out, "FlowInter: input clip must be GRAY, 420, 422, 440, or 444, up to 16 bits, with constant dimensions.");
-        vsapi->freeNode(d.super);
-        vsapi->freeNode(d.finest);
-        vsapi->freeNode(d.mvfw);
-        vsapi->freeNode(d.mvbw);
-        vsapi->freeNode(d.node);
-        return;
-    }
-
-
-    d.nBlkXP = d.mvbw_data.nBlkX;
-    d.nBlkYP = d.mvbw_data.nBlkY;
-    while (d.nBlkXP * (d.mvbw_data.nBlkSizeX - d.mvbw_data.nOverlapX) + d.mvbw_data.nOverlapX < d.mvbw_data.nWidth)
-        d.nBlkXP++;
-    while (d.nBlkYP * (d.mvbw_data.nBlkSizeY - d.mvbw_data.nOverlapY) + d.mvbw_data.nOverlapY < d.mvbw_data.nHeight)
-        d.nBlkYP++;
-
-    d.nWidthP = d.nBlkXP * (d.mvbw_data.nBlkSizeX - d.mvbw_data.nOverlapX) + d.mvbw_data.nOverlapX;
-    d.nHeightP = d.nBlkYP * (d.mvbw_data.nBlkSizeY - d.mvbw_data.nOverlapY) + d.mvbw_data.nOverlapY;
-
-    d.nWidthPUV = d.nWidthP / d.mvbw_data.xRatioUV;
-    d.nHeightPUV = d.nHeightP / d.mvbw_data.yRatioUV;
-    d.nHeightUV = d.mvbw_data.nHeight / d.mvbw_data.yRatioUV;
-    d.nWidthUV = d.mvbw_data.nWidth / d.mvbw_data.xRatioUV;
-
-    d.nHPaddingUV = d.mvbw_data.nHPadding / d.mvbw_data.xRatioUV;
-    d.nVPaddingUV = d.mvbw_data.nVPadding / d.mvbw_data.yRatioUV;
-
-    d.VPitchY = (d.nWidthP + 15) & (~15);
-    d.VPitchUV = (d.nWidthPUV + 15) & (~15);
-
-
-    simpleInit(&d.upsizer, d.nWidthP, d.nHeightP, d.nBlkXP, d.nBlkYP, d.mvbw_data.nWidth, d.mvbw_data.nHeight, d.mvbw_data.nPel, d.opt);
-    if (d.vi->format.colorFamily != cfGray)
-        simpleInit(&d.upsizerUV, d.nWidthPUV, d.nHeightPUV, d.nBlkXP, d.nBlkYP, d.nWidthUV, d.nHeightUV, d.mvbw_data.nPel, d.opt);
-
-    selectFlowInterFunctions(&d.FlowInterSimple, &d.FlowInter, &d.FlowInterExtra, d.vi->format.bitsPerSample, d.opt);
-
-
-    data = (MVFlowInterData *)malloc(sizeof(d));
-    *data = d;
-
+    // FIXME, check actual use
     VSFilterDependency deps[4] = { 
-        {data->node, rpGeneral}, 
-        // {data->super, rpStrictSpatial}, //MVFlowInter doesn't actually request any frames from the super.
-        {data->finest, rpGeneral}, 
-        {data->mvbw, rpGeneral}, 
-        {data->mvfw, rpGeneral}, 
+        {d->node, rpGeneral}, 
+        {d->super, rpGeneral},
+        {d->mvbw, rpGeneral}, 
+        {d->mvfw, rpGeneral}, 
     };
 
-    vsapi->createVideoFilter(out, "FlowInter", data->vi, mvflowinterGetFrame, mvflowinterFree, fmParallel, deps, ARRAY_SIZE(deps), data, core);
+    vsapi->createVideoFilter(out, "FlowInter", d->vi, flowinterGetFrame, filterFree<FlowInterData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    d.release();
 }
-
 
 void mvflowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("FlowInter",
@@ -708,5 +457,5 @@ void mvflowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "thscd2:int:opt;"
                  "prefix:data:opt;",
                  "clip:vnode;",
-                 mvflowinterCreate, 0, plugin);
+                 flowinterCreate, 0, plugin);
 }

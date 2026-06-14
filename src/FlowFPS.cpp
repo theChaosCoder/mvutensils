@@ -24,128 +24,7 @@
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 #include "MaskResize.h"
-
-// time-weihted blend src with ref frames (used for interpolation for poor motion estimation)
-template <typename PixelType>
-static void Blend(uint8_t *VS_RESTRICT pdst, const uint8_t *VS_RESTRICT psrc, const uint8_t *VS_RESTRICT pref, int height, int width, ptrdiff_t stride, int time256) {
-    for (int h = 0; h < height; h++) {
-        for (int w = 0; w < width; w++) {
-            const PixelType *psrc_ = (const PixelType *)psrc;
-            const PixelType *pref_ = (const PixelType *)pref;
-            PixelType *pdst_ = (PixelType *)pdst;
-
-            pdst_[w] = (psrc_[w] * (256 - time256) + pref_[w] * time256) >> 8;
-        }
-        pdst += stride;
-        psrc += stride;
-        pref += stride;
-    }
-}
-
-template <typename PixelType>
-static void FlowInter(
-        uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch,
-        const PyramidPlane &prefB, const PyramidPlane &prefF,
-        const uint16_t *VXFullB, const uint16_t *VXFullF,
-        const uint16_t *VYFullB, const uint16_t *VYFullF,
-        const uint16_t *MaskB, const uint16_t *MaskF, ptrdiff_t tilePitch,
-        int dstX, int dstY,
-        int width, int height,
-        int time256) {
-
-    PixelType *pdst = (PixelType *)pdst8;
-
-    tilePitch /= sizeof(uint16_t);
-    dst_pitch /= sizeof(PixelType);
-
-    int nPelLog = ilog2(prefB.nPel);
-
-    for (int h = 0; h < height; h++) {
-        for (int w = 0; w < width; w++) {
-            int vxF = ((static_cast<int>(VXFullF[w]) - (1 << 15)) * time256) >> 8;
-            int vyF = ((static_cast<int>(VYFullF[w]) - (1 << 15)) * time256) >> 8;
-            int64_t dstF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxF + ((w + dstX) << nPelLog), vyF + ((h + dstY) << nPelLog)));
-            int dstF0 = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(((w + dstX) << nPelLog), ((h + dstY) << nPelLog)));
-            int vxB = ((static_cast<int>(VXFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int vyB = ((static_cast<int>(VYFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int64_t dstB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxB + ((w + dstX) << nPelLog), vyB + ((h + dstY) << nPelLog)));
-            int dstB0 = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(((w + dstX) << nPelLog), ((h + dstY) << nPelLog)));
-            pdst[w] = (PixelType)((((dstF * (256 - (MaskF[w] >> 8)) + (((MaskF[w] >> 8) * (dstB * (256 - (MaskB[w] >> 8)) + (MaskB[w] >> 8) * dstF0) + 256) >> 8) + 256) >> 8) * (256 - time256) +
-                ((dstB * (256 - (MaskB[w] >> 8)) + (((MaskB[w] >> 8) * (dstF * (256 - (MaskF[w] >> 8)) + (MaskF[w] >> 8) * dstB0) + 256) >> 8) + 256) >> 8) * time256) >> 8) - 1;
-        }
-
-        pdst += dst_pitch;
-        VXFullB += tilePitch;
-        VYFullB += tilePitch;
-        VXFullF += tilePitch;
-        VYFullF += tilePitch;
-        MaskB += tilePitch;
-        MaskF += tilePitch;
-    }
-}
-
-
-template <typename PixelType>
-static void FlowInterExtra(
-        uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch,
-        const PyramidPlane &prefB, const PyramidPlane &prefF,
-        const uint16_t *VXFullB, const uint16_t *VXFullF,
-        const uint16_t *VYFullB, const uint16_t *VYFullF,
-        const uint16_t *MaskB, const uint16_t *MaskF, ptrdiff_t tilePitch,
-        int dstX, int dstY,
-        int width, int height,
-        int time256,
-        const uint16_t *VXFullBB, const uint16_t *VXFullFF,
-        const uint16_t *VYFullBB, const uint16_t *VYFullFF) {
-
-    PixelType *pdst = (PixelType *)pdst8;
-
-    dst_pitch /= sizeof(PixelType);
-    tilePitch /= sizeof(int16_t);
-
-    int nPelLog = ilog2(prefB.nPel);
-
-    for (int h = 0; h < height; h++) {
-        for (int w = 0; w < width; w++) {
-            int vxF = ((static_cast<int>(VXFullF[w]) - (1 << 15)) * time256) >> 8;
-            int vyF = ((static_cast<int>(VYFullF[w]) - (1 << 15)) * time256) >> 8;
-            int dstF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxF + ((w + dstX) << nPelLog), vyF + ((h + dstY) << nPelLog)));
-
-            int vxFF = ((static_cast<int>(VXFullFF[w]) - (1 << 15)) * time256) >> 8;
-            int vyFF = ((static_cast<int>(VYFullFF[w]) - (1 << 15)) * time256) >> 8;
-            int dstFF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxFF + ((w + dstX) << nPelLog), vyFF + ((h + dstY) << nPelLog)));
-
-            int vxB = ((static_cast<int>(VXFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int vyB = ((static_cast<int>(VYFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int dstB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxB + ((w + dstX) << nPelLog), vyB + ((h + dstY) << nPelLog)));
-
-            int vxBB = ((static_cast<int>(VXFullBB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int vyBB = ((static_cast<int>(VYFullBB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int dstBB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxBB + ((w + dstX) << nPelLog), vyBB + ((h + dstY) << nPelLog)));
-
-            /* use median, firsly get min max of compensations */
-            int minfb = std::min(dstB, dstF);
-            int maxfb = std::max(dstB, dstF);
-
-            int medianBB = std::max(minfb, std::min(dstBB, maxfb));
-            int medianFF = std::max(minfb, std::min(dstFF, maxfb));
-
-            pdst[w] = ((((medianBB * (MaskF[w] >> 8) + dstF * (256 - (MaskF[w] >> 8)) + 256) >> 8) * (256 - time256) +
-                ((medianFF * (MaskB[w] >> 8) + dstB * (256 - (MaskB[w] >> 8)) + 256) >> 8) * time256) >> 8) - 1;
-        }
-        pdst += dst_pitch;
-        VXFullB += tilePitch;
-        VYFullB += tilePitch;
-        VXFullF += tilePitch;
-        VYFullF += tilePitch;
-        MaskB += tilePitch;
-        MaskF += tilePitch;
-        VXFullBB += tilePitch;
-        VYFullBB += tilePitch;
-        VXFullFF += tilePitch;
-        VYFullFF += tilePitch;
-    }
-}
+#include "FlowShared.h"
 
 struct FlowFPSData {
     VSNode *node;
@@ -277,7 +156,6 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                 vsh::vsh_aligned_free
             };
 
-            // FIXME, remember to divide occlusion mask values by 256 later
             // analyse vectors field to detect occlusion
             //        double occNormB = (256-time256)/(256*ml);
             //        MakeVectorOcclusionMask(mvClipB, nBlkX, nBlkY, occNormB, 1.0, nPel, MaskSmallB, nBlkXP);
@@ -288,102 +166,30 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
             //        MakeVectorOcclusionMask(mvClipF, nBlkX, nBlkY, occNormF, 1.0, nPel, MaskSmallF, nBlkXP);
             vectorsF.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, MaskSmallF.get(), occlusionMaskPitch, (256 - time256));
 
-            std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> tmp{
-                vsh::vsh_aligned_malloc(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize), 64),
-                vsh::vsh_aligned_free
-            };
+            auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
-            constexpr ptrdiff_t dstTileStride = roundUpTo64(MaskResizer::TileSize * sizeof(uint16_t));
+            auto dstTileMaskF = MaskResizer::GetTileBuffer();
+            auto dstTileMaskB = MaskResizer::GetTileBuffer();
+            auto dstTileXF = MaskResizer::GetTileBuffer();
+            auto dstTileYF = MaskResizer::GetTileBuffer();
+            auto dstTileXB = MaskResizer::GetTileBuffer();
+            auto dstTileYB = MaskResizer::GetTileBuffer();
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileMaskF{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+            auto srcBufMaskF = MaskResizer::MakeSrcBuffer(MaskSmallF.get(), occlusionMaskPitch);
+            auto srcBufMaskB = MaskResizer::MakeSrcBuffer(MaskSmallB.get(), occlusionMaskPitch);
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileMaskB{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+            auto srcBufSmallFX = MaskResizer::MakeSrcBuffer(SmallF->VXSmallY, SmallF->pitchVSmallY);
+            auto srcBufSmallFY = MaskResizer::MakeSrcBuffer(SmallF->VYSmallY, SmallF->pitchVSmallY);
+            auto srcBufSmallBX = MaskResizer::MakeSrcBuffer(SmallB->VXSmallY, SmallB->pitchVSmallY);
+            auto srcBufSmallBY = MaskResizer::MakeSrcBuffer(SmallB->VYSmallY, SmallB->pitchVSmallY);
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileXF{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
+            auto dstBufMaskF = MaskResizer::MakeDstBuffer(dstTileMaskF.get());
+            auto dstBufMaskB = MaskResizer::MakeDstBuffer(dstTileMaskB.get());
 
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileYF{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
-
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileXB{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
-
-            std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileYB{
-                vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                vsh::vsh_aligned_free
-            };
-
-            mvuzimgxx::zimage_buffer_const srcBufMaskF;
-            srcBufMaskF.plane[0].data = MaskSmallF.get();
-            srcBufMaskF.plane[0].stride = occlusionMaskPitch;
-            srcBufMaskF.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer_const srcBufMaskB;
-            srcBufMaskB.plane[0].data = MaskSmallB.get();
-            srcBufMaskB.plane[0].stride = occlusionMaskPitch;
-            srcBufMaskB.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer_const srcBufSmallFX;
-            srcBufSmallFX.plane[0].data = SmallF->VXSmallY;
-            srcBufSmallFX.plane[0].stride = SmallF->pitchVSmallY;
-            srcBufSmallFX.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer_const srcBufSmallFY;
-            srcBufSmallFY.plane[0].data = SmallF->VYSmallY;
-            srcBufSmallFY.plane[0].stride = SmallF->pitchVSmallY;
-            srcBufSmallFY.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer_const srcBufSmallBX;
-            srcBufSmallBX.plane[0].data = SmallB->VXSmallY;
-            srcBufSmallBX.plane[0].stride = SmallB->pitchVSmallY;
-            srcBufSmallBX.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer_const srcBufSmallBY;
-            srcBufSmallBY.plane[0].data = SmallB->VYSmallY;
-            srcBufSmallBY.plane[0].stride = SmallB->pitchVSmallY;
-            srcBufSmallBY.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer dstBufMaskF;
-            dstBufMaskF.plane[0].data = dstTileMaskF.get();
-            dstBufMaskF.plane[0].stride = dstTileStride;
-            dstBufMaskF.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer dstBufMaskB;
-            dstBufMaskB.plane[0].data = dstTileMaskB.get();
-            dstBufMaskB.plane[0].stride = dstTileStride;
-            dstBufMaskB.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer dstBufSmallXF;
-            dstBufSmallXF.plane[0].data = dstTileXF.get();
-            dstBufSmallXF.plane[0].stride = dstTileStride;
-            dstBufSmallXF.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer dstBufSmallYF;
-            dstBufSmallYF.plane[0].data = dstTileYF.get();
-            dstBufSmallYF.plane[0].stride = dstTileStride;
-            dstBufSmallYF.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer dstBufSmallXB;
-            dstBufSmallXB.plane[0].data = dstTileXB.get();
-            dstBufSmallXB.plane[0].stride = dstTileStride;
-            dstBufSmallXB.plane[0].mask = ZIMG_BUFFER_MAX;
-
-            mvuzimgxx::zimage_buffer dstBufSmallYB;
-            dstBufSmallYB.plane[0].data = dstTileYB.get();
-            dstBufSmallYB.plane[0].stride = dstTileStride;
-            dstBufSmallYB.plane[0].mask = ZIMG_BUFFER_MAX;
+            auto dstBufSmallXF = MaskResizer::MakeDstBuffer(dstTileXF.get());
+            auto dstBufSmallYF = MaskResizer::MakeDstBuffer(dstTileYF.get());
+            auto dstBufSmallXB = MaskResizer::MakeDstBuffer(dstTileXB.get());
+            auto dstBufSmallYB = MaskResizer::MakeDstBuffer(dstTileYB.get());
 
             // forward from previous to current
             const VSFrame *mvFF = d->extraMask ? vsapi->getFrameFilter(nleft, d->mvfw, frameCtx) : nullptr;
@@ -395,70 +201,25 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
             MotionBlockPyramid vectorsBB(mvBB, 1, d->prefix, core, vsapi);
             vsapi->freeFrame(mvBB);
 
-            if (d->extraMask && vectorsBB.IsUsable(d->thscd1, d->thscd2) && vectorsFF.IsUsable(d->thscd1, d->thscd2)) { // slow method with extra frames
+            if (d->extraMask && vectorsBB.IsUsable(d->thscd1, d->thscd2) && vectorsFF.IsUsable(d->thscd1, d->thscd2)) {
                 // get vector mask from extra frames
                 auto SmallBB = vectorsBB.MakeSmallVectorMasks();
                 auto SmallFF = vectorsFF.MakeSmallVectorMasks();
 
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileXFF{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
+                auto srcBufSmallFFX = MaskResizer::MakeSrcBuffer(SmallFF->VXSmallY, SmallFF->pitchVSmallY);
+                auto srcBufSmallFFY = MaskResizer::MakeSrcBuffer(SmallFF->VYSmallY, SmallFF->pitchVSmallY);
+                auto srcBufSmallBBX = MaskResizer::MakeSrcBuffer(SmallBB->VXSmallY, SmallBB->pitchVSmallY);
+                auto srcBufSmallBBY = MaskResizer::MakeSrcBuffer(SmallBB->VYSmallY, SmallBB->pitchVSmallY);
 
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileYFF{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
+                auto dstTileXFF = MaskResizer::GetTileBuffer();
+                auto dstTileYFF = MaskResizer::GetTileBuffer();
+                auto dstTileXBB = MaskResizer::GetTileBuffer();
+                auto dstTileYBB = MaskResizer::GetTileBuffer();
 
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileXBB{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
-
-                std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> dstTileYBB{
-                    vsh::vsh_aligned_malloc<uint16_t>(dstTileStride * MaskResizer::TileSize, 64),
-                    vsh::vsh_aligned_free
-                };
-
-                mvuzimgxx::zimage_buffer_const srcBufSmallFFX;
-                srcBufSmallFFX.plane[0].data = SmallFF->VXSmallY;
-                srcBufSmallFFX.plane[0].stride = SmallFF->pitchVSmallY;
-                srcBufSmallFFX.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer_const srcBufSmallFFY;
-                srcBufSmallFFY.plane[0].data = SmallFF->VYSmallY;
-                srcBufSmallFFY.plane[0].stride = SmallFF->pitchVSmallY;
-                srcBufSmallFFY.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer_const srcBufSmallBBX;
-                srcBufSmallBBX.plane[0].data = SmallBB->VXSmallY;
-                srcBufSmallBBX.plane[0].stride = SmallBB->pitchVSmallY;
-                srcBufSmallBBX.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer_const srcBufSmallBBY;
-                srcBufSmallBBY.plane[0].data = SmallBB->VYSmallY;
-                srcBufSmallBBY.plane[0].stride = SmallBB->pitchVSmallY;
-                srcBufSmallBBY.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufSmallXFF;
-                dstBufSmallXFF.plane[0].data = dstTileXFF.get();
-                dstBufSmallXFF.plane[0].stride = dstTileStride;
-                dstBufSmallXFF.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufSmallYFF;
-                dstBufSmallYFF.plane[0].data = dstTileYFF.get();
-                dstBufSmallYFF.plane[0].stride = dstTileStride;
-                dstBufSmallYFF.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufSmallXBB;
-                dstBufSmallXBB.plane[0].data = dstTileXBB.get();
-                dstBufSmallXBB.plane[0].stride = dstTileStride;
-                dstBufSmallXBB.plane[0].mask = ZIMG_BUFFER_MAX;
-
-                mvuzimgxx::zimage_buffer dstBufSmallYBB;
-                dstBufSmallYBB.plane[0].data = dstTileYBB.get();
-                dstBufSmallYBB.plane[0].stride = dstTileStride;
-                dstBufSmallYBB.plane[0].mask = ZIMG_BUFFER_MAX;
+                auto dstBufSmallXFF = MaskResizer::MakeDstBuffer(dstTileXFF.get());
+                auto dstBufSmallYFF = MaskResizer::MakeDstBuffer(dstTileYFF.get());
+                auto dstBufSmallXBB = MaskResizer::MakeDstBuffer(dstTileXBB.get());
+                auto dstBufSmallYBB = MaskResizer::MakeDstBuffer(dstTileYBB.get());
 
                 ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
                 uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
@@ -482,7 +243,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                     FlowInterExtra<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
                          ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
                          dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                         dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                         dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                          tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
                          dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
                 }
@@ -517,14 +278,14 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                         FlowInterExtra<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
                              ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
                              dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                             dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                             dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                              tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
                              dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
 
                         FlowInterExtra<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
                              ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
                              dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                             dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                             dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                              tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
                              dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
                     }
@@ -546,7 +307,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                     FlowInter<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
                          ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
                          dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                         dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                         dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                          tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
 
                 }
@@ -573,26 +334,25 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                         FlowInter<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
                                 ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
                                 dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                                dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                                dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                                 tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
 
                         FlowInter<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
                                 ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
                                 dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                                dstTileMaskB.get(), dstTileMaskF.get(), dstTileStride,
+                                dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                                 tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
                     }
                 }
             }
 
             return dst;
-        } else { // poor estimation
-            if (d->blend) { //let's blend src with ref frames like ConvertFPS
+        } else {
+            if (d->blend) {
                 const VSFrame *src = vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx);
                 const VSFrame *ref = vsapi->getFrameFilter(std::min(nright, d->oldvi->numFrames - 1), d->node, frameCtx);
                 VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, src, core);
 
-                // blend with time weight
                 for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
                     Blend<PixelType>(vsapi->getWritePtr(dst, plane), vsapi->getReadPtr(src, plane), vsapi->getReadPtr(ref, plane), vsapi->getFrameHeight(dst, plane), vsapi->getFrameWidth(dst, plane), vsapi->getStride(dst, plane), time256);
 
@@ -677,6 +437,9 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
         FramePyramid super(d->super, d->prefix, core, vsapi);
+
+        if (!super.IsCompatibleWithSource(d->oldvi))
+            throw std::runtime_error("super clip is not compatible with source clip");
 
         d->mvbw = vsapi->mapGetNode(in, "mvbw", 0, nullptr);
         d->mvfw = vsapi->mapGetNode(in, "mvfw", 0, nullptr);
