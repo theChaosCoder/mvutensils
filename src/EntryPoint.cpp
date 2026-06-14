@@ -16,7 +16,7 @@ void maskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void flowRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void flowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvflowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
-void mvflowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
+void flowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvblockfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void scdetectionRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
 void mvdepanRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi);
@@ -39,7 +39,7 @@ VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     flowRegister(plugin, vspapi);
     flowblurRegister(plugin, vspapi);
     //mvflowinterRegister(plugin, vspapi);
-    //mvflowfpsRegister(plugin, vspapi);
+    flowfpsRegister(plugin, vspapi);
     //mvblockfpsRegister(plugin, vspapi);
     scdetectionRegister(plugin, vspapi);
     //mvdepanRegister(plugin, vspapi);
