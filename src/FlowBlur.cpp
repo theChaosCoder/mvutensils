@@ -258,9 +258,6 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                              tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
                     }
                 }
-
-                vsapi->freeFrame(ref);
-
             } catch (std::runtime_error &e) {
                 vsapi->freeFrame(dst);
                 vsapi->setFilterError(("FlowBlur: " + std::string(e.what())).c_str(), frameCtx);

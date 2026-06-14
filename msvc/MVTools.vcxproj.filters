@@ -125,9 +125,6 @@
     <ClCompile Include="..\src\Compensate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MVFinest.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\SuperPyramid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

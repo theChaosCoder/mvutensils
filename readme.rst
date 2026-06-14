@@ -42,6 +42,8 @@ Changes
 * DegrainN:
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors
 
+	* Reduced memory usage
+
 * Mask:
 	* Split into 3 functions that correspond to kind 0-2 called VectorLengthMask, SADMask and OcclusionMask, obviously the kind argument has been removed
 	
@@ -58,7 +60,7 @@ Changes
 	
 	* Improved internal mask resizing quality
 	
-	* Reduced memory usage
+	* Greatly reduced memory usage
 	
 	* Mode=1 was dropped since nobody used it, since only mode=0 remains the mode argument was removed
 
@@ -67,10 +69,13 @@ Changes
 	
 	* Improved internal mask resizing quality
 	
-	* Reduced memory usage
+	* Greatly reduced memory usage
 
 * SCDetection:
     * None
+
+* Finest:
+	* Removed since its only real use was as a support function for other filters due to lazy frame access code
 
 Planned changes
 ===============
@@ -86,7 +91,5 @@ Planned changes
 * Make overlap and blksize default to the values in the super clip for analyse (maybe)
 
 * Have a general Degrain function that maps to the right DegrainN depending on the number of vectors passed (maybe, feedback welcome)
-
-* Remove Finest (only exists as a helper function due to poor super frame data layout)
 
 * Slowly port all other bits
