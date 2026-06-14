@@ -189,6 +189,8 @@ template<typename PixelType>
 static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     const FlowFPSData *d = reinterpret_cast<FlowFPSData *>(instanceData);
 
+    // FIXME, catch exceptions
+
     if (activationReason == arInitial) {
         int off = -d->deltaFrame;
 
