@@ -76,6 +76,9 @@ Changes
 
 * SCDetection:
     * None
+	
+* BlockFPS:
+	* Removed since nobody FlowFPS is generally both the better and more popular option
 
 * Finest:
 	* Removed since its only real use was as a support function for other filters due to lazy frame access code
@@ -95,4 +98,6 @@ Planned changes
 
 * Have a general Degrain function that maps to the right DegrainN depending on the number of vectors passed (maybe, feedback welcome)
 
-* Slowly port all other bits
+* Big additional code cleanups
+
+* Depan
