@@ -4154,6 +4154,11 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
     d->initzoom = 1 / d->initzoom; // make consistent with internal definition - v1.7
 
     d->wintsize = (int)(d->fps / (4 * d->cutoff));
+    // fps / (4 * cutoff) can round down to 0 (e.g. low fps, high cutoff). That leaves the
+    // smoothing window as the single element wint[0] = 0, so norm sums to 0 and the smoothed
+    // transform is divided by zero (NaN). Keep at least one tap.
+    if (d->wintsize < 1)
+        d->wintsize = 1;
     d->radius = d->wintsize;
     d->wint = (float *)malloc((d->wintsize + 1) * sizeof(float));
 
