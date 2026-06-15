@@ -225,9 +225,12 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
                     // Allocate buffer for only nBlkSizeY rows instead of full frame height
                     // We'll output finalized rows and reuse the buffer as a sliding window
+                    int frameW[3] = {}, frameH[3] = {};
                     for (int plane = 0; plane < num_planes; plane++) {
                         DstTempBuffers[plane] = std::make_unique<uint8_t[]>(nBlkSizeY[plane] * dstTempPitch[plane]);
                         DstTemp[plane] = DstTempBuffers[plane].get();
+                        frameW[plane] = vsapi->getFrameWidth(dst, plane);
+                        frameH[plane] = vsapi->getFrameHeight(dst, plane);
                     }
 
                     for (int by = 0; by < nBlkY; by++) {
@@ -279,10 +282,10 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                         // Output the finalized rows (non-overlapping portion)
                         for (int plane = 0; plane < num_planes; plane++) {
                             int planeRowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : (nBlkSizeY[plane] - nOverlapY[plane]);
-                            int outputHeight = std::min(planeRowsToOutput, std::min(vsapi->getFrameHeight(dst, plane), nHeight_B[plane]) - by * (nBlkSizeY[plane] - nOverlapY[plane]));
+                            int outputHeight = std::min(planeRowsToOutput, std::min(frameH[plane], nHeight_B[plane]) - by * (nBlkSizeY[plane] - nOverlapY[plane]));
 
                             if (outputHeight > 0) {
-                                int outputWidth = std::min(vsapi->getFrameWidth(dst, plane), nWidth_B[plane]);
+                                int outputWidth = std::min(frameW[plane], nWidth_B[plane]);
                                 d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp[plane], dstTempPitch[plane], outputWidth, outputHeight, bitsPerSample);
                             }
 

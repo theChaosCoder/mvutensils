@@ -213,10 +213,10 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                 if (!d->process[plane])
                     continue;
 
-                if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
-                    const int frameW = vsapi->getFrameWidth(dst, plane);
-                    const int frameH = vsapi->getFrameHeight(dst, plane);
+                const int frameW = vsapi->getFrameWidth(dst, plane);
+                const int frameH = vsapi->getFrameHeight(dst, plane);
 
+                if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
                     for (int by = 0; by < nBlkY; by++) {
                         const int dstPixY = by * nBlkSizeY[plane];
                         const int validH = std::min(nBlkSizeY[plane], frameH - dstPixY);
@@ -317,8 +317,8 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                         // Last block row outputs all nBlkSizeY rows; others output only stepY
                         int rowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : stepY;
-                        int outputHeight = std::min(rowsToOutput, vsapi->getFrameHeight(dst, plane) - by * stepY);
-                        int outputWidth = std::min(nWidth_B[plane], vsapi->getFrameWidth(dst, plane));
+                        int outputHeight = std::min(rowsToOutput, frameH - by * stepY);
+                        int outputWidth = std::min(nWidth_B[plane], frameW);
 
 
 
@@ -339,7 +339,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                 if (nLimit[plane] < pixelMax)
                     d->LimitChanges(pDst[plane], nDstPitches[plane],
                         pSrc[plane], nSrcPitches[plane],
-                        vsapi->getFrameWidth(dst, plane), vsapi->getFrameHeight(dst, plane), nLimit[plane]);
+                        frameW, frameH, nLimit[plane]);
             }
 
 
