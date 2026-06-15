@@ -1500,11 +1500,13 @@ void MotionBlockPyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, co
     }
 }
 
-MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, const VSAPI *vsapi) noexcept {
+MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, const VSAPI *vsapi) noexcept :
+    vsapi(vsapi) {
     LoadFrameData(src, maxLevel, prefix, vsapi);
 }
 
-MotionBlockPyramid::MotionBlockPyramid(VSNode *node, const std::string &prefix, const VSAPI *vsapi) {
+MotionBlockPyramid::MotionBlockPyramid(VSNode *node, const std::string &prefix, const VSAPI *vsapi) :
+    vsapi(vsapi) {
     char errorMsg[ERROR_SIZE] = {};
     const VSFrame *srcFrame = vsapi->getFrame(0, node, errorMsg, ERROR_SIZE);
     if (!srcFrame)
