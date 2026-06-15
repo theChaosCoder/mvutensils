@@ -16,6 +16,9 @@ enum InstructionSets {
 #define DEGRAIN_AVX2(radius, width, height) \
     { KEY(width, height, 8, AVX2), Degrain_avx2<radius, width, height> },
 
+#define DEGRAIN_AVX2_U16(radius, width, height) \
+    { KEY(width, height, 16, AVX2), Degrain_u16_avx2<radius, width, height> },
+
 #define DEGRAIN_LEVEL_AVX2(radius) \
     {\
         DEGRAIN_AVX2(radius, 8, 2)\
@@ -39,9 +42,27 @@ enum InstructionSets {
         DEGRAIN_AVX2(radius, 128, 32)\
         DEGRAIN_AVX2(radius, 128, 64)\
         DEGRAIN_AVX2(radius, 128, 128)\
+        DEGRAIN_AVX2_U16(radius, 16, 1)\
+        DEGRAIN_AVX2_U16(radius, 16, 2)\
+        DEGRAIN_AVX2_U16(radius, 16, 4)\
+        DEGRAIN_AVX2_U16(radius, 16, 8)\
+        DEGRAIN_AVX2_U16(radius, 16, 16)\
+        DEGRAIN_AVX2_U16(radius, 16, 32)\
+        DEGRAIN_AVX2_U16(radius, 32, 8)\
+        DEGRAIN_AVX2_U16(radius, 32, 16)\
+        DEGRAIN_AVX2_U16(radius, 32, 32)\
+        DEGRAIN_AVX2_U16(radius, 32, 64)\
+        DEGRAIN_AVX2_U16(radius, 64, 16)\
+        DEGRAIN_AVX2_U16(radius, 64, 32)\
+        DEGRAIN_AVX2_U16(radius, 64, 64)\
+        DEGRAIN_AVX2_U16(radius, 64, 128)\
+        DEGRAIN_AVX2_U16(radius, 128, 32)\
+        DEGRAIN_AVX2_U16(radius, 128, 64)\
+        DEGRAIN_AVX2_U16(radius, 128, 128)\
     }
 #else
 #define DEGRAIN_AVX2(radius, width, height)
+#define DEGRAIN_AVX2_U16(radius, width, height)
 #define DEGRAIN_LEVEL_AVX2(radius)
 #endif
 
@@ -116,6 +137,54 @@ static void Degrain_avx2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
             pRefs[i] += nRefPitches[i] * pitchMul;
             pRefs[i + 1] += nRefPitches[i + 1] * pitchMul;
         }
+    }
+}
+
+static inline void Degrain_u16_accum_avx2(__m256i &a0, __m256i &a1, __m256i v, __m256i w) {
+    __m256i lo = _mm256_mullo_epi16(v, w);
+    __m256i hi = _mm256_mulhi_epu16(v, w);
+    __m256i pa = _mm256_unpacklo_epi16(lo, hi);
+    __m256i pb = _mm256_unpackhi_epi16(lo, hi);
+    a0 = _mm256_add_epi32(a0, _mm256_permute2x128_si256(pa, pb, 0x20));
+    a1 = _mm256_add_epi32(a1, _mm256_permute2x128_si256(pa, pb, 0x31));
+}
+
+// 16-bit source variant (width >= 16; narrower sizes use the SSE2 16-bit path). 32-bit lane
+// accumulation with unsigned 16x16->32 products (mulhi_epu16, since 16-bit source exceeds the
+// signed range); the >>8 result fits uint16 (weights total 256) so packus_epi32 + permute4x64
+// relinearise it. unpack/permute2x128 keep the product order linear.
+template <int radius, int blockWidth, int blockHeight>
+static void Degrain_u16_avx2(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs8, const ptrdiff_t * MVU_RESTRICT nRefPitches, int WSrc, const int * MVU_RESTRICT WRefs) {
+    static_assert(blockWidth >= 16, "");
+
+    __m256i wsrc = _mm256_set1_epi16((short)WSrc);
+    __m256i wrefs[12];
+    for (int r = 0; r < radius * 2; r++)
+        wrefs[r] = _mm256_set1_epi16((short)WRefs[r]);
+
+    const __m256i k128 = _mm256_set1_epi32(128);
+
+    for (int y = 0; y < blockHeight; y++) {
+        const uint16_t *pSrc = (const uint16_t *)pSrc8;
+        uint16_t *pDst = (uint16_t *)pDst8;
+
+        for (int x = 0; x < blockWidth; x += 16) {
+            __m256i a0 = k128, a1 = k128;
+            Degrain_u16_accum_avx2(a0, a1, _mm256_loadu_si256((const __m256i *)&pSrc[x]), wsrc);
+            for (int r = 0; r < radius * 2; r++) {
+                const uint16_t *pRef = (const uint16_t *)pRefs8[r];
+                Degrain_u16_accum_avx2(a0, a1, _mm256_loadu_si256((const __m256i *)&pRef[x]), wrefs[r]);
+            }
+            a0 = _mm256_srli_epi32(a0, 8);
+            a1 = _mm256_srli_epi32(a1, 8);
+            __m256i out = _mm256_permute4x64_epi64(_mm256_packus_epi32(a0, a1), 0xD8);
+            _mm256_storeu_si256((__m256i *)&pDst[x], out);
+        }
+
+        pDst8 += nDstPitch;
+        pSrc8 += nSrcPitch;
+        for (int r = 0; r < radius * 2; r++)
+            pRefs8[r] += nRefPitches[r];
     }
 }
 #endif
