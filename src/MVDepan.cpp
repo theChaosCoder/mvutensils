@@ -3403,7 +3403,7 @@ static void fillBorderPrev(VSFrame *dst, DepanStabiliseData *d, int nbase, int n
     float dabsmin = 10000;
 
     transform tr[3];
-    tr[0] = *trdif; // luma transform
+    tr[0] = tr[1] = *trdif; // luma transform; tr[1] is the chroma base, adjusted below
 
     transform trcur;
 
@@ -3465,7 +3465,7 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
     float dabsmin = 1000;
 
     transform tr[3];
-    tr[0] = *trdif; // luma transform for current frame
+    tr[0] = tr[1] = *trdif; // luma transform for current frame; tr[1] is the chroma base, adjusted below
 
     transform trcur, trinv;
 
