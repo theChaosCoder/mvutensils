@@ -106,14 +106,6 @@ Planned changes/mysteries
 
 * Have an Analyse wrapper that outputs a full array of all clips required for DegrainN
 
-* Make block size and overlap compulsory in Super (probably)
-
-* Make overlaph/v and blksizeh/v simply blocksize=[w, h] and overlap=[w, h] arrays
-
-* Make overlap and blksize default to the values in the super clip for analyse/recalculate (maybe)
-
-* Make hpad/vpad work like blksize/overlap?
-
 * Have a general Degrain function that maps to the right DegrainN depending on the number of vectors passed (maybe, feedback welcome)
 
 * Big additional code cleanups
