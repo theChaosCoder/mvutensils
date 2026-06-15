@@ -35,7 +35,7 @@ Changes
 
 	* Greatly reduced memory usage
 
-* Analyse/Recalculate:
+* Analyse/Recalculate:	
     * Now takes blksize=[h, v] and overlap=[h, v] like Super. These values also default to the ones used when creating the super clip.
 
     * The dct argument was replaced with satd (true/false), satd=false is equivalent to dct=0 and satd=true is the same as dct=5 in the original mvtools
@@ -46,8 +46,10 @@ Changes
 	
 	* Removed the divide argument since no good use case seems to exist, in recalculate Recalculate you can already get an effect similar to divide=1/2 depending on smooth=False/True
     
-    * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction, as a result the little known fixed frame reference with negative delta in the original mvtools has been removed
-    
+    * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction. NOTE THAT NEGATIVE DELTA MEANS FORWARD, POSITIVE DELTA MEANS BACKWARD. If you previously used isb=False+delta=1 in mvtools you must now specify delta=-1
+
+    * Removed the little known fixed frame reference mode that could previously be used with negative deltas in the original mvtools
+	
     * Will throw an error when not all pixels can be processed due to the chosen blksize/overlap combination in contrast to the values used in Super. Note that generally halving blksize+overlap and reusing the Super clip will work. Other more esoteric splits may or may not require a new Super clip to be derived.
     
 	* Renamed lambda to mvlamda and global to globalmv to not collide with python keywords
@@ -121,7 +123,7 @@ Changes
 Planned changes/mysteries
 =========================
 
-* Does the delta sign direction make sense? Flip it?
+* The tff stuff present in most filters needs cleanup
 
 * Mask doesn't need source properties passed on or the possibility to specify the output format?
 

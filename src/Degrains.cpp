@@ -508,8 +508,6 @@ static void selectFunctions(DegrainData<radius> &d, const MotionBlockPyramid &ve
     d.DEGRAIN[1] = d.DEGRAIN[2] = selectDegrainFunction(radius, nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits);
 }
 
-
-// FIXME, is individual plane processing in degrainN even a thing?
 static inline void getProcessPlanesArg(const VSMap *in, bool process[3], const VSAPI *vsapi) {
     int m = vsapi->mapNumElements(in, "planes");
 
@@ -590,7 +588,6 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
             d->deltaFrame[r] = vectors[r]->nDeltaFrame;
 
-            // FIXME, delta direction later
             if (r % 2 == 1) {
                 if (d->deltaFrame[r] != -d->deltaFrame[r - 1])
                     throw std::runtime_error("forward and backward vector clips must be symmetric in their delta frame");
