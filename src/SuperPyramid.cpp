@@ -121,7 +121,7 @@ static void RB2F_C(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc
     for (int y = 0; y < nHeight; y++) {
         for (int x = 0; x < nWidth; x++)
             pDst[x] = (pSrc[x * 2] + pSrc[x * 2 + 1]
-                + pSrc[x * 2 + nSrcPitch + 1] + pSrc[x * 2 + nSrcPitch] + 2) / 4;
+                + pSrc[x * 2 + nSrcPitch + 1] + pSrc[x * 2 + nSrcPitch] + 2) >> 2;
 
         pDst += nDstPitch;
         pSrc += nSrcPitch * 2;
@@ -151,22 +151,22 @@ static void RB2BilinearFiltered(uint8_t *pDst, const uint8_t * MVU_RESTRICT pSrc
         if (y == 0 || y == nHeight - 1) {
             // Edge rows: simple average of the two source rows
             for (int x = 0; x < srcWidth2; x++)
-                tmp[x] = (row[x] + row[x + nSrcPitch] + 1) / 2;
+                tmp[x] = (row[x] + row[x + nSrcPitch] + 1) >> 1;
         } else {
             // Middle rows: 4-tap filter (1/8, 3/8, 3/8, 1/8) across rows 2y-1..2y+2
             for (int x = 0; x < srcWidth2; x++)
-                tmp[x] = (row[x - nSrcPitch] + (row[x] + row[x + nSrcPitch]) * 3 + row[x + nSrcPitch * 2] + 4) / 8;
+                tmp[x] = (row[x - nSrcPitch] + (row[x] + row[x + nSrcPitch]) * 3 + row[x + nSrcPitch * 2] + 4) >> 3;
         }
 
         // Horizontal filter: reduce tmp from srcWidth2 to nWidth, write to dst row y
         PixelType *dstRow = dst + y * nDstPitch;
 
-        dstRow[0] = (tmp[0] + tmp[1] + 1) / 2;
+        dstRow[0] = (tmp[0] + tmp[1] + 1) >> 1;
 
         for (int x = 1; x < nWidth - 1; x++)
-            dstRow[x] = (tmp[x * 2 - 1] + (tmp[x * 2] + tmp[x * 2 + 1]) * 3 + tmp[x * 2 + 2] + 4) / 8;
+            dstRow[x] = (tmp[x * 2 - 1] + (tmp[x * 2] + tmp[x * 2 + 1]) * 3 + tmp[x * 2 + 2] + 4) >> 3;
 
-        dstRow[nWidth - 1] = (tmp[(nWidth - 1) * 2] + tmp[(nWidth - 1) * 2 + 1] + 1) / 2;
+        dstRow[nWidth - 1] = (tmp[(nWidth - 1) * 2] + tmp[(nWidth - 1) * 2 + 1] + 1) >> 1;
     }
 }
 
@@ -193,7 +193,7 @@ static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
         if (y == 0 || y == nHeight - 1) {
             // Edge rows: simple average of the two source rows
             for (int x = 0; x < srcWidth2; x++)
-                tmp[x] = (row[x] + row[x + nSrcPitch] + 1) / 2;
+                tmp[x] = (row[x] + row[x + nSrcPitch] + 1) >> 1;
         } else {
             // Middle rows: 6-tap filter (1/32, 5/32, 10/32, 10/32, 5/32, 1/32) across rows 2y-2..2y+3
             for (int x = 0; x < srcWidth2; x++) {
@@ -214,7 +214,7 @@ static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
         // Horizontal filter: reduce tmp from srcWidth2 to nWidth, write to dst row y
         PixelType *dstRow = dst + y * nDstPitch;
 
-        dstRow[0] = (tmp[0] + tmp[1] + 1) / 2;
+        dstRow[0] = (tmp[0] + tmp[1] + 1) >> 1;
 
         for (int x = 1; x < nWidth - 1; x++) {
             int m0 = tmp[x * 2 - 2];
@@ -230,7 +230,7 @@ static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
             dstRow[x] = m0 >> 5;
         }
 
-        dstRow[nWidth - 1] = (tmp[(nWidth - 1) * 2] + tmp[(nWidth - 1) * 2 + 1] + 1) / 2;
+        dstRow[nWidth - 1] = (tmp[(nWidth - 1) * 2] + tmp[(nWidth - 1) * 2 + 1] + 1) >> 1;
     }
 }
 
