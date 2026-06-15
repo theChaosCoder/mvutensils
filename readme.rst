@@ -123,6 +123,8 @@ Changes
 Planned changes/mysteries
 =========================
 
+* The levels argument to Super and Analyse should probably be reworked somehow
+
 * The tff stuff present in most filters needs cleanup
 
 * Mask doesn't need source properties passed on or the possibility to specify the output format?
