@@ -391,8 +391,6 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
     };
     vsapi->createVideoFilter(out, "FlowFPS", &d->vi, (d->vi.format.bitsPerSample == 8) ? flowfpsGetFrame<uint8_t> : flowfpsGetFrame<uint16_t>, filterFree<FlowFPSData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
-
-    // FIXME, verify new fps being correctly set
 }
 
 void flowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {

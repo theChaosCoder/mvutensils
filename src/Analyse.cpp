@@ -12,9 +12,10 @@
 #include "MotionBlockPyramid.h"
 
 
-struct AnalyseDataExtra {
-    const VSVideoInfo *vi;
-    const VSVideoInfo *supervi;
+struct AnalyseData {
+    VSNode *node = nullptr;
+
+    const VSVideoInfo *vi = nullptr;
 
     int nBlkSizeX;
     int nBlkSizeY;
@@ -53,9 +54,15 @@ struct AnalyseDataExtra {
     bool tff_exists;
 
     std::string prefix;
-};
 
-typedef SingleNodeData<AnalyseDataExtra> AnalyseData;
+    const VSAPI *vsapi;
+
+    AnalyseData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~AnalyseData() {
+        vsapi->freeNode(node);
+    }
+};
 
 static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     AnalyseData *d = reinterpret_cast<AnalyseData *>(instanceData);
@@ -138,8 +145,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
             d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
         d->node = vsapi->mapGetNode(in, "super", 0, nullptr);
-        d->supervi = vsapi->getVideoInfo(d->node);
-        d->vi = d->supervi;
+        d->vi = vsapi->getVideoInfo(d->node);
 
         FramePyramid super(d->node, d->prefix, core, vsapi);
 

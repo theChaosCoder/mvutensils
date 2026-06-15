@@ -53,56 +53,6 @@ static inline void mvu_bitblt(void *dstp, ptrdiff_t dst_stride, const void *srcp
     }
 }
 
-template<typename T>
-struct SingleNodeData : public T {
-private:
-    const VSAPI *vsapi;
-public:
-    VSNode *node = nullptr;
-
-    explicit SingleNodeData(const VSAPI *vsapi) noexcept : T(), vsapi(vsapi) {
-    }
-
-    ~SingleNodeData() {
-        vsapi->freeNode(node);
-    }
-};
-
-
-// FIXME, drop this for naming clarity?
-template<typename T>
-struct DualNodeData : public T {
-private:
-    const VSAPI *vsapi;
-public:
-    VSNode *node1 = nullptr;
-    VSNode *node2 = nullptr;
-
-    explicit DualNodeData(const VSAPI *vsapi) noexcept : T(), vsapi(vsapi) {
-    }
-
-    ~DualNodeData() {
-        vsapi->freeNode(node1);
-        vsapi->freeNode(node2);
-    }
-};
-
-template<typename T>
-struct VariableNodeData : public T {
-private:
-    const VSAPI *vsapi;
-public:
-    std::vector<VSNode *> nodes;
-
-    explicit VariableNodeData(const VSAPI *vsapi) noexcept : T(), vsapi(vsapi) {
-    }
-
-    ~VariableNodeData() {
-        for (auto iter : nodes)
-            vsapi->freeNode(iter);
-    }
-};
-
 /* returns the biggest integer x such as 2^x <= i */
 inline static int ilog2(int i) {
     int result = 0;
@@ -112,7 +62,6 @@ inline static int ilog2(int i) {
     }
     return result;
 }
-
 
 template<typename T>
 static inline T *mvu_aligned_malloc(size_t size, size_t alignment) {

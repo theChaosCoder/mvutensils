@@ -26,31 +26,40 @@
 #include "Common.h"
 
 
-struct SCDetectionDataExtra {
+struct SCDetectionData {
+    VSNode *node = nullptr;
+    VSNode *vectors = nullptr;
+
     const VSVideoInfo *vi;
 
     int64_t thscd1;
     int thscd2;
 
     std::string prefix;
+
+    const VSAPI *vsapi;
+
+    SCDetectionData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~SCDetectionData() {
+        vsapi->freeNode(node);
+        vsapi->freeNode(vectors);
+    }
 };
-
-typedef DualNodeData<SCDetectionDataExtra> SCDetectionData;
-
 
 static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     SCDetectionData *d = reinterpret_cast<SCDetectionData *>(instanceData);
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(n, d->node1, frameCtx);
-        vsapi->requestFrameFilter(n, d->node2, frameCtx);
+        vsapi->requestFrameFilter(n, d->node, frameCtx);
+        vsapi->requestFrameFilter(n, d->vectors, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *src = vsapi->getFrameFilter(n, d->node1, frameCtx);
+        const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
         VSFrame *dst = vsapi->copyFrame(src, core);
         vsapi->freeFrame(src);
 
         try {
-            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->node2, frameCtx), 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
 
             constexpr const char *propNames[2] = { "_SceneChangePrev", "_SceneChangeNext" };
             VSMap *props = vsapi->getFramePropertiesRW(dst);
@@ -94,13 +103,13 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData,
         d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
 
-    d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
-    d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+    d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+    d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
-    d->vi = vsapi->getVideoInfo(d->node1);
+    d->vi = vsapi->getVideoInfo(d->node);
 
     try {
-        MotionBlockPyramid vectors(d->node2, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
 
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
     } catch (std::runtime_error &e) {
@@ -108,10 +117,9 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData,
         return;
     }
 
-
     VSFilterDependency deps[2] = { 
-        {d->node1, rpStrictSpatial},
-        {d->node2, rpStrictSpatial}
+        {d->node, rpStrictSpatial},
+        {d->vectors, rpStrictSpatial}
     };
 
     vsapi->createVideoFilter(out, "SCDetection", d->vi, scdetectionGetFrame, scdetectionFree, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);

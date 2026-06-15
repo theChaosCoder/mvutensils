@@ -10,7 +10,10 @@
 #include "Common.h"
 
 
-struct SuperDataExtra {
+struct SuperData {
+    VSNode *node = nullptr;
+    VSNode *pelclip = nullptr;
+
     VSVideoInfo vi;
 
     int nHPad;
@@ -28,26 +31,32 @@ struct SuperDataExtra {
     bool usePelClip;
 
     std::string prefix;
+
+    const VSAPI *vsapi;
+
+    SuperData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~SuperData() {
+        vsapi->freeNode(node);
+        vsapi->freeNode(pelclip);
+    }
 };
-
-typedef DualNodeData<SuperDataExtra> SuperData;
-
 
 static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     SuperData *d = reinterpret_cast<SuperData *>(instanceData);
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(n, d->node1, frameCtx);
+        vsapi->requestFrameFilter(n, d->node, frameCtx);
         if (d->usePelClip)
-            vsapi->requestFrameFilter(n, d->node2, frameCtx);
+            vsapi->requestFrameFilter(n, d->pelclip, frameCtx);
     } else if (activationReason == arAllFramesReady) {
         try {
-            const VSFrame *src = vsapi->getFrameFilter(n, d->node1, frameCtx);
+            const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
             FramePyramid pyramid(src, d->nLevels, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->nHPad, d->nVPad, d->rfilter, core, vsapi);
 
             if (d->usePelClip) {
-                const VSFrame *srcPel = vsapi->getFrameFilter(n, d->node2, frameCtx);
+                const VSFrame *srcPel = vsapi->getFrameFilter(n, d->pelclip, frameCtx);
                 pyramid.SetExternalPelPlanes(srcPel, d->nPel, core, vsapi);
                 vsapi->freeFrame(srcPel);
             } else if (d->nPel > 1) {
@@ -105,8 +114,8 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
         if (d->rfilter != RFilterParam::Simple && d->rfilter != RFilterParam::Bilinear && d->rfilter != RFilterParam::Cubic)
             throw std::runtime_error("rfilter must be between 0 and 2");
 
-        d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
-        d->vi = *vsapi->getVideoInfo(d->node1);
+        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        d->vi = *vsapi->getVideoInfo(d->node);
 
         if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 16 || d->vi.format.sampleType != stInteger ||
             d->vi.format.subSamplingW > 1 || d->vi.format.subSamplingH > 1 || (d->vi.format.colorFamily != cfYUV && d->vi.format.colorFamily != cfGray))
@@ -128,8 +137,8 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
         if (d->nLevels <= 0 || d->nLevels > nLevelsMax)
             d->nLevels = nLevelsMax;
 
-        d->node2 = vsapi->mapGetNode(in, "pelclip", 0, &err);
-        const VSVideoInfo *pelvi = d->node2 ? vsapi->getVideoInfo(d->node2) : nullptr;
+        d->pelclip = vsapi->mapGetNode(in, "pelclip", 0, &err);
+        const VSVideoInfo *pelvi = d->pelclip ? vsapi->getVideoInfo(d->pelclip) : nullptr;
 
         if (pelvi && (!vsh::isConstantVideoFormat(pelvi) || !vsh::isSameVideoFormat(&pelvi->format, &d->vi.format)))
             throw std::runtime_error("pelclip must have the same format as the input clip, and it must have constant dimensions");
@@ -150,8 +159,8 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
     }
 
     VSFilterDependency deps[2] = { 
-        { d->node1, rpStrictSpatial },
-        { d->node2, rpStrictSpatial }
+        { d->node, rpStrictSpatial },
+        { d->pelclip, rpStrictSpatial }
     };
 
     vsapi->createVideoFilter(out, "Super", &d->vi, superGetFrame, filterFree<SuperData>, fmParallel, deps, d->usePelClip ? 2 : 1, d.get(), core);

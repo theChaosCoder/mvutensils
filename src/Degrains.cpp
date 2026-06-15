@@ -37,7 +37,7 @@ struct DegrainData {
     VSNode *vectors[radius * 2] = {};
     int deltaFrame[radius * 2] = {};
 
-    const VSVideoInfo *vi;
+    const VSVideoInfo *vi = nullptr;
 
     int64_t thSAD[3];
     int nLimit[3];

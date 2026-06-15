@@ -5,7 +5,10 @@
 #include "MotionBlockPyramid.h"
 #include "Common.h"
 
-struct RecalculateDataExtra {
+struct RecalculateData {
+    VSNode *super = nullptr;
+    VSNode *vectors = nullptr;
+
     const VSVideoInfo *vi;
 
     int deltaFrame;
@@ -36,9 +39,16 @@ struct RecalculateDataExtra {
     bool tff_exists;
 
     std::string prefix;
-};
 
-typedef DualNodeData<RecalculateDataExtra> RecalculateData;
+    const VSAPI *vsapi;
+
+    RecalculateData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~RecalculateData() {
+        vsapi->freeNode(super);
+        vsapi->freeNode(vectors);
+    }
+};
 
 static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     RecalculateData *d = reinterpret_cast<RecalculateData *>(instanceData);
@@ -46,24 +56,18 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
     int nref = n + d->deltaFrame;
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(n, d->node2, frameCtx);
+        vsapi->requestFrameFilter(n, d->vectors, frameCtx);
 
         if (nref >= 0 && nref < d->vi->numFrames) {
-            if (n < nref) {
-                vsapi->requestFrameFilter(n, d->node1, frameCtx);
-                vsapi->requestFrameFilter(nref, d->node1, frameCtx);
-            } else {
-                vsapi->requestFrameFilter(nref, d->node1, frameCtx);
-                vsapi->requestFrameFilter(n, d->node1, frameCtx);
-            }
+            vsapi->requestFrameFilter(std::min(n, nref), d->super, frameCtx);
+            vsapi->requestFrameFilter(std::max(n, nref), d->super, frameCtx);
         } else { // too close to beginning/end of clip
-            vsapi->requestFrameFilter(n, d->node1, frameCtx);
+            vsapi->requestFrameFilter(n, d->super, frameCtx);
         }
     } else if (activationReason == arAllFramesReady) {
         try {
-            const VSFrame *src = vsapi->getFrameFilter(n, d->node1, frameCtx);
+            const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
             FramePyramid pSrcGOF(src, 1, d->prefix, core, vsapi);
-
 
             const VSMap *srcprops = vsapi->getFramePropertiesRO(src);
             int err;
@@ -76,10 +80,10 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
             if (d->tff_exists)
                 src_top_field = d->tff ^ (n % 2);
 
-            MotionBlockPyramid fgop(vsapi->getFrameFilter(n, d->node2, frameCtx), 1, d->prefix, core, vsapi);
+            MotionBlockPyramid fgop(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
 
             if (fgop.HasMotionVectors() && nref >= 0 && nref < d->vi->numFrames) {
-                const VSFrame *ref = vsapi->getFrameFilter(nref, d->node1, frameCtx);
+                const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
                 FramePyramid pRefGOF(ref, 1, d->prefix, core, vsapi);
                 const VSMap *refprops = vsapi->getFramePropertiesRO(ref);
 
@@ -123,9 +127,9 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         else
             d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-        d->node1 = vsapi->mapGetNode(in, "super", 0, nullptr);
-        d->vi = vsapi->getVideoInfo(d->node1);
-        FramePyramid super(d->node1, d->prefix, core, vsapi);
+        d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
+        d->vi = vsapi->getVideoInfo(d->super);
+        FramePyramid super(d->super, d->prefix, core, vsapi);
 
         GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", super.nBlkSizeX, super.nBlkSizeY, in, vsapi);
         GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", super.nOverlapX, super.nOverlapY, in, vsapi);
@@ -181,9 +185,9 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         if (d->pnew < 0 || d->pnew > 256)
             throw std::runtime_error("pnew must be between 0 and 256");
 
-        d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+        d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
-        MotionBlockPyramid vectors(d->node2, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
 
         d->deltaFrame = vectors.nDeltaFrame;
 
@@ -211,8 +215,8 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
     }
 
     VSFilterDependency deps[2] = { 
-        {d->node1, rpGeneral},
-        {d->node2, rpStrictSpatial},
+        {d->super, rpGeneral},
+        {d->vectors, rpStrictSpatial},
     };
 
     vsapi->createVideoFilter(out, "Recalculate", d->vi, recalculateGetFrame, filterFree<RecalculateData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);

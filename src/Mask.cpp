@@ -29,7 +29,8 @@
 #include "MaskResize.h"
 #include "Common.h"
 
-struct MaskDataExtra {
+struct MaskData {
+    VSNode *node = nullptr;
     VSVideoInfo vi;
 
     float fGamma;
@@ -50,9 +51,16 @@ struct MaskDataExtra {
 
     std::string prefix;
     std::string filterName;
+
+    const VSAPI *vsapi;
+
+    MaskData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~MaskData() {
+        vsapi->freeNode(node);
+    }
 };
 
-typedef SingleNodeData<MaskDataExtra> MaskData;
 
 template<typename PixelType>
 static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {

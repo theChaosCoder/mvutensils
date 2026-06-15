@@ -34,8 +34,8 @@ struct CompensateData {
     VSNode *super = nullptr;
     VSNode *vectors = nullptr;
 
-    const VSVideoInfo *vi;
-    const VSVideoInfo *supervi;
+    const VSVideoInfo *vi = nullptr;
+    const VSVideoInfo *supervi = nullptr;
 
     int scBehavior;
     int64_t thSAD;
