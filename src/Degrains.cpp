@@ -140,10 +140,8 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         bool isUsable[radius * 2] = {};
 
         try {
-
             std::optional<MotionBlockPyramid> fgops[radius * 2];
-
-            const VSFrame *refFrames[radius * 2] = {};
+            std::optional<FramePyramid> pRefGOF[radius * 2];
 
             for (int r = 0; r < radius * 2; r++) {
                 const VSFrame *frame = vsapi->getFrameFilter(n, d->vectors[r], frameCtx);
@@ -152,7 +150,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                 if (isUsable[r]) {
                     int offset = fgops[r]->nDeltaFrame;
-                    refFrames[r] = vsapi->getFrameFilter(n + offset, d->super, frameCtx);
+                    pRefGOF[r].emplace(vsapi->getFrameFilter(n + offset, d->super, frameCtx), 1, d->prefix, vsapi);
                 }
             }
 
@@ -181,11 +179,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
             const int *nHeight_B = d->nHeight_B;
             const int64_t *thSAD = d->thSAD;
             const int *nLimit = d->nLimit;
-
-            std::optional<FramePyramid> pRefGOF[radius * 2];
-            for (int r = 0; r < radius * 2; r++)
-                if (isUsable[r])
-                    pRefGOF[r].emplace(refFrames[r], 1, d->prefix, vsapi);
 
             OverlapWindows *OverWins[3] = { &d->OverWins[0], &d->OverWins[1], &d->OverWins[2] };
             std::unique_ptr<uint8_t[]> DstTempAlloc;
