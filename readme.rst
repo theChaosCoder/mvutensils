@@ -63,6 +63,9 @@ Changes
 
 	* Greatly reduced memory usage
 
+* Degrain:
+	* A convenience function that deduces the correct DegrainN call from the number of passed vectors, created to combine with AnalyseMany
+
 * Mask:
 	* Split into 3 functions that correspond to kind 0-2 called VectorLengthMask, SADMask and OcclusionMask, obviously the kind argument has been removed
 	
@@ -107,9 +110,7 @@ Planned changes/mysteries
 
 * Does the delta sign direction make sense? Flip it?
 
-* Rename lambda and global arguments
-
-* Have a general Degrain function that maps to the right DegrainN depending on the number of vectors passed (maybe, feedback welcome)
+* Have FlowBlur, FlowFPS and FlowInter take a vectors=[bw, fw] argument instead
 
 * Big additional code cleanups
 

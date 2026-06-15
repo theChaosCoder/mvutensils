@@ -317,7 +317,7 @@ static void VS_CC analyseManyCreate(const VSMap *in, VSMap *out, void *userData,
                 vsapi->freeMap(ret);
                 return false;
             } else {
-                vsapi->mapConsumeNode(ret, "clip", vsapi->mapGetNode(ret, "clip", 0, nullptr), maAppend);
+                vsapi->mapConsumeNode(out, "clip", vsapi->mapGetNode(ret, "clip", 0, nullptr), maAppend);
                 vsapi->freeMap(ret);
                 return true;
             }

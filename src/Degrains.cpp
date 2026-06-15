@@ -535,7 +535,6 @@ template <int radius>
 static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<DegrainData<radius>> d(new DegrainData<radius>(vsapi));
 
-    
     d->filterName = "Degrain" + std::to_string(radius);
 
     int err;
@@ -693,6 +692,32 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
     }
 }
 
+static void VS_CC degrainNCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+    int numElems = vsapi->mapNumElements(in, "vectors");
+    if (numElems % 2 != 0) {
+        vsapi->mapSetError(out, "Degrain: number of vectors must be even");
+        return;
+    }
+
+    numElems /= 2;
+
+    if (numElems < 1 || numElems > 6) {
+        vsapi->mapSetError(out, "Degrain: number of vector pairs must be between 1 and 6");
+        return;
+    }
+
+    std::string functionName = "Degrain" + std::to_string(numElems);
+    VSPlugin *thisPlugin = vsapi->getPluginByID("com.vapoursynth.mvutensils", core);
+
+    VSMap *ret = vsapi->invoke(thisPlugin, functionName.c_str(), in);
+    if (vsapi->mapGetError(ret)) {
+        vsapi->mapSetError(out, ("Degrain: " + std::string(vsapi->mapGetError(ret))).c_str());
+    } else {
+        vsapi->mapConsumeNode(out, "clip", vsapi->mapGetNode(ret, "clip", 0, nullptr), maAppend);
+    }
+    vsapi->freeMap(ret);
+}
+
 constexpr const char *degrain_args =
     "clip:vnode;"
     "super:vnode;"
@@ -721,14 +746,18 @@ void degrainsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  degrainCreate<3>, nullptr, plugin);
     vspapi->registerFunction("Degrain4",
                  degrain_args,
-                "clip:vnode;",
+                 "clip:vnode;",
                  degrainCreate<4>, nullptr, plugin);
     vspapi->registerFunction("Degrain5",
-                degrain_args,
-                "clip:vnode;",
+                 degrain_args,
+                 "clip:vnode;",
                  degrainCreate<5>, nullptr, plugin);
     vspapi->registerFunction("Degrain6",
-                degrain_args,
-                "clip:vnode;",
+                 degrain_args,
+                 "clip:vnode;",
                  degrainCreate<6>, nullptr, plugin);
+    vspapi->registerFunction("Degrain",
+                 degrain_args,
+                 "clip:vnode;",
+                 degrainNCreate, nullptr, plugin);
 }
