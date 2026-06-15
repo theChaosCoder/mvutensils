@@ -18,6 +18,7 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include <VapourSynth4.h>
+#include <VSHelper4.h>
 
 #include "Common.h"
 #include "SuperPyramid.h"
@@ -282,63 +283,6 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
     return nullptr;
 }
 
-// FIXME, use reducerational in vshelper?
-static inline void setFPS(VSVideoInfo *vi, int64_t num, int64_t den) {
-    if (num <= 0 || den <= 0) {
-        vi->fpsNum = 0;
-        vi->fpsDen = 1;
-    } else {
-        int64_t x = num;
-        int64_t y = den;
-        while (y) {
-            int64_t t = x % y;
-            x = y;
-            y = t;
-        }
-        vi->fpsNum = num / x;
-        vi->fpsDen = den / x;
-    }
-}
-
-// FIXME, reducerational in vshelper can probably replace it but leave it for now
-// general common divisor (from wikipedia)
-inline static int64_t gcd(int64_t u, int64_t v) {
-    int shift;
-
-    /* GCD(0,x) := x */
-    if (u == 0 || v == 0)
-        return u | v;
-
-    /* Let shift := lg K, where K is the greatest power of 2
-       dividing both u and v. */
-    for (shift = 0; ((u | v) & 1) == 0; ++shift) {
-        u >>= 1;
-        v >>= 1;
-    }
-
-    while ((u & 1) == 0)
-        u >>= 1;
-
-    /* From here on, u is always odd. */
-    do {
-        while ((v & 1) == 0) /* Loop X */
-            v >>= 1;
-
-        /* Now u and v are both odd, so diff(u, v) is even.
-           Let u = min(u, v), v = diff(u, v)/2. */
-        if (u < v) {
-            v -= u;
-        } else {
-            int64_t diff = u - v;
-            u = v;
-            v = diff;
-        }
-        v >>= 1;
-    } while (v != 0);
-
-    return u << shift;
-}
-
 static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<FlowFPSData> d(new FlowFPSData(vsapi));
     int err;
@@ -421,30 +365,19 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->vi.fpsNum == 0 || d->vi.fpsDen == 0)
             throw std::runtime_error("input clip must have known framerate");
 
-        int64_t numeratorOld = d->vi.fpsNum;
-        int64_t denominatorOld = d->vi.fpsDen;
-        int64_t numerator, denominator;
-
+        d->fa = d->vi.fpsNum;
+        d->fb = d->vi.fpsDen;
         if (d->num != 0 && d->den != 0) {
-            numerator = d->num;
-            denominator = d->den;
+            d->vi.fpsNum = d->num;
+            d->vi.fpsDen = d->den;
         } else {
-            numerator = numeratorOld * 2; // double fps by default
-            denominator = denominatorOld;
+            d->vi.fpsNum *= 2;
         }
 
-        //  safe for big numbers since v2.1
-        d->fa = denominator * numeratorOld;
-        d->fb = numerator * denominatorOld;
-        int64_t fgcd = gcd(d->fa, d->fb); // general common divisor
-        d->fa /= fgcd;
-        d->fb /= fgcd;
-
-        setFPS(&d->vi, numerator, denominator);
+        vsh::reduceRational(&d->vi.fpsNum, &d->vi.fpsDen);
+        vsh::muldivRational(&d->fa, &d->fb, d->vi.fpsDen, d->vi.fpsNum);
 
         d->vi.numFrames = (int)(d->vi.numFrames * d->fb / d->fa);
-        d->vi.fpsDen = d->fa;
-        d->vi.fpsNum = d->fb;
     } catch (std::runtime_error &e) {
         vsapi->mapSetError(out, ("FlowFPS: " + std::string(e.what())).c_str());
         return;
