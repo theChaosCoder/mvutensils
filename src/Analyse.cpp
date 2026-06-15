@@ -176,7 +176,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (err)
             d->truemotion = true;
 
-        d->nLambda = vsapi->mapGetIntSaturated(in, "lambda", 0, &err);
+        d->nLambda = vsapi->mapGetIntSaturated(in, "mvlambda", 0, &err);
         if (err)
             d->nLambda = d->truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
 
@@ -188,7 +188,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (err)
             d->plevel = d->truemotion ? 1 : 0;
 
-        d->global = !!vsapi->mapGetInt(in, "global", 0, &err);
+        d->global = !!vsapi->mapGetInt(in, "globalmv", 0, &err);
         if (err)
             d->global = d->truemotion;
 
@@ -340,13 +340,13 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "search:int:opt;"
                  "searchparam:int:opt;"
                  "pelsearch:int:opt;"
-                 "lambda:int:opt;"
+                 "mvlambda:int:opt;"
                  "chroma:int:opt;"
                  "delta:int:opt;"
                  "truemotion:int:opt;"
                  "lsad:int:opt;"
                  "plevel:int:opt;"
-                 "global:int:opt;"
+                 "globalmv:int:opt;"
                  "pnew:int:opt;"
                  "pzero:int:opt;"
                  "pglobal:int:opt;"
@@ -369,13 +369,13 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "search:int:opt;"
                  "searchparam:int:opt;"
                  "pelsearch:int:opt;"
-                 "lambda:int:opt;"
+                 "mvlambda:int:opt;"
                  "chroma:int:opt;"
                  "delta:int:opt;"
                  "truemotion:int:opt;"
                  "lsad:int:opt;"
                  "plevel:int:opt;"
-                 "global:int:opt;"
+                 "globalmv:int:opt;"
                  "pnew:int:opt;"
                  "pzero:int:opt;"
                  "pglobal:int:opt;"

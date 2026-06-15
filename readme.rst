@@ -50,6 +50,8 @@ Changes
     
     * Will throw an error when not all pixels can be processed due to the chosen blksize/overlap combination in contrast to the values used in Super. Note that generally halving blksize+overlap and reusing the Super clip will work. Other more esoteric splits may or may not require a new Super clip to be derived.
     
+	* Renamed lambda to mvlamda and global to globalmv to not collide with python keywords
+	
 * AnalyseMany:
 	* A helper function to generate a multiple analysis clips quickly to pass to DegrainN and friends, takes the same arguments as Analyse except that delta is a positive number controlling the step size backward and forward. The radius argument determines how many vectors are produced. For example radius=2 will return [Analyse(delta=1), Analyse(delta=-1), Analyse(delta=2), Analyse(delta=-2)]
 	

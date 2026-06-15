@@ -148,7 +148,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         if (err)
             d->truemotion = 1;
 
-        d->nLambda = vsapi->mapGetIntSaturated(in, "lambda", 0, &err);
+        d->nLambda = vsapi->mapGetIntSaturated(in, "mvlambda", 0, &err);
         if (err)
             d->nLambda = d->truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
 
@@ -229,7 +229,7 @@ void recalculateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "blksize:int[]:opt;"
                  "search:int:opt;"
                  "searchparam:int:opt;"
-                 "lambda:int:opt;"
+                 "mvlambda:int:opt;"
                  "chroma:int:opt;"
                  "truemotion:int:opt;"
                  "pnew:int:opt;"
