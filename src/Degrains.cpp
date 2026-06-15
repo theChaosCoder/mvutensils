@@ -277,7 +277,10 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                     memset(DstTemp, 0, dstTempPitch * nBlkSizeY[plane]);
 
                     for (int by = 0; by < nBlkY; by++) {
-                        int wby = ((by + nBlkY - 3) / (nBlkY - 2)) * 3;
+                        // top (0) / middle (3) / bottom (6) window row; comparison form is
+                        // equivalent to the old ((by + nBlkY - 3) / (nBlkY - 2)) * 3 for
+                        // nBlkY >= 3 but avoids the division by zero when nBlkY == 2.
+                        int wby = (by == 0) ? 0 : (by == nBlkY - 1) ? 6 : 3;
                         int wbx = 0;
                         int xx = 0;
 
