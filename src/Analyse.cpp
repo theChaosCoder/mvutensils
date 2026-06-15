@@ -321,9 +321,9 @@ static void VS_CC analyseManyCreate(const VSMap *in, VSMap *out, void *userData,
             }
         };
 
-        if (!InvokeAnalyse(r))
+        if (!InvokeAnalyse(r * delta))
             break;
-        if (!InvokeAnalyse(-r))
+        if (!InvokeAnalyse(-r * delta))
             break;
     }
 
