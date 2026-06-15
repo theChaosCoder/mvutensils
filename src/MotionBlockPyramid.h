@@ -266,7 +266,7 @@ private:
     State state = State::Invalid;
     std::vector<MotionBlockLevel> pyramidLevels;
     const VSFrame *sourceFrame = nullptr;
-    const VSAPI *vsapi;
+    const VSAPI *vsapi = nullptr;
     void LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi);
 public:
     // The FramePyramid in src is only used as a template for the internal data structures, the actual motion estimation is performed on the frames passed to SearchMVs

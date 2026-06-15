@@ -1424,6 +1424,7 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
 
 void MotionBlockPyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi) {
     sourceFrame = srcFrame;
+    this->vsapi = vsapi;
 
     if (!srcFrame)
         return;
