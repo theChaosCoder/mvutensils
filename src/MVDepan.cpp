@@ -654,12 +654,12 @@ static void frame_data2d(const uint8_t *srcp, ptrdiff_t pitch, float * MVU_RESTR
 
     srcp += pitch * h0 + winleft * bytes_per_sample; // offset of window data
     for (j = 0; j < winy; j++) {
-        if (bytes_per_sample == 8) {
+        if (bytes_per_sample == 1) {
             for (i = 0; i < winx; i += 2) {
                 realdata[i] = srcp[i];         // real part
                 realdata[i + 1] = srcp[i + 1]; // real part
             }
-        } else if (bytes_per_sample == 32) {
+        } else if (bytes_per_sample == 4) {
             for (i = 0; i < winx; i += 2) {
                 const float *srcpf = (const float *)srcp;
                 realdata[i] = srcpf[i];         // real part
