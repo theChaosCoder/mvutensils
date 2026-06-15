@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <stdexcept>
+#include <cstring>
 #ifdef _WIN32
 #include <malloc.h>
 #else 
