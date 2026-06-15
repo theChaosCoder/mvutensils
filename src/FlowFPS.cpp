@@ -35,7 +35,6 @@ struct FlowFPSData {
     VSNode *mvbw = nullptr;
     VSNode *mvfw = nullptr;
 
-    int64_t num, den;
     bool extraMask;
     float ml;
     bool blend;
@@ -287,13 +286,13 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
     std::unique_ptr<FlowFPSData> d(new FlowFPSData(vsapi));
     int err;
 
-    d->num = vsapi->mapGetInt(in, "num", 0, &err);
+    int64_t num = vsapi->mapGetInt(in, "num", 0, &err);
     if (err)
-        d->num = 25;
+        num = 25;
 
-    d->den = vsapi->mapGetInt(in, "den", 0, &err);
+    int64_t den = vsapi->mapGetInt(in, "den", 0, &err);
     if (err)
-        d->den = 1;
+        den = 1;
 
     d->extraMask = !!vsapi->mapGetIntSaturated(in, "extramask", 0, &err);
     if (err)
@@ -367,9 +366,9 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         d->fa = d->vi.fpsNum;
         d->fb = d->vi.fpsDen;
-        if (d->num != 0 && d->den != 0) {
-            d->vi.fpsNum = d->num;
-            d->vi.fpsDen = d->den;
+        if (num != 0 && den != 0) {
+            d->vi.fpsNum = num;
+            d->vi.fpsDen = den;
         } else {
             d->vi.fpsNum *= 2;
         }

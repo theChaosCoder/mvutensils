@@ -37,7 +37,6 @@ struct CompensateData {
     const VSVideoInfo *vi = nullptr;
     const VSVideoInfo *supervi = nullptr;
 
-    int scBehavior;
     int64_t thSAD;
     int fields;
     int time256;
@@ -319,10 +318,6 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
     std::unique_ptr<CompensateData> d(new CompensateData(vsapi));
     int err;
 
-    d->scBehavior = !!vsapi->mapGetInt(in, "scbehavior", 0, &err);
-    if (err)
-        d->scBehavior = 1;
-
     d->thSAD = vsapi->mapGetInt(in, "thsad", 0, &err);
     if (err)
         d->thSAD = 10000;
@@ -431,7 +426,6 @@ void compensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "clip:vnode;"
                  "super:vnode;"
                  "vectors:vnode;"
-                 "scbehavior:int:opt;"
                  "thsad:int:opt;"
                  "fields:int:opt;"
                  "time:float:opt;"

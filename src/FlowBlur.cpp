@@ -35,7 +35,6 @@ struct FlowBlurData {
     VSNode *mvbw = nullptr;
     VSNode *mvfw = nullptr;
 
-    float blur;
     int prec;
     int64_t thscd1;
     int thscd2;
@@ -210,9 +209,9 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VS
     std::unique_ptr<FlowBlurData> d(new FlowBlurData(vsapi));
     int err;
 
-    d->blur = (float)vsapi->mapGetFloat(in, "blur", 0, &err);
+    float blur = vsapi->mapGetFloatSaturated(in, "blur", 0, &err);
     if (err)
-        d->blur = 50.0f;
+        blur = 50.0f;
 
     d->prec = vsapi->mapGetIntSaturated(in, "prec", 0, &err);
     if (err)
@@ -234,13 +233,13 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VS
 
     try {
 
-        if (d->blur < 0.0f || d->blur > 200.0f)
+        if (blur < 0.0f || blur > 200.0f)
             throw std::runtime_error("blur must be between 0 and 200");
 
         if (d->prec < 1)
             throw std::runtime_error("prec must be at least 1");
 
-        d->blur256 = (int)(d->blur * 256.0f / 200.0f);
+        d->blur256 = (int)(blur * 256.0f / 200.0f);
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 

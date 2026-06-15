@@ -58,7 +58,7 @@ Changes
     * A helper function to generate a multiple analysis clips quickly to pass to DegrainN and friends, takes the same arguments as Analyse except that delta is a positive number controlling the step size backward and forward. The radius argument determines how many vectors are produced and defaults to 1. For example radius=2 will return [Analyse(delta=1), Analyse(delta=-1), Analyse(delta=2), Analyse(delta=-2)]
     
 * Compensate:
-    * None
+    * Removed scbehavior argument, its only function was to decide which source frame to copy the unprocessed parts of the frame from around scene changes
     
 * DegrainN:
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors

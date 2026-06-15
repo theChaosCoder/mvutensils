@@ -30,7 +30,6 @@ struct RecalculateData {
 
     int searchparam;
     bool chroma;
-    bool truemotion;
     bool smooth;
     int64_t thSAD;
 
@@ -101,7 +100,7 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
                     // vertical shift of fields for fieldbased video at finest level pel2
                 }
 
-                fgop.RecalculateMVs(pSrcGOF, pRefGOF, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->nPel, d->searchType, d->searchparam, d->nLambda, d->pnew, fieldShift, d->thSAD, d->useSatd, d->smooth, d->meander);
+                fgop.RecalculateMVs(pSrcGOF, pRefGOF, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->chroma, d->searchType, d->searchparam, d->nLambda, d->pnew, fieldShift, d->thSAD, d->useSatd, d->smooth, d->meander);
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
@@ -154,17 +153,17 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
         if (err)
             d->chroma = 1;
 
-        d->truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
+        bool truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
         if (err)
-            d->truemotion = 1;
+            truemotion = true;
 
         d->nLambda = vsapi->mapGetIntSaturated(in, "mvlambda", 0, &err);
         if (err)
-            d->nLambda = d->truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
+            d->nLambda = truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
 
         d->pnew = vsapi->mapGetIntSaturated(in, "pnew", 0, &err);
         if (err)
-            d->pnew = d->truemotion ? 50 : 0; // relative to 256
+            d->pnew = truemotion ? 50 : 0; // relative to 256
 
         d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
 
