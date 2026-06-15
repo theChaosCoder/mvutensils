@@ -131,6 +131,12 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
     int err;
 
     try {
+        const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+        if (prefix)
+            d->prefix = prefix;
+        else
+            d->prefix = DEFAULT_MVUTENSILS_PREFIX;
+
         d->node = vsapi->mapGetNode(in, "super", 0, nullptr);
         d->supervi = vsapi->getVideoInfo(d->node);
         d->vi = d->supervi;
@@ -215,12 +221,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
         d->tff_exists = !err;
 
-        const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
-        if (prefix)
-            d->prefix = prefix;
-        else
-            d->prefix = DEFAULT_MVUTENSILS_PREFIX;
-
         if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
             throw std::runtime_error("search must be between 0 and 5");
 
@@ -304,7 +304,7 @@ static void VS_CC analyseManyCreate(const VSMap *in, VSMap *out, void *userData,
 
     for (int r = 1; r <= radius; ++r) {
         auto InvokeAnalyse = [&](int delta) {
-            vsapi->mapSetInt(args, "delta", r, maReplace);
+            vsapi->mapSetInt(args, "delta", delta, maReplace);
             VSMap *ret = vsapi->invoke(thisPlugin, "Analyse", args);
             if (vsapi->mapGetError(ret)) {
                 vsapi->mapSetError(out, ("AnalyseMany: " + std::string(vsapi->mapGetError(ret))).c_str());
