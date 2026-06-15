@@ -22,7 +22,6 @@ struct RecalculateDataExtra {
 
     int nPel;
     int pnew;  
-    MotionBlockPyramid::DivideExtra divideExtra; 
     bool meander;
 
     bool useSatd;
@@ -100,8 +99,6 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
                 }
 
                 fgop.RecalculateMVs(pSrcGOF, pRefGOF, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->nPel, d->searchType, d->searchparam, d->nLambda, d->pnew, fieldShift, d->thSAD, d->useSatd, d->smooth, d->meander);
-
-                fgop.DivideVectorsExtra(d->divideExtra);
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
@@ -171,8 +168,6 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
 
     d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
 
-    d->divideExtra = static_cast<MotionBlockPyramid::DivideExtra>(vsapi->mapGetIntSaturated(in, "divide", 0, &err));
-
     d->meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
     if (err)
         d->meander = true;
@@ -194,10 +189,6 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
 
         if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
             throw std::runtime_error("satd cannot work with 16x2 blocks");
-
-        if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && d->divideExtra != MotionBlockPyramid::DivideExtra::Point && d->divideExtra != MotionBlockPyramid::DivideExtra::Median)
-            throw std::runtime_error("divide must be between 0 and 2");
-
 
         if ((d->nBlkSizeX != 4 || d->nBlkSizeY != 4) &&
             (d->nBlkSizeX != 8 || d->nBlkSizeY != 4) &&
@@ -221,19 +212,12 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
             d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2)
             throw std::runtime_error("overlap must be at most half of blksize, overlapv must be at most half of blksizev, and they both need to be at least 0");
 
-        if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8))
-            throw std::runtime_error("blksize and blksizev must be at least 8 when divide>0");
-
         d->node1 = vsapi->mapGetNode(in, "super", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node1);
 
         if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
             d->nOverlapY % (1 << d->vi->format.subSamplingH))
             throw std::runtime_error("The requested overlap is incompatible with the super clip's subsampling");
-
-        if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
-            d->nOverlapY % (2 << d->vi->format.subSamplingH)))
-            throw std::runtime_error("overlaph and overlapv must be multiples of 2 or 4 when divide>0, depending on the super clip's subsampling");
 
         FramePyramid super(d->node1, d->prefix, core, vsapi);
 
@@ -292,7 +276,6 @@ void recalculateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "pnew:int:opt;"
                  "overlaph:int:opt;"
                  "overlapv:int:opt;"
-                 "divide:int:opt;"
                  "meander:int:opt;"
                  "fields:int:opt;"
                  "tff:int:opt;"

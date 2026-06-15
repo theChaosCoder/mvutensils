@@ -31,6 +31,8 @@ Changes
     * The rfilter argument was changed and mode 1/3 was removed, as a result the new mapping is 2=>1 and 4=>2
     
     * The search and pelsearch argument had mode 0 and 1 removed, as a result all remaining mode have been adjusted by -2
+	
+	* Removed the divide argument since no good use case seems to exist, in recalculate Recalculate you can already get an effect similar to divide=1/2 depending on smooth=False/True
     
     * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction
     

@@ -11,6 +11,11 @@
 #include "CPU.h"
 #endif
 
+#ifdef _MSC_VER
+#define FORCE_INLINE __forceinline
+#else
+#define FORCE_INLINE __attribute__((always_inline))
+#endif
 
 ///////////////////////////////////
 
@@ -214,147 +219,9 @@ void MotionBlockLevel::EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const
     }
 }
 
-
-////////////////////////////////////////////////
-
-static inline int Median3(int a, int b, int c) noexcept {
-    // b a c || c a b
-    if (((b <= a) && (a <= c)) || ((c <= a) && (a <= b)))
-        return a;
-
-    // a b c || c b a
-    else if (((a <= b) && (b <= c)) || ((c <= b) && (b <= a)))
-        return b;
-
-    // b c a || a c b
-    else
-        return c;
-}
-
-static void GetMedian(int &vx, int &vy, int vx1, int vy1, int vx2, int vy2, int vx3, int vy3) noexcept {
-    vx = Median3(vx1, vx2, vx3);
-    vy = Median3(vy1, vy2, vy3);
-    if ((vx == vx1 && vy == vy1) || (vx == vx2 && vy == vy2) || (vx == vx3 && vy == vy3))
-        return;
-    else {
-        vx = vx1;
-        vy = vy1;
-    }
-}
-
-void MotionBlockPyramid::DivideVectorsExtra(DivideExtra divideExtra) {
-    this->divideExtra = divideExtra;
-
-    if (divideExtra == DivideExtra::No) {
-        dividedVectors.clear();
-        return;
-    }
-
-    if (!HasMotionVectors())
-        throw MotionBlockPyramidError("DivideVectorsExtra: no vectors available to divide");
-
-    dividedVectors.resize(pyramidLevels[0].nBlkCount * 4);
-
-    const VECTOR *blocks_in = pyramidLevels[0].vectors.data();
-    VECTOR *blocks_out = dividedVectors.data();
-
-    int nBlkY = pyramidLevels[0].nBlkY;
-    int nBlkX = pyramidLevels[0].nBlkX;
-
-    // top blocks
-    for (int bx = 0; bx < nBlkX; bx++) {
-        VECTOR block = blocks_in[bx];
-        block.sad >>= 2;
-
-        blocks_out[bx * 2] = block;                 // top left subblock
-        blocks_out[bx * 2 + 1] = block;             // top right subblock
-        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
-        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
-    }
-
-    blocks_out += nBlkX * 4;
-    blocks_in += nBlkX;
-
-    // middle blocks
-    for (int by = 1; by < nBlkY - 1; by++) {
-        int bx = 0;
-
-        VECTOR block = blocks_in[bx];
-        block.sad >>= 2;
-
-        blocks_out[bx * 2] = block;                 // top left subblock
-        blocks_out[bx * 2 + 1] = block;             // top right subblock
-        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
-        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
-
-        for (bx = 1; bx < nBlkX - 1; bx++) {
-            block = blocks_in[bx];
-            block.sad >>= 2;
-
-            blocks_out[bx * 2] = block;                 // top left subblock
-            blocks_out[bx * 2 + 1] = block;             // top right subblock
-            blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
-            blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
-
-            if (divideExtra == DivideExtra::Median) {
-                GetMedian(blocks_out[bx * 2].x, blocks_out[bx * 2].y,
-                    blocks_in[bx].x, blocks_in[bx].y,
-                    blocks_in[bx - 1].x, blocks_in[bx - 1].y,
-                    blocks_in[bx - nBlkX].x, blocks_in[bx - nBlkX].y);
-
-                GetMedian(blocks_out[bx * 2 + 1].x, blocks_out[bx * 2 + 1].y,
-                    blocks_in[bx].x, blocks_in[bx].y,
-                    blocks_in[bx + 1].x, blocks_in[bx + 1].y,
-                    blocks_in[bx - nBlkX].x, blocks_in[bx - nBlkX].y);
-
-                GetMedian(blocks_out[bx * 2 + nBlkX * 2].x, blocks_out[bx * 2 + nBlkX * 2].y,
-                    blocks_in[bx].x, blocks_in[bx].y,
-                    blocks_in[bx - 1].x, blocks_in[bx - 1].y,
-                    blocks_in[bx + nBlkX].x, blocks_in[bx + nBlkX].y);
-
-                GetMedian(blocks_out[bx * 2 + nBlkX * 2 + 1].x, blocks_out[bx * 2 + nBlkX * 2 + 1].y,
-                    blocks_in[bx].x, blocks_in[bx].y,
-                    blocks_in[bx + 1].x, blocks_in[bx + 1].y,
-                    blocks_in[bx + nBlkX].x, blocks_in[bx + nBlkX].y);
-            }
-        }
-
-        bx = nBlkX - 1;
-
-        block = blocks_in[bx];
-        block.sad >>= 2;
-
-        blocks_out[bx * 2] = block;                 // top left subblock
-        blocks_out[bx * 2 + 1] = block;             // top right subblock
-        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
-        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
-
-        blocks_out += nBlkX * 4;
-        blocks_in += nBlkX;
-    }
-
-    // bottom blocks
-    for (int bx = 0; bx < nBlkX; bx++) {
-        VECTOR block = blocks_in[bx];
-        block.sad >>= 2;
-
-        blocks_out[bx * 2] = block;                 // top left subblock
-        blocks_out[bx * 2 + 1] = block;             // top right subblock
-        blocks_out[bx * 2 + nBlkX * 2] = block;     // bottom left subblock
-        blocks_out[bx * 2 + nBlkX * 2 + 1] = block; // bottom right subblock
-    }
-}
-
-
 /////////////////////////////////////////////////////////////
 
 
-
-#ifdef _MSC_VER
-#define FORCE_INLINE __forceinline
-#else
-#define FORCE_INLINE __attribute__((always_inline))
-#endif
 
 
 /* fetch the block in the reference frame, which is pointed by the vector (vx, vy) */
@@ -1763,7 +1630,7 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std:
     vsapi->mapSetInt(props, (prefix + "AnalysisHPad").c_str(), nHPadding, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisVPad").c_str(), nVPadding, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisPel").c_str(), nPel, maReplace);
-    vsapi->mapSetInt(props, (prefix + "AnalysisLevels").c_str(), pyramidLevels.size() + (divideExtra == DivideExtra::No ? 0 : 1), maReplace);
+    vsapi->mapSetInt(props, (prefix + "AnalysisLevels").c_str(), pyramidLevels.size(), maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisChroma").c_str(), chroma, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisXRatioUV").c_str(), xRatioUV, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisYRatioUV").c_str(), yRatioUV, maReplace);
@@ -1784,17 +1651,6 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std:
 
     if (HasMotionVectors()) {
         std::string vectorsProp = prefix + "AnalysisVectors";
-
-        if (divideExtra != DivideExtra::No) {
-            vsapi->mapSetData(props,
-                vectorsProp.c_str(),
-                (const char *)dividedVectors.data(),
-                static_cast<int>(dividedVectors.size() * sizeof(VECTOR)),
-                dtBinary,
-                maReplace);
-            if (oneLevel)
-                return;
-        }
 
         for (int i = 0; i < nLevelCount; i++) {
             const auto &plane = pyramidLevels[i];

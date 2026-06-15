@@ -249,12 +249,6 @@ public:
         AnalysisDone
     };
 
-    enum class DivideExtra {
-        No,
-        Point,
-        Median
-    };
-
     // exported
     int nBlkSizeX;
     int nBlkSizeY;
@@ -278,8 +272,6 @@ public:
     int bitsPerSample;
 private:
     State state = State::Invalid;
-    DivideExtra divideExtra = DivideExtra::No;
-    std::vector<VECTOR> dividedVectors;
     std::vector<MotionBlockLevel> pyramidLevels;
     const VSFrame *sourceFrame = nullptr;
     const VSAPI *vsapi;
@@ -312,8 +304,6 @@ public:
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
         SearchType searchType, int nSearchParam, int nLambda, int pnew,
         int fieldShift, int64_t thSAD, bool useSatd, bool smooth, bool meander);
-
-    void DivideVectorsExtra(DivideExtra divideExtra);
 
     bool IsUsable(int64_t thscd1, int thscd2) const noexcept;
     BlockData GetBlock(int nBlk) const noexcept;

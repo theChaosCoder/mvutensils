@@ -53,8 +53,6 @@ struct AnalyseDataExtra {
     bool tff;
     bool tff_exists;
 
-    MotionBlockPyramid::DivideExtra divideExtra;
-
     std::string prefix;
 };
 
@@ -120,8 +118,6 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
                 }
 
                 vectorFields.SearchMVs(srcFramePyramid, refFramePyramid, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse, d->chroma);
-
-                vectorFields.DivideVectorsExtra(d->divideExtra);
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
@@ -215,8 +211,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
     d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
 
-    d->divideExtra = static_cast<MotionBlockPyramid::DivideExtra>(vsapi->mapGetIntSaturated(in, "divide", 0, &err));
-
     d->badSAD = vsapi->mapGetIntSaturated(in, "badsad", 0, &err);
     if (err)
         d->badSAD = 10000;
@@ -253,10 +247,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
             throw std::runtime_error("satd cannot work with 16x2 blocks");
 
-        if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && d->divideExtra != MotionBlockPyramid::DivideExtra::Point && d->divideExtra != MotionBlockPyramid::DivideExtra::Median)
-            throw std::runtime_error("divide must be between 0 and 2");
-
-
         if ((d->nBlkSizeX != 4 || d->nBlkSizeY != 4) &&
             (d->nBlkSizeX != 8 || d->nBlkSizeY != 4) &&
             (d->nBlkSizeX != 8 || d->nBlkSizeY != 8) &&
@@ -288,9 +278,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
             d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2)
             throw std::runtime_error("overlaph must be at most half of blksizeh, overlapv must be at most half of blksizev, and they both need to be at least 0");
 
-        if (d->divideExtra != MotionBlockPyramid::DivideExtra::No && (d->nBlkSizeX < 8 || d->nBlkSizeY < 8))
-            throw std::runtime_error("blksize and blksizev must be at least 8 when divide>0");
-
         d->nSearchParam = std::max(d->searchparam, 1);
 
         d->node = vsapi->mapGetNode(in, "super", 0, 0);
@@ -311,10 +298,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
             d->nOverlapY % (1 << d->vi->format.subSamplingH))
             throw std::runtime_error("The requested overlap is incompatible with the super clip's subsampling"); 
-
-        if ((d->divideExtra != MotionBlockPyramid::DivideExtra::No) && (d->nOverlapX % (2 << d->vi->format.subSamplingW) ||
-                              d->nOverlapY % (2 << d->vi->format.subSamplingH)))
-            throw std::runtime_error("overlaph and overlapv must be multiples of 2 or 4 when divide > 0, depending on the super clip's subsampling");
 
         if (d->deltaFrame == 0)
             throw std::runtime_error("delta can't be 0");
@@ -361,7 +344,6 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "pglobal:int:opt;"
                  "overlaph:int:opt;"
                  "overlapv:int:opt;"
-                 "divide:int:opt;"
                  "badsad:int:opt;"
                  "badrange:int:opt;"
                  "meander:int:opt;"
