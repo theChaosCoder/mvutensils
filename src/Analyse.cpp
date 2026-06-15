@@ -28,19 +28,19 @@ struct AnalyseDataExtra {
     SearchType searchType;
     SearchType searchTypeCoarse;
 
-    int nSearchParam; // usually search radius
-    int nPelSearch; // search radius at finest level
+    int nSearchParam; 
+    int nPelSearch; 
 
-    int lsad;        // SAD limit for lambda using - added by Fizick
-    int pnew;        // penalty to cost for new canditate - added by Fizick
-    int plevel;      // penalty factors (lambda, plen) level scaling - added by Fizick
-    bool global;     // use global motion predictor
-    int pglobal;     // penalty factor for global motion predictor
-    int pzero;       // penalty factor for zero vector
-    int64_t badSAD;  //  SAD threshold to make more wide search for bad vectors
-    int badrange;    // range (radius) of wide search
-    bool meander;    //meander (alternate) scan blocks (even row left to right, odd row right to left
-    bool tryMany;    // try refine around many predictors
+    int lsad; 
+    int pnew;   
+    int plevel;    
+    bool global;    
+    int pglobal;  
+    int pzero;       
+    int64_t badSAD; 
+    int badrange;   
+    bool meander;   
+    bool tryMany;  
     bool useSatd;
 
     int levels;

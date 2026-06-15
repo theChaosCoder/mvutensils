@@ -387,7 +387,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
         if (d->fields && vectors.nPel < 2)
             throw std::runtime_error("fields option requires pel > 1");
 
-        d->thSAD = d->thSAD * d->nSCD1 / nSCD1_old; // normalize to block SAD
+        d->thSAD = d->thSAD * d->nSCD1 / nSCD1_old;
 
         d->dstTempPitch = ((vectors.nWidth + 15) / 16) * 16 * d->vi->format.bytesPerSample * 2;
         d->dstTempPitchUV = (((vectors.nWidth / vectors.xRatioUV) + 15) / 16) * 16 * d->vi->format.bytesPerSample * 2;

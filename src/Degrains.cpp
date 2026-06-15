@@ -590,6 +590,16 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
                 throw std::runtime_error("The motion vectors passed are not compatible with the super clip");
 
             d->deltaFrame[r] = vectors[r]->nDeltaFrame;
+
+            // FIXME, delta direction later
+            if (r % 2 == 1) {
+                if (d->deltaFrame[r] != -d->deltaFrame[r - 1])
+                    throw std::runtime_error("forward and backward vector clips must be symmetric in their delta frame");
+                if (r >= 2) {
+                    if (abs(d->deltaFrame[r - 2]) >= abs(d->deltaFrame[r]))
+                        throw std::runtime_error("vector clips must have increasing number of delta frames");
+                }
+            }
         }
 
         if (!super.IsCompatibleWithSource(d->vi))
@@ -598,42 +608,8 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         int64_t nSCD1_old = d->nSCD1;
         vectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
 
-        // FIXME, more checks? better checks?
-        // bw1, fw1, bw2, fw2, ...
-
-        /*
-
-        for (int r = 0; r < radius * 2; r++)
-
-    #define CHECK_VECTORS(rThreshold, backwardN, forwardN, backwardP, forwardP, mvbwN, mvfwN, mvbwP, mvfwP)\
-        if (radius > rThreshold) {\
-            if (!d->vectors_data[backwardN].isBackward)\
-                snprintf(error, ERROR_SIZE, "%s", "mvbw must be generated with isb=True.");\
-            if (d->vectors_data[forwardN].isBackward)\
-                snprintf(error, ERROR_SIZE, "%s", "mvfw must be generated with isb=False.");\
-            if (d->vectors_data[backwardN].nDeltaFrame <= d->vectors_data[backwardP].nDeltaFrame)\
-                snprintf(error, ERROR_SIZE, "%s", "mvbwN must have greater delta than mvbwP.");\
-            if (d->vectors_data[forwardN].nDeltaFrame <= d->vectors_data[forwardP].nDeltaFrame)\
-                snprintf(error, ERROR_SIZE, "%s", "mvfwN must have greater delta than mvfwP.");\
-        }
-
-        // Make sure the motion vector clips are correct.
-        if (!d->vectors_data[Backward1].isBackward)
-            snprintf(error, ERROR_SIZE, "%s", "mvbw must be generated with isb=True.");
-        if (d->vectors_data[Forward1].isBackward)
-            snprintf(error, ERROR_SIZE, "%s", "mvfw must be generated with isb=False.");
-
-        CHECK_VECTORS(1, Backward2, Forward2, Backward1, Forward1, mvbw2, mvfw2, mvbw, mvfw)
-        CHECK_VECTORS(2, Backward3, Forward3, Backward2, Forward2, mvbw3, mvfw3, mvbw2, mvfw2)
-        CHECK_VECTORS(3, Backward4, Forward4, Backward3, Forward3, mvbw4, mvfw4, mvbw3, mvfw3)
-        CHECK_VECTORS(4, Backward5, Forward5, Backward4, Forward4, mvbw5, mvfw5, mvbw4, mvfw4)
-        CHECK_VECTORS(5, Backward6, Forward6, Backward5, Forward5, mvbw6, mvfw6, mvbw5, mvfw5)
-
-    #undef CHECK_VECTORS
-
-    */
-        d->thSAD[0] = d->thSAD[0] * d->nSCD1 / nSCD1_old;              // normalize to block SAD
-        d->thSAD[1] = d->thSAD[2] = d->thSAD[1] * d->nSCD1 / nSCD1_old; // chroma threshold, normalized to block SAD
+        d->thSAD[0] = d->thSAD[0] * d->nSCD1 / nSCD1_old;             
+        d->thSAD[1] = d->thSAD[2] = d->thSAD[1] * d->nSCD1 / nSCD1_old;
 
         if (d->thSAD[0] >= INT_MAX || d->thSAD[1] >= INT_MAX) {
             int64_t maximum = INT_MAX * nSCD1_old / d->nSCD1;
