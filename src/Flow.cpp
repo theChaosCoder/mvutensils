@@ -43,8 +43,6 @@ struct FlowData {
     bool tff;
     bool tff_exists;
 
-    int pixel_max;
-
     MaskResizer maskResizerFull;
     MaskResizer maskResizerSubSampled;
 
@@ -285,7 +283,6 @@ void flowRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "super:vnode;"
                  "vectors:vnode;"
                  "time:float:opt;"
-                 "mode:int:opt;"
                  "fields:int:opt;"
                  "thscd1:int:opt;"
                  "thscd2:int:opt;"

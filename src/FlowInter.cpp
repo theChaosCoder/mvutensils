@@ -33,7 +33,6 @@ struct FlowInterData {
     VSNode *mvbw = nullptr;
     VSNode *mvfw = nullptr;
 
-    float time;
     float ml;
     bool blend;
     int64_t thscd1;
@@ -259,9 +258,9 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, V
     std::unique_ptr<FlowInterData> d(new FlowInterData(vsapi));
     int err;
 
-    d->time = vsapi->mapGetFloatSaturated(in, "time", 0, &err);
+    float time = vsapi->mapGetFloatSaturated(in, "time", 0, &err);
     if (err)
-        d->time = 50.0f;
+        time = 50.0f;
 
     d->ml = vsapi->mapGetFloatSaturated(in, "ml", 0, &err);
     if (err)
@@ -287,13 +286,13 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, V
 
     try {
 
-        if (d->time < 0.0f || d->time > 100.0f)
+        if (time < 0.0f || time > 100.0f)
             throw std::runtime_error("time must be between 0 and 100%");
 
         if (d->ml <= 0.0f)
             throw std::runtime_error("ml must be greater than 0");
 
-        d->time256 = (int)(d->time * 256.0f / 100.0f);
+        d->time256 = (int)(time * 256.0f / 100.0f);
 
         d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node);

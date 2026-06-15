@@ -42,14 +42,8 @@ struct MaskData {
 
     float fMaskNormFactor;
 
-    int nWidthUV;
-    int nHeightUV;
-    int nWidthB;
-    int nHeightB;
-    int nWidthBUV;
-    int nHeightBUV;
-
     std::string prefix;
+
     std::string filterName;
 
     const VSAPI *vsapi;
