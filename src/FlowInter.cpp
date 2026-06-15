@@ -60,7 +60,7 @@ struct FlowInterData {
     }
 };
 
-typedef uint8_t PixelType;
+template<typename PixelType>
 static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     FlowInterData *d = reinterpret_cast<FlowInterData *>(instanceData);
 
@@ -343,7 +343,7 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, V
         {d->mvfw, rpGeneral}, 
     };
 
-    vsapi->createVideoFilter(out, "FlowInter", d->vi, flowinterGetFrame, filterFree<FlowInterData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "FlowInter", d->vi, (d->vi->format.bitsPerSample == 8) ? flowinterGetFrame<uint8_t> : flowinterGetFrame<uint16_t>, filterFree<FlowInterData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 
