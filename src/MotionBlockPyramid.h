@@ -302,7 +302,7 @@ public:
     void ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const;
     State GetState() const noexcept;
     bool HasMotionVectors() const noexcept;
-    // FIXME, maybe have all IsCompatible funtions throw an exception if they're not compatible instead of returning false
+
     bool IsCompatible(const MotionBlockPyramid &other) const noexcept;
     bool IsCompatibleForAnalysis(const FramePyramid &other) const noexcept;
     bool IsCompatibleForRecalc(const FramePyramid &other) const noexcept;
