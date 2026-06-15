@@ -66,7 +66,7 @@ void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int 
 }
 
 template <typename PixelType>
-static void RB2F_C(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8, ptrdiff_t nDstPitch,
+static void RB2F_C(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8, ptrdiff_t nDstPitch,
     ptrdiff_t nSrcPitch, int nWidth, int nHeight) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
@@ -88,8 +88,8 @@ static void RB2F_C(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
 // interleaves vertical and horizontal downscaling row by row using tempBuffer as scratch
 // tempBuffer must point to at least nWidth * 8 * sizeof(PixelType) bytes
 template <typename PixelType>
-static void RB2BilinearFiltered(uint8_t *pDst, const uint8_t * VS_RESTRICT pSrc, ptrdiff_t nDstPitch,
-    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t * VS_RESTRICT tempBuffer) noexcept {
+static void RB2BilinearFiltered(uint8_t *pDst, const uint8_t * MVU_RESTRICT pSrc, ptrdiff_t nDstPitch,
+    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t * MVU_RESTRICT tempBuffer) noexcept {
 
     PixelType *dst = (PixelType *)pDst;
     const PixelType *src = (const PixelType *)pSrc;
@@ -131,7 +131,7 @@ static void RB2BilinearFiltered(uint8_t *pDst, const uint8_t * VS_RESTRICT pSrc,
 // tempBuffer must point to at least nWidth * 8 * sizeof(PixelType) bytes
 template <typename PixelType>
 static void RB2Cubic(uint8_t *pDst, const uint8_t *pSrc, ptrdiff_t nDstPitch,
-    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t *VS_RESTRICT tempBuffer) noexcept {
+    ptrdiff_t nSrcPitch, int nWidth, int nHeight, uint8_t *MVU_RESTRICT tempBuffer) noexcept {
 
     PixelType *dst = (PixelType *)pDst;
     const PixelType *src = (const PixelType *)pSrc;
@@ -231,7 +231,7 @@ void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatio
 
 
 template <typename PixelType>
-static void VerticalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
+static void VerticalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     (void)bitsPerSample;
 
@@ -253,7 +253,7 @@ static void VerticalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTR
 
 
 template <typename PixelType>
-static void HorizontalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
+static void HorizontalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     (void)bitsPerSample;
 
@@ -274,7 +274,7 @@ static void HorizontalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RES
 
 
 template <typename PixelType>
-static void DiagonalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
+static void DiagonalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     (void)bitsPerSample;
 
@@ -299,7 +299,7 @@ static void DiagonalBilinear(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTR
 // so called Wiener interpolation. (sharp, similar to Lanczos ?)
 // invarint simplified, 6 taps. Weights: (1, -5, 20, 20, -5, 1)/32 - added by Fizick
 template <typename PixelType>
-static void VerticalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
+static void VerticalWiener(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
@@ -351,7 +351,7 @@ static void VerticalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRIC
 
 
 template <typename PixelType>
-static void HorizontalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
+static void HorizontalWiener(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
@@ -395,7 +395,7 @@ static void HorizontalWiener(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTR
 
 // bicubic (Catmull-Rom 4 taps interpolation)
 template <typename PixelType>
-static void VerticalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
+static void VerticalBicubic(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
@@ -433,7 +433,7 @@ static void VerticalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRI
 
 
 template <typename PixelType>
-static void HorizontalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc8,
+static void HorizontalBicubic(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
@@ -459,7 +459,7 @@ static void HorizontalBicubic(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_REST
 
 
 template <typename PixelType>
-static void Average2(uint8_t *VS_RESTRICT pDst8, const uint8_t *VS_RESTRICT pSrc18, const uint8_t *VS_RESTRICT pSrc28,
+static void Average2(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc18, const uint8_t *MVU_RESTRICT pSrc28,
     ptrdiff_t nPitch, int nWidth, int nHeight) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     const PixelType *pSrc1 = (const PixelType *)pSrc18;

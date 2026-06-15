@@ -23,7 +23,6 @@
 #include <memory>
 
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 
 #include "Degrains.h"
 #include "Overlap.h"
@@ -260,7 +259,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                                 // Edge block — write to tmpBlock, then copy only the valid region
                                 d->DEGRAIN[plane](tmpBlock, tmpBlockPitch, pSrcCur[plane] + xx, nSrcPitches[plane],
                                     pointers, strides, WSrc, WRefs);
-                                vsh::bitblt(pDstCur[plane] + xx, nDstPitches[plane],
+                                mvu_bitblt(pDstCur[plane] + xx, nDstPitches[plane],
                                     tmpBlock, tmpBlockPitch,
                                     validW * bytesPerSample, validH);
                             }
@@ -270,7 +269,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                         // Right non-covered region (source copy), clamped to actual row count
                         if (nWidth_B[plane] < frameW)
-                            vsh::bitblt(pDstCur[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
+                            mvu_bitblt(pDstCur[plane] + nWidth_B[plane] * bytesPerSample, nDstPitches[plane],
                                 pSrcCur[plane] + nWidth_B[plane] * bytesPerSample, nSrcPitches[plane],
                                 (frameW - nWidth_B[plane]) * bytesPerSample, validH);
 
@@ -280,7 +279,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                     // Bottom non-covered region (source copy)
                     if (nHeight_B[plane] < frameH)
-                        vsh::bitblt(pDstCur[plane], nDstPitches[plane],
+                        mvu_bitblt(pDstCur[plane], nDstPitches[plane],
                             pSrcCur[plane], nSrcPitches[plane],
                             frameW * bytesPerSample, frameH - nHeight_B[plane]);
                 } else { // overlap - sliding window

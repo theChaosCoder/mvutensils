@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <algorithm>
-#include <VSHelper4.h>
+#include "Common.h"
 
 // top, middle, botom and left, middle, right windows
 #define OW_TL 0
@@ -51,7 +51,7 @@ typedef void (*ToPixelsFunction)(uint8_t *pDst, ptrdiff_t nDstPitch,
                                  int width, int height, int bitsPerSample);
 
 template<typename PixelType2, typename PixelType>
-void ToPixels(uint8_t *VS_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t *VS_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int bitsPerSample) {
+void ToPixels(uint8_t *MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t *MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int bitsPerSample) {
     int pixelMax = (1 << bitsPerSample) - 1;
 
     for (int h = 0; h < nHeight; h++) {

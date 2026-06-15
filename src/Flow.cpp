@@ -23,7 +23,6 @@
 #include <algorithm>
 
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 
 #include "Common.h"
 #include "SuperPyramid.h"
@@ -64,7 +63,7 @@ struct FlowData {
 
 
 template <typename PixelType>
-static void flowFetch(uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const uint16_t *VS_RESTRICT VXFull, const uint16_t *VS_RESTRICT VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
+static void flowFetch(uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const uint16_t *MVU_RESTRICT VXFull, const uint16_t *MVU_RESTRICT VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
     PixelType *pdst = (PixelType *)pdst8;
 
     dst_pitch /= sizeof(PixelType);

@@ -648,7 +648,7 @@ typedef struct DepanEstimateData {
 
 
 // put source data to real array for FFT
-static void frame_data2d(const uint8_t *srcp, ptrdiff_t pitch, float * VS_RESTRICT realdata, int winx, int winy, int winleft, int h0, int bytes_per_sample) {
+static void frame_data2d(const uint8_t *srcp, ptrdiff_t pitch, float * MVU_RESTRICT realdata, int winx, int winy, int winleft, int h0, int bytes_per_sample) {
     int i, j;
     int winxpadded = (winx / 2 + 1) * 2;
 
@@ -678,7 +678,7 @@ static void frame_data2d(const uint8_t *srcp, ptrdiff_t pitch, float * VS_RESTRI
 }
 
 
-static void mult_conj_data2d(const fftwf_complex * VS_RESTRICT fftnext, const fftwf_complex * VS_RESTRICT fftsrc, fftwf_complex * VS_RESTRICT mult, int winx, int winy) {
+static void mult_conj_data2d(const fftwf_complex * MVU_RESTRICT fftnext, const fftwf_complex * MVU_RESTRICT fftsrc, fftwf_complex * MVU_RESTRICT mult, int winx, int winy) {
     // multiply complex conj. *next to src
     // (hermit)
     int nx = winx / 2 + 1; //padded, odd
@@ -697,7 +697,7 @@ static void mult_conj_data2d(const fftwf_complex * VS_RESTRICT fftnext, const ff
 }
 
 
-static void get_motion_vector(const float * VS_RESTRICT correl, int winx, int winy, float trust_limit, int dxmax, int dymax, float stab, int fieldbased, int top_field, float pixaspect, float *fdx, float *fdy, float *trust) {
+static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int winy, float trust_limit, int dxmax, int dymax, float stab, int fieldbased, int top_field, float pixaspect, float *fdx, float *fdy, float *trust) {
     float correlmax, cur, correlmean;
     float f1, f2;
     float xadd = 0.0f;
@@ -892,7 +892,7 @@ static void get_plane_fft(const uint8_t *srcp, ptrdiff_t src_pitch, fftwf_comple
 }
 
 
-static void showcorrelation(const float * VS_RESTRICT correl, int winx, int winy, uint8_t *dstp, ptrdiff_t dst_pitch, int winleft, int wintop, int pixel_max) {
+static void showcorrelation(const float * MVU_RESTRICT correl, int winx, int winy, uint8_t *dstp, ptrdiff_t dst_pitch, int winleft, int wintop, int pixel_max) {
     float correlmax, correlmin, cur;
     int i, j;
     int winxpadded = (winx / 2 + 1) * 2;
@@ -1624,7 +1624,7 @@ static void sumtransform(const transform *ta, const transform *tb, transform *tb
 // move plane of nextp frame to dstp for motion compensation by trc, trm with NEAREST pixels
 //
 template <typename PixelType>
-static void compensate_plane_nearest(uint8_t * VS_RESTRICT dstp8, const uint8_t * VS_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work1row_size, int blurmax, int pixel_max) {
+static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t * MVU_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work1row_size, int blurmax, int pixel_max) {
     // if border >=0, then we fill empty edge (border) pixels by that value
     // work1row_size is work array, it must have size >= 1*row_size
 
@@ -1853,7 +1853,7 @@ static void compensate_plane_nearest(uint8_t * VS_RESTRICT dstp8, const uint8_t 
 //   t[0] = dxc, t[1] = dxx, t[2] = dxy, t[3] = dyc, t[4] = dyx, t[5] = dyy
 //
 template <typename PixelType>
-static void compensate_plane_bilinear(uint8_t * VS_RESTRICT dstp8, const uint8_t * VS_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2row_size4356, int blurmax, int pixel_max) {
+static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_t * MVU_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2row_size4356, int blurmax, int pixel_max) {
     // work2row_size is work array, it must have size >= 2*row_size
 
     (void)pixel_max;
@@ -2200,7 +2200,7 @@ static void compensate_plane_bilinear(uint8_t * VS_RESTRICT dstp8, const uint8_t
 //   t[0] = dxc, t[1] = dxx, t[2] = dxy, t[3] = dyc, t[4] = dyx, t[5] = dyy
 //
 template <typename PixelType>
-static void compensate_plane_bicubic(uint8_t * VS_RESTRICT dstp8, const uint8_t * VS_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2width1030, int blurmax, int pixel_max) {
+static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t * MVU_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2width1030, int blurmax, int pixel_max) {
     // work2width1030 is integer work array, it must have size >= 2*row_size+1030
 
     const PixelType *srcp = (const PixelType *)srcp8;

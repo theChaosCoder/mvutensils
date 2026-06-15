@@ -9,6 +9,7 @@
 #endif
 #include <VapourSynth4.h>
 
+#define MVU_RESTRICT __restrict
 
 class MVUtensilsError : public std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -34,6 +35,23 @@ static constexpr const int MV_DEFAULT_SCD1 = 400;
 static constexpr const int MV_DEFAULT_SCD2 = 130;
 
 constexpr char DEFAULT_MVUTENSILS_PREFIX[] = "MVUtensils";
+
+static inline void mvu_bitblt(void *dstp, ptrdiff_t dst_stride, const void *srcp, ptrdiff_t src_stride, size_t row_size, size_t height) {
+    if (height) {
+        if (src_stride == dst_stride && src_stride == (ptrdiff_t)row_size) {
+            memcpy(dstp, srcp, row_size * height);
+        } else {
+            const uint8_t *srcp8 = (const uint8_t *)srcp;
+            uint8_t *dstp8 = (uint8_t *)dstp;
+            size_t i;
+            for (i = 0; i < height; i++) {
+                memcpy(dstp8, srcp8, row_size);
+                srcp8 += src_stride;
+                dstp8 += dst_stride;
+            }
+        }
+    }
+}
 
 template<typename T>
 struct SingleNodeData : public T {

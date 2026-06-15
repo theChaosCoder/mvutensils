@@ -3,7 +3,6 @@
 
 #include <memory>
 #include <stdexcept>
-#include <VSHelper4.h>
 
 void BilinearUpsizeBlockMask(uint8_t *dst, ptrdiff_t dststride, int dstwidth, int dstheight, const void *src, ptrdiff_t srcstride, int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int bitsPerSample) {
     int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;

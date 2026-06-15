@@ -1,6 +1,5 @@
 #include <memory>
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"

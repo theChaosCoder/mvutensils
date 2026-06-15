@@ -1,6 +1,5 @@
 #include "MotionBlockPyramid.h"
 
-#include <VSHelper4.h>
 #include <functional>
 #include <algorithm>
 #include <memory>
@@ -456,7 +455,7 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
         //      predictors[0].sad = Median(predictors[1].sad, predictors[2].sad, predictors[3].sad);
         // but it is not true median vector (x and y may be mixed) and not its sad ?!
         // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
-        predictors[0].sad = VSMAX(predictors[1].sad, VSMAX(predictors[2].sad, predictors[3].sad));
+        predictors[0].sad = std::max(predictors[1].sad, std::max(predictors[2].sad, predictors[3].sad));
     } else {
         //        predictors[0].x = (predictors[1].x + predictors[2].x + predictors[3].x);
         //        predictors[0].y = (predictors[1].y + predictors[2].y + predictors[3].y);
@@ -1220,13 +1219,13 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
             int centerY = nBlkSizeY / 2 + (nBlkSizeY - nOverlapY) * blky;
             int blkyold = (centerY - nBlkSizeYold / 2) / nStepYold;
 
-            int deltaX = VSMAX(0, centerX - (nBlkSizeXold / 2 + nStepXold * blkxold)); // distance from old to new
-            int deltaY = VSMAX(0, centerY - (nBlkSizeYold / 2 + nStepYold * blkyold));
+            int deltaX = std::max(0, centerX - (nBlkSizeXold / 2 + nStepXold * blkxold)); // distance from old to new
+            int deltaY = std::max(0, centerY - (nBlkSizeYold / 2 + nStepYold * blkyold));
 
-            int blkxold1 = VSMIN(nBlkXold - 1, VSMAX(0, blkxold));
-            int blkxold2 = VSMIN(nBlkXold - 1, VSMAX(0, blkxold + 1));
-            int blkyold1 = VSMIN(nBlkYold - 1, VSMAX(0, blkyold));
-            int blkyold2 = VSMIN(nBlkYold - 1, VSMAX(0, blkyold + 1));
+            int blkxold1 = std::min(nBlkXold - 1, std::max(0, blkxold));
+            int blkxold2 = std::min(nBlkXold - 1, std::max(0, blkxold + 1));
+            int blkyold1 = std::min(nBlkYold - 1, std::max(0, blkyold));
+            int blkyold2 = std::min(nBlkYold - 1, std::max(0, blkyold + 1));
 
             VECTOR vectorOld; // interpolated or nearest
 

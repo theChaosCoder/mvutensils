@@ -2,12 +2,12 @@
 
 #include <cstdint>
 #include <algorithm>
-#include <VSHelper4.h>
 #include "SuperPyramid.h"
+#include "Common.h"
 
 // time-weihted blend src with ref frames (used for interpolation for poor motion estimation)
 template <typename PixelType>
-static void Blend(uint8_t *VS_RESTRICT pdst, const uint8_t *VS_RESTRICT psrc, const uint8_t *VS_RESTRICT pref, int height, int width, ptrdiff_t stride, int time256) {
+static void Blend(uint8_t *MVU_RESTRICT pdst, const uint8_t *MVU_RESTRICT psrc, const uint8_t *MVU_RESTRICT pref, int height, int width, ptrdiff_t stride, int time256) {
     for (int h = 0; h < height; h++) {
         for (int w = 0; w < width; w++) {
             const PixelType *psrc_ = (const PixelType *)psrc;
@@ -24,7 +24,7 @@ static void Blend(uint8_t *VS_RESTRICT pdst, const uint8_t *VS_RESTRICT psrc, co
 
 template <typename PixelType>
 static void FlowInter(
-        uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch,
+        uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch,
         const PyramidPlane &prefB, const PyramidPlane &prefF,
         const uint16_t *VXFullB, const uint16_t *VXFullF,
         const uint16_t *VYFullB, const uint16_t *VYFullF,
@@ -66,7 +66,7 @@ static void FlowInter(
 
 template <typename PixelType>
 static void FlowInterExtra(
-        uint8_t *VS_RESTRICT pdst8, ptrdiff_t dst_pitch,
+        uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch,
         const PyramidPlane &prefB, const PyramidPlane &prefF,
         const uint16_t *VXFullB, const uint16_t *VXFullF,
         const uint16_t *VYFullB, const uint16_t *VYFullF,

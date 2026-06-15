@@ -18,7 +18,6 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 
 #include "Common.h"
 #include "SuperPyramid.h"
@@ -229,7 +228,7 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
         } else {
             if (d->blend) {
                 const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
-                const VSFrame *ref = vsapi->getFrameFilter(VSMIN(n + off, d->vi->numFrames - 1), d->node, frameCtx);
+                const VSFrame *ref = vsapi->getFrameFilter(std::min(n + off, d->vi->numFrames - 1), d->node, frameCtx);
                 VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
 
                 for (int plane = 0; plane < d->vi->format.numPlanes; plane++)

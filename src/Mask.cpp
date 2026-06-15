@@ -22,7 +22,6 @@
 #include <memory>
 
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 #include <VSConstants4.h>
 
 #include "SuperPyramid.h"

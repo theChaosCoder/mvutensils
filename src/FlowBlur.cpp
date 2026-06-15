@@ -21,7 +21,6 @@
 #include <algorithm>
 
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 
 #include "Common.h"
 #include "SuperPyramid.h"
@@ -62,8 +61,8 @@ struct FlowBlurData {
 };
 
 template<typename PixelType>
-static void FlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref,
-                         const uint16_t * VS_RESTRICT VXFullB, const uint16_t *VS_RESTRICT VXFullF, const uint16_t *VS_RESTRICT VYFullB, const uint16_t *VS_RESTRICT VYFullF,
+static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref,
+                         const uint16_t * MVU_RESTRICT VXFullB, const uint16_t *MVU_RESTRICT VXFullF, const uint16_t *MVU_RESTRICT VYFullB, const uint16_t *MVU_RESTRICT VYFullF,
                          ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int blur256, int prec) {
     PixelType *pdst = (PixelType *)pdst8;
 

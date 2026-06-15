@@ -18,7 +18,6 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 
 #include "Common.h"
 #include "SuperPyramid.h"

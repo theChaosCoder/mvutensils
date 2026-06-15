@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <algorithm>
 
-#include <VSHelper4.h>
-
+#include "Common.h"
 #include "SuperPyramid.h"
 #include "MotionBlockPyramid.h"
 
@@ -31,7 +31,7 @@ typedef void (*DenoiseFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_
 // XXX Moves the pointers passed in pRefs. This is okay because they are not
 // used after this function is done with them.
 template <int radius, int blockWidth, int blockHeight, typename PixelType>
-static void Degrain_C(uint8_t * VS_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * VS_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const uint8_t ** VS_RESTRICT pRefs8, const ptrdiff_t * VS_RESTRICT nRefPitches, int WSrc, const int * VS_RESTRICT WRefs) {
+static void Degrain_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs8, const ptrdiff_t * MVU_RESTRICT nRefPitches, int WSrc, const int * MVU_RESTRICT WRefs) {
     for (int y = 0; y < blockHeight; y++) {
         for (int x = 0; x < blockWidth; x++) {
             const PixelType *pSrc = (const PixelType * __restrict)pSrc8;
@@ -68,7 +68,7 @@ DenoiseFunction selectDegrainFunctionAVX2(unsigned radius, unsigned width, unsig
 // XXX Moves the pointers passed in pRefs. This is okay because they are not
 // used after this function is done with them.
 template <int radius, int blockWidth, int blockHeight>
-static void Degrain_sse2(uint8_t * VS_RESTRICT pDst, ptrdiff_t nDstPitch, const uint8_t * VS_RESTRICT pSrc, ptrdiff_t nSrcPitch, const uint8_t ** VS_RESTRICT pRefs, const ptrdiff_t * VS_RESTRICT nRefPitches, int WSrc, const int * VS_RESTRICT WRefs) {
+static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs, const ptrdiff_t * MVU_RESTRICT nRefPitches, int WSrc, const int * MVU_RESTRICT WRefs) {
     static_assert(blockWidth >= 4, "");
 
     __m128i zero = _mm_setzero_si128();
@@ -169,13 +169,14 @@ typedef void (*LimitFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t 
 
 
 template <typename PixelType>
-static void LimitChanges_C(uint8_t * VS_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * VS_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit) {
+static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit) {
     for (int h = 0; h < nHeight; h++) {
         for (int i = 0; i < nWidth; i++) {
             const PixelType *pSrc = (const PixelType *)pSrc8;
             PixelType *pDst = (PixelType *)pDst8;
 
-            pDst[i] = (PixelType)VSMIN(VSMAX(pDst[i], (pSrc[i] - nLimit)), (pSrc[i] + nLimit));
+            // FIXME, suboptimally wide type
+            pDst[i] = (PixelType)std::min<ptrdiff_t>(std::max<ptrdiff_t>(pDst[i], (pSrc[i] - nLimit)), (pSrc[i] + nLimit));
         }
         pDst8 += nDstPitch;
         pSrc8 += nSrcPitch;

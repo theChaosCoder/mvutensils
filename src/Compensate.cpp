@@ -20,7 +20,6 @@
 
 #include <memory>
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 
 #include "CopyCode.h"
 #include "Overlap.h"
@@ -217,7 +216,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
                             if (slowBlitX || slowBlitY) {
                                 for (int plane = 0; plane < num_planes; plane++) {
-                                    vsh::bitblt(pDstCur[plane] + xx[plane], nDstPitches[plane], pPlanes[plane].GetPointer<PixelType>(blx[plane], bly[plane]), pPlanes[plane].nPitch, (slowBlitX && blitSizeRight[plane]) ? blitSizeRight[plane] : (nBlkSizeX[plane] * sizeof(PixelType)), (slowBlitY && blitSizeBottom[plane]) ? blitSizeBottom[plane] : nBlkSizeY[plane]);
+                                    mvu_bitblt(pDstCur[plane] + xx[plane], nDstPitches[plane], pPlanes[plane].GetPointer<PixelType>(blx[plane], bly[plane]), pPlanes[plane].nPitch, (slowBlitX && blitSizeRight[plane]) ? blitSizeRight[plane] : (nBlkSizeX[plane] * sizeof(PixelType)), (slowBlitY && blitSizeBottom[plane]) ? blitSizeBottom[plane] : nBlkSizeY[plane]);
                                     xx[plane] += nBlkSizeX[plane] * sizeof(PixelType);
                                 }
                             } else {
