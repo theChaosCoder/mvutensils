@@ -73,7 +73,7 @@ Changes
 	
 	* The clip argument was removed, it was used for nothing at all except attaching source frame properties and as such is pointless
 	
-	* Returns a grayscale full range mask only instead of the weird UV plane stuff goign on in the original
+	* Returns a grayscale full range mask only instead of the weird UV plane stuff going on in the original
 	
 	* Supports 8-16 bit, the output format is derived entirely from the vector clip
 	
@@ -122,6 +122,8 @@ Planned changes/mysteries
 =========================
 
 * Does the delta sign direction make sense? Flip it?
+
+* Mask doesn't need source properties passed on or the possibility to specify the output format?
 
 * Big additional code cleanups
 
