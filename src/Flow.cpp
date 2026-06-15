@@ -149,8 +149,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
 
                 auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
-                auto dstTileVX = MaskResizer::GetTileBuffer();
-                auto dstTileVY = MaskResizer::GetTileBuffer();
+                auto [dstTileVX, dstTileVY] = MaskResizer::GetTileBuffers<2>();
 
                 auto srcBufVX = MaskResizer::MakeSrcBuffer(smallMasks->VXSmallY, smallMasks->pitchVSmallY);
                 auto srcBufVY = MaskResizer::MakeSrcBuffer(smallMasks->VYSmallY, smallMasks->pitchVSmallY);

@@ -104,12 +104,7 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
 
             auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
-            auto dstTileMaskF = MaskResizer::GetTileBuffer();
-            auto dstTileMaskB = MaskResizer::GetTileBuffer();
-            auto dstTileXF = MaskResizer::GetTileBuffer();
-            auto dstTileYF = MaskResizer::GetTileBuffer();
-            auto dstTileXB = MaskResizer::GetTileBuffer();
-            auto dstTileYB = MaskResizer::GetTileBuffer();
+            auto [dstTileMaskF, dstTileMaskB, dstTileXF, dstTileYF, dstTileXB, dstTileYB] = MaskResizer::GetTileBuffers<6>();
 
             auto srcBufMaskF = MaskResizer::MakeSrcBuffer(MaskSmallF->mask, MaskSmallF->stride);
             auto srcBufMaskB = MaskResizer::MakeSrcBuffer(MaskSmallB->mask, MaskSmallB->stride);
@@ -140,10 +135,7 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
                 auto srcBufSmallBBX = MaskResizer::MakeSrcBuffer(SmallBB->VXSmallY, SmallBB->pitchVSmallY);
                 auto srcBufSmallBBY = MaskResizer::MakeSrcBuffer(SmallBB->VYSmallY, SmallBB->pitchVSmallY);
 
-                auto dstTileXFF = MaskResizer::GetTileBuffer();
-                auto dstTileYFF = MaskResizer::GetTileBuffer();
-                auto dstTileXBB = MaskResizer::GetTileBuffer();
-                auto dstTileYBB = MaskResizer::GetTileBuffer();
+                auto [dstTileXFF, dstTileYFF, dstTileXBB, dstTileYBB] = MaskResizer::GetTileBuffers<4>();
 
                 auto dstBufSmallXFF = MaskResizer::MakeDstBuffer(dstTileXFF.get());
                 auto dstBufSmallYFF = MaskResizer::MakeDstBuffer(dstTileYFF.get());

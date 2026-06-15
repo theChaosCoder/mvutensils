@@ -151,10 +151,7 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
 
                 auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
-                auto dstTileVXFw = MaskResizer::GetTileBuffer();
-                auto dstTileVYFw = MaskResizer::GetTileBuffer();
-                auto dstTileVXBw = MaskResizer::GetTileBuffer();
-                auto dstTileVYBw = MaskResizer::GetTileBuffer();
+                auto [dstTileVXFw, dstTileVYFw, dstTileVXBw, dstTileVYBw] = MaskResizer::GetTileBuffers<4>();
 
                 auto srcBufVXFw = MaskResizer::MakeSrcBuffer(smallMasksFw->VXSmallY, smallMasksFw->pitchVSmallY);
                 auto srcBufVYFw = MaskResizer::MakeSrcBuffer(smallMasksFw->VYSmallY, smallMasksFw->pitchVSmallY);

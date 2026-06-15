@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <vector>
 #include <memory>
+#include <tuple>
+#include <utility>
 #include "Common.h"
 
 #define ZIMGXX_NAMESPACE mvuzimgxx
@@ -52,15 +54,25 @@ public:
         return buf;
     }
 
+    static std::unique_ptr<void, decltype(&mvu_aligned_free)> GetTmpBuffer(size_t size) {
+        return std::unique_ptr<void, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<void>(size, 64), mvu_aligned_free };
+    }
+
     static constexpr ptrdiff_t GetTileBufferStride() {
         return roundUpTo64(TileSize * sizeof(uint16_t));
     }
 
+    template <size_t N>
+    static auto GetTileBuffers() {
+        return GetTileBuffersImpl(std::make_index_sequence<N>{});
+    }
+private:
     static std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)> GetTileBuffer() {
-        return std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<uint16_t>(GetTileBufferStride() * TileSize, 64), mvu_aligned_free };
+        return std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<uint16_t>(GetTileBufferStride() *TileSize, 64), mvu_aligned_free };
     }
 
-    static std::unique_ptr<void, decltype(&mvu_aligned_free)> GetTmpBuffer(size_t size) {
-        return std::unique_ptr<void, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<void>(size, 64), mvu_aligned_free };
+    template <size_t... Is>
+    static auto GetTileBuffersImpl(std::index_sequence<Is...>) {
+        return std::make_tuple(((void)Is, GetTileBuffer())...);
     }
 };
