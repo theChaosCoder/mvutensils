@@ -3,6 +3,7 @@
 #include <functional>
 #include <algorithm>
 #include <memory>
+#include <cmath>
 #include "Common.h"
 
 // Only for emms
