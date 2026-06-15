@@ -106,14 +106,13 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
         MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
 
         if (vectors.IsUsable(d->thscd1, d->thscd2)) {
-            const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-            FramePyramid refGOF(ref, 1, d->prefix, vsapi);
-
             const VSFrame *propSrc = vsapi->getFrameFilter(n, d->clip, frameCtx);
             VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
             vsapi->freeFrame(propSrc);
 
             try {
+                const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
+                FramePyramid refGOF(ref, 1, d->prefix, vsapi);
 
                 // FIXME, this field shift and combined tff logic is a even more of a mess than usueal
                 int fieldShift = 0;
@@ -185,8 +184,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
 
                 return dst;
 
-            }
-            catch (std::runtime_error &e) {
+            } catch (std::runtime_error &e) {
                 vsapi->setFilterError(("Flow: " + std::string(e.what())).c_str(), frameCtx);
                 vsapi->freeFrame(dst);
                 return nullptr;
