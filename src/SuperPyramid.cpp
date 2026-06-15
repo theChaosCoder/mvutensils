@@ -95,14 +95,14 @@ void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int 
     // Top and bottom padding by copying the first and last actual image line that's already been extended horizontally
     const PixelType *dstPLastLine = dstP - dstPitch;
     for (int h = 0; h < vPad + nBlkSizePadY; h++) {
-        memcpy(dstP, dstPLastLine, dstPitch);
+        memcpy(dstP, dstPLastLine, nPitch);
         dstP += dstPitch;
     }
 
     dstP = reinterpret_cast<PixelType *>(vsapi->getWritePtr(dst, 0));
     const PixelType *dstPFirstLine = dstP + dstPitch * vPad;
     for (int h = 0; h < vPad; h++) {
-        memcpy(dstP, dstPFirstLine, dstPitch);
+        memcpy(dstP, dstPFirstLine, nPitch);
         dstP += dstPitch;
     }
 
