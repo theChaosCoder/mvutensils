@@ -1475,7 +1475,7 @@ void MotionBlockPyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, co
             int nBlkY1 = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
             int size = vsapi->mapGetDataSize(props, vectorsProp.c_str(), i, &err);
             pyramidLevels[i].Initialize(nBlkX1, nBlkY1, nBlkSizeX, nBlkSizeY, (i == 0) ? nPel : 1, i, (i == loadLevels - 1), chroma, nOverlapX, nOverlapY, xRatioUV, yRatioUV, vi->bitsPerSample);
-            if (size == nBlkX1 * nBlkY1 * sizeof(VECTOR)) {
+            if (size == nBlkX1 * nBlkY1 * static_cast<int>(sizeof(VECTOR))) {
                 const char *data = vsapi->mapGetData(props, vectorsProp.c_str(), i, &err);
                 if (!data) {
                     pyramidLevels.clear();
