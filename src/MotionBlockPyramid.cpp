@@ -1062,7 +1062,9 @@ void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const Frame
             DoSearchMVs<2, uint16_t>(pSrcFrame, pRefFrame, st, stp, lambda, lsad, pnew, plevel, globalMVec, fieldShift, pzero, pglobal, badSAD, badrange, meander, tryMany, chroma);
     }
 
+#ifdef MVTOOLS_X86
     mvtools_cpu_emms();
+#endif
 }
 
 
@@ -1352,8 +1354,9 @@ void MotionBlockLevel::RecalculateMVs(const FramePyramidLevel &pSrcFrame, const 
         else
             DoRecalculateMVs<2, uint16_t>(pSrcFrame, pRefFrame, nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY, chroma, st, stp, lambda, pnew, fieldShift, thSAD, smooth, meander, useSatd);
     }
-
+#ifdef MVTOOLS_X86
     mvtools_cpu_emms();
+#endif
 }
 
 
