@@ -284,6 +284,54 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
 }
 
 
+static void VS_CC analyseManyCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+    int err;
+
+    int radius = vsapi->mapGetIntSaturated(in, "radius", 0, &err);
+    if (radius < 1) {
+        vsapi->mapSetError(out, "AnalyseMany: radius must be a positive number");
+        return;
+    }
+
+    int delta = vsapi->mapGetIntSaturated(in, "delta", 0, &err);
+    if (err)
+        delta = 1;
+
+    if (delta < 1) {
+        vsapi->mapSetError(out, "AnalyseMany: delta must be a positive number");
+        return;
+    }
+
+    VSMap *args = vsapi->createMap();
+    vsapi->copyMap(in, args);
+    vsapi->mapDeleteKey(args, "radius");
+
+    VSPlugin *thisPlugin = vsapi->getPluginByID("com.vapoursynth.mvutensils", core);
+
+    for (int r = 1; r <= radius; ++r) {
+        auto InvokeAnalyse = [&](int delta) {
+            vsapi->mapSetInt(args, "delta", r, maReplace);
+            VSMap *ret = vsapi->invoke(thisPlugin, "Analyse", args);
+            if (vsapi->mapGetError(ret)) {
+                vsapi->mapSetError(out, ("AnalyseMany: " + std::string(vsapi->mapGetError(ret))).c_str());
+                vsapi->freeMap(ret);
+                return false;
+            } else {
+                vsapi->mapConsumeNode(ret, "clip", vsapi->mapGetNode(ret, "clip", 0, nullptr), maAppend);
+                vsapi->freeMap(ret);
+                return true;
+            }
+        };
+
+        if (!InvokeAnalyse(r))
+            break;
+        if (!InvokeAnalyse(-r))
+            break;
+    }
+
+    vsapi->freeMap(args);
+}
+
 void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("Analyse",
                  "super:vnode;"
@@ -314,4 +362,34 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "prefix:data:opt;",
                  "clip:vnode;",
                  analyseCreate, nullptr, plugin);
+    vspapi->registerFunction("AnalyseMany",
+                 "super:vnode;"
+                 "blksize:int[]:opt;"
+                 "levels:int:opt;"
+                 "search:int:opt;"
+                 "searchparam:int:opt;"
+                 "pelsearch:int:opt;"
+                 "lambda:int:opt;"
+                 "chroma:int:opt;"
+                 "delta:int:opt;"
+                 "truemotion:int:opt;"
+                 "lsad:int:opt;"
+                 "plevel:int:opt;"
+                 "global:int:opt;"
+                 "pnew:int:opt;"
+                 "pzero:int:opt;"
+                 "pglobal:int:opt;"
+                 "overlap:int[]:opt;"
+                 "badsad:int:opt;"
+                 "badrange:int:opt;"
+                 "meander:int:opt;"
+                 "trymany:int:opt;"
+                 "fields:int:opt;"
+                 "tff:int:opt;"
+                 "search_coarse:int:opt;"
+                 "satd:int:opt;"
+                 "radius:int;"
+                 "prefix:data:opt;",
+                 "clip:vnode[];",
+                 analyseManyCreate, nullptr, plugin);
 }
