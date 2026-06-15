@@ -201,7 +201,7 @@ private:
         int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept;
 
     bool IsVectorOK(int vx, int vy) const noexcept;
-    int MotionDistorsion(int vx, int vy) const noexcept;
+    int64_t MotionDistorsion(int vx, int vy) const noexcept;
     VECTOR ClipMV(VECTOR v) const noexcept;
     void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept;
     void InitMotionEstimationFields(bool useSatd, bool chroma, int bytesPerSample);
