@@ -26,7 +26,7 @@ dynamic = ["version"]
 
 [project.urls]
 Repository = "https://github.com/myrsloik/mvutensils.git"
-Issues = "https://github.com/dubhatervapoursynth/vapoursynth-mvtools/issues"
+Issues = "https://github.com/myrsloik/mvutensils/issues"
 
 [tool.meson-python.wheel]
 exclude = ["*/*.dll.a", "*/*.lib"]
