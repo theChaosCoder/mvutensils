@@ -1575,6 +1575,8 @@ static void motion2transform(float dx1, float dy1, float rot, float zoom1, float
     rotradian = fractoffset * rot * PI / 180; // from degree to radian
     if (fabsf(rotradian) < 1e-6f)
         rotradian = 0.0f; // for some stability of rounding precision
+    if (zoom1 < 1e-6f) // a zero/negative zoom (e.g. from a malformed data clip) makes logf NaN/-inf
+        zoom1 = 1e-6f;
     zoom = expf(fractoffset * logf(zoom1)); // zoom**(fractoffset) = exp(fractoffset*ln(zoom))
     if (fabsf(zoom - 1.0f) < 1e-6f)
         zoom = 1.0f; // for some stability of rounding precision
