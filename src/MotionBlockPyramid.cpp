@@ -960,7 +960,7 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
     searchType = st;    //( nLogScale == 0 ) ? st : EXHAUSTIVE;
     nSearchParam = stp; //*nPel; // v1.8.2 - redesigned in v1.8.5
 
-    int nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
+    int64_t nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
     if (plevel == 1)
         nLambdaLevel = nLambdaLevel * nScale; // scale lambda - Fizick
     else if (plevel == 2)
@@ -1164,7 +1164,7 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     searchType = st;
     nSearchParam = stp;
 
-    int nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
+    int64_t nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
 
 
     // Functions using float must not be used here
