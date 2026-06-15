@@ -252,8 +252,11 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VS
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("source clip isn't compatible with super clip");
 
-        d->mvfw = vsapi->mapGetNode(in, "mvfw", 0, nullptr);
-        d->mvbw = vsapi->mapGetNode(in, "mvbw", 0, nullptr);
+        if (vsapi->mapNumElements(in, "vectors") != 2)
+            throw std::runtime_error("vectors must have exactly 2 elements");
+
+        d->mvbw = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+        d->mvfw = vsapi->mapGetNode(in, "vectors", 1, nullptr);
 
         MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
         MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
@@ -295,8 +298,7 @@ void flowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("FlowBlur",
                  "clip:vnode;"
                  "super:vnode;"
-                 "mvbw:vnode;"
-                 "mvfw:vnode;"
+                 "vectors:vnode[];"
                  "blur:float:opt;"
                  "prec:int:opt;"
                  "thscd1:int:opt;"

@@ -288,6 +288,8 @@ static void VS_CC analyseManyCreate(const VSMap *in, VSMap *out, void *userData,
     int err;
 
     int radius = vsapi->mapGetIntSaturated(in, "radius", 0, &err);
+    if (err)
+        radius = 1;
     if (radius < 1) {
         vsapi->mapSetError(out, "AnalyseMany: radius must be a positive number");
         return;
@@ -388,7 +390,7 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "tff:int:opt;"
                  "search_coarse:int:opt;"
                  "satd:int:opt;"
-                 "radius:int;"
+                 "radius:int:opt;"
                  "prefix:data:opt;",
                  "clip:vnode[];",
                  analyseManyCreate, nullptr, plugin);

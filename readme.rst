@@ -53,7 +53,7 @@ Changes
 	* Renamed lambda to mvlamda and global to globalmv to not collide with python keywords
 	
 * AnalyseMany:
-	* A helper function to generate a multiple analysis clips quickly to pass to DegrainN and friends, takes the same arguments as Analyse except that delta is a positive number controlling the step size backward and forward. The radius argument determines how many vectors are produced. For example radius=2 will return [Analyse(delta=1), Analyse(delta=-1), Analyse(delta=2), Analyse(delta=-2)]
+	* A helper function to generate a multiple analysis clips quickly to pass to DegrainN and friends, takes the same arguments as Analyse except that delta is a positive number controlling the step size backward and forward. The radius argument determines how many vectors are produced and defaults to 1. For example radius=2 will return [Analyse(delta=1), Analyse(delta=-1), Analyse(delta=2), Analyse(delta=-2)]
 	
 * Compensate:
     * None
@@ -89,12 +89,23 @@ Changes
 	
 	* Greatly reduced memory usage
 	
+	* The mvbw and mvfw argumets were replaced with vectors=[mvbw, mvfw] so it interacts better with AnalyseMany
+	
+* FlowInter
+	* Improved internal mask resizing quality
+	
+	* Greatly reduced memory usage
+	
+	* The mvbw and mvfw argumets were replaced with vectors=[mvbw, mvfw] so it interacts better with AnalyseMany
+
 * FlowFPS
 	* Improved internal mask resizing quality
 	
 	* Greatly reduced memory usage
 
 	* The mask argument was replaced with extramask=True/False, extramask=False is the same as mask=1 and extramask=True is equivalent to mask=2
+	
+	* The mvbw and mvfw argumets were replaced with vectors=[mvbw, mvfw] so it interacts better with AnalyseMany
 
 * SCDetection:
     * None
@@ -110,7 +121,7 @@ Planned changes/mysteries
 
 * Does the delta sign direction make sense? Flip it?
 
-* Have FlowBlur, FlowFPS and FlowInter take a vectors=[bw, fw] argument instead
+* Rework limit/limitc in degrain
 
 * Big additional code cleanups
 

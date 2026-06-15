@@ -305,8 +305,11 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, V
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("super clip is not compatible with source clip");
 
-        d->mvbw = vsapi->mapGetNode(in, "mvbw", 0, nullptr);
-        d->mvfw = vsapi->mapGetNode(in, "mvfw", 0, nullptr);
+        if (vsapi->mapNumElements(in, "vectors") != 2)
+            throw std::runtime_error("vectors must have exactly 2 elements");
+
+        d->mvbw = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+        d->mvfw = vsapi->mapGetNode(in, "vectors", 1, nullptr);
 
         MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
         MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
@@ -348,8 +351,7 @@ void flowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("FlowInter",
                  "clip:vnode;"
                  "super:vnode;"
-                 "mvbw:vnode;"
-                 "mvfw:vnode;"
+                 "vectors:vnode[];"
                  "time:float:opt;"
                  "ml:float:opt;"
                  "blend:int:opt;"

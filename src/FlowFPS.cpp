@@ -392,8 +392,11 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (!super.IsCompatibleWithSource(d->oldvi))
             throw std::runtime_error("super clip is not compatible with source clip");
 
-        d->mvbw = vsapi->mapGetNode(in, "mvbw", 0, nullptr);
-        d->mvfw = vsapi->mapGetNode(in, "mvfw", 0, nullptr);
+        if (vsapi->mapNumElements(in, "vectors") != 2)
+            throw std::runtime_error("vectors must have exactly 2 elements");
+
+        d->mvbw = vsapi->mapGetNode(in, "vectors", 0, nullptr);
+        d->mvfw = vsapi->mapGetNode(in, "vectors", 1, nullptr);
 
         MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
         MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
@@ -463,8 +466,7 @@ void flowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     vspapi->registerFunction("FlowFPS",
                  "clip:vnode;"
                  "super:vnode;"
-                 "mvbw:vnode;"
-                 "mvfw:vnode;"
+                 "vectors:vnode[];"
                  "num:int:opt;"
                  "den:int:opt;"
                  "extramask:int:opt;"
