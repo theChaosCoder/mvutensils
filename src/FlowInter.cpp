@@ -325,7 +325,6 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, V
         return;
     }
 
-    // FIXME, check actual use
     VSFilterDependency deps[4] = { 
         {d->node, rpGeneral}, 
         {d->super, rpGeneral},

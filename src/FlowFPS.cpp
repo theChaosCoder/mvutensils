@@ -67,8 +67,6 @@ template<typename PixelType>
 static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     const FlowFPSData *d = reinterpret_cast<FlowFPSData *>(instanceData);
 
-    // FIXME, catch exceptions
-
     if (activationReason == arInitial) {
         int off = -d->deltaFrame;
 
@@ -105,171 +103,179 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
             vsapi->requestFrameFilter(std::min(nright, d->oldvi->numFrames - 1), d->node, frameCtx);
 
     } else if (activationReason == arAllFramesReady) {
-        int nleft = (int)(n * d->fa / d->fb);
-        // intermediate product may be very large! Now I know how to multiply int64
-        int time256 = (int)(((double)n * d->fa / d->fb - nleft) * 256 + 0.5);
+        VSFrame *dst = nullptr;
 
-        int off = -d->deltaFrame; // integer offset of reference frame
-        // usually off must be = 1
-        if (off > 1)
-            time256 = time256 / off;
+        try {
+            int nleft = (int)(n * d->fa / d->fb);
+            // intermediate product may be very large! Now I know how to multiply int64
+            int time256 = (int)(((double)n * d->fa / d->fb - nleft) * 256 + 0.5);
 
-        int nright = nleft + off;
+            int off = -d->deltaFrame; // integer offset of reference frame
+            // usually off must be = 1
+            if (off > 1)
+                time256 = time256 / off;
 
-        if (time256 == 0) {
-            return vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx); // simply left
-        } else if (time256 == 256) {
-            return vsapi->getFrameFilter(std::min(nright, d->oldvi->numFrames - 1), d->node, frameCtx); // simply right
-        }
+            int nright = nleft + off;
 
-        bool vectorsLoadFrame = (nleft < d->oldvi->numFrames && nright < d->oldvi->numFrames);
-
-        MotionBlockPyramid vectorsF(vectorsLoadFrame ? vsapi->getFrameFilter(nright, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
-        MotionBlockPyramid vectorsB(vectorsLoadFrame ? vsapi->getFrameFilter(nleft, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
-
-        if (vectorsB.IsUsable(d->thscd1, d->thscd2) && vectorsF.IsUsable(d->thscd1, d->thscd2)) {
-            // If both are usable, that means both nleft and nright are less than oldvi->numFrames. Thus there is no need to check nleft and nright here.
-            FramePyramid src(vsapi->getFrameFilter(nleft, d->super, frameCtx), 1, d->prefix, core, vsapi);
-            FramePyramid ref(vsapi->getFrameFilter(nright, d->super, frameCtx), 1, d->prefix, core, vsapi);
-            const VSFrame *dstPropSrc = vsapi->getFrameFilter(nleft, d->super, frameCtx);
-            VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, dstPropSrc, core);
-            vsapi->freeFrame(dstPropSrc);
-
-            auto SmallB = vectorsB.MakeSmallVectorMasks();
-            auto SmallF = vectorsF.MakeSmallVectorMasks();
-
-            auto MaskSmallB = vectorsB.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - time256));
-            auto MaskSmallF = vectorsF.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - time256));
-
-            auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
-
-            auto [dstTileMaskF, dstTileMaskB, dstTileXF, dstTileYF, dstTileXB, dstTileYB] = MaskResizer::GetTileBuffers<6>();
-
-            auto bufMaskF = MaskResizer::MakeBufferPair(MaskSmallF->mask, MaskSmallF->stride, dstTileMaskF.get());
-            auto bufMaskB = MaskResizer::MakeBufferPair(MaskSmallB->mask, MaskSmallB->stride, dstTileMaskB.get());
-
-            auto bufSmallFX = MaskResizer::MakeBufferPair(SmallF->VXSmallY, SmallF->pitchVSmallY, dstTileXF.get());
-            auto bufSmallFY = MaskResizer::MakeBufferPair(SmallF->VYSmallY, SmallF->pitchVSmallY, dstTileYF.get());
-            auto bufSmallBX = MaskResizer::MakeBufferPair(SmallB->VXSmallY, SmallB->pitchVSmallY, dstTileXB.get());
-            auto bufSmallBY = MaskResizer::MakeBufferPair(SmallB->VYSmallY, SmallB->pitchVSmallY, dstTileYB.get());
-
-            MotionBlockPyramid vectorsFF(d->extraMask ? vsapi->getFrameFilter(nleft, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
-            MotionBlockPyramid vectorsBB(d->extraMask ? vsapi->getFrameFilter(nright, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
-
-            if (d->extraMask && vectorsBB.IsUsable(d->thscd1, d->thscd2) && vectorsFF.IsUsable(d->thscd1, d->thscd2)) {
-                // get vector mask from extra frames
-                auto SmallBB = vectorsBB.MakeSmallVectorMasks();
-                auto SmallFF = vectorsFF.MakeSmallVectorMasks();
-
-                auto [dstTileXFF, dstTileYFF, dstTileXBB, dstTileYBB] = MaskResizer::GetTileBuffers<4>();
-
-                auto bufSmallFFX = MaskResizer::MakeBufferPair(SmallFF->VXSmallY, SmallFF->pitchVSmallY, dstTileXFF.get());
-                auto bufSmallFFY = MaskResizer::MakeBufferPair(SmallFF->VYSmallY, SmallFF->pitchVSmallY, dstTileYFF.get());
-                auto bufSmallBBX = MaskResizer::MakeBufferPair(SmallBB->VXSmallY, SmallBB->pitchVSmallY, dstTileXBB.get());
-                auto bufSmallBBY = MaskResizer::MakeBufferPair(SmallBB->VYSmallY, SmallBB->pitchVSmallY, dstTileYBB.get());
-
-                ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
-                uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
-
-                for (auto &tile : d->maskResizerFull.tiles) {
-                    tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
-
-                    FlowInterExtra<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
-                         ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
-                         dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                         dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
-                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
-                         dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
-                }
-
-                if (d->vi.format.numPlanes == 3) {
-                    SmallF->AdjustSmallVectorMaskSubSampling(vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    SmallB->AdjustSmallVectorMaskSubSampling(vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    SmallFF->AdjustSmallVectorMaskSubSampling(vectorsFF.nBlkX, vectorsFF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    SmallBB->AdjustSmallVectorMaskSubSampling(vectorsBB.nBlkX, vectorsBB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-
-                    ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
-                    ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
-                    uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
-                    uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
-
-                    for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
-                        tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
-
-                        FlowInterExtra<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
-                             ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
-                             dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                             dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
-                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
-                             dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
-
-                        FlowInterExtra<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
-                             ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
-                             dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                             dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
-                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
-                             dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
-                    }
-                }
-            } else { // old method without extra frames
-                ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
-                uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
-
-                for (auto &tile : d->maskResizerFull.tiles) {
-                    tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
-     
-                    FlowInter<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
-                         ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
-                         dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                         dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
-                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
-
-                }
-
-                if (d->vi.format.numPlanes == 3) {
-                    SmallF->AdjustSmallVectorMaskSubSampling(vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    SmallB->AdjustSmallVectorMaskSubSampling(vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-
-                    ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
-                    ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
-                    uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
-                    uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
-
-                    for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
-                        tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
-
-                        FlowInter<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
-                                ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
-                                dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                                dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
-                                tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
-
-                        FlowInter<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
-                                ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
-                                dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
-                                dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
-                                tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
-                    }
-                }
+            if (time256 == 0) {
+                return vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx); // simply left
+            } else if (time256 == 256) {
+                return vsapi->getFrameFilter(std::min(nright, d->oldvi->numFrames - 1), d->node, frameCtx); // simply right
             }
 
-            return dst;
-        } else {
-            if (d->blend) {
-                const VSFrame *src = vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx);
-                const VSFrame *ref = vsapi->getFrameFilter(std::min(nright, d->oldvi->numFrames - 1), d->node, frameCtx);
-                VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, src, core);
+            bool vectorsLoadFrame = (nleft < d->oldvi->numFrames && nright < d->oldvi->numFrames);
 
-                for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
-                    Blend<PixelType>(vsapi->getWritePtr(dst, plane), vsapi->getReadPtr(src, plane), vsapi->getReadPtr(ref, plane), vsapi->getFrameHeight(dst, plane), vsapi->getFrameWidth(dst, plane), vsapi->getStride(dst, plane), time256);
+            MotionBlockPyramid vectorsF(vectorsLoadFrame ? vsapi->getFrameFilter(nright, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectorsB(vectorsLoadFrame ? vsapi->getFrameFilter(nleft, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
 
-                vsapi->freeFrame(src);
-                vsapi->freeFrame(ref);
+            if (vectorsB.IsUsable(d->thscd1, d->thscd2) && vectorsF.IsUsable(d->thscd1, d->thscd2)) {
+                // If both are usable, that means both nleft and nright are less than oldvi->numFrames. Thus there is no need to check nleft and nright here.
+                FramePyramid src(vsapi->getFrameFilter(nleft, d->super, frameCtx), 1, d->prefix, core, vsapi);
+                FramePyramid ref(vsapi->getFrameFilter(nright, d->super, frameCtx), 1, d->prefix, core, vsapi);
+                const VSFrame *dstPropSrc = vsapi->getFrameFilter(nleft, d->super, frameCtx);
+                dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, dstPropSrc, core);
+                vsapi->freeFrame(dstPropSrc);
+
+                auto SmallB = vectorsB.MakeSmallVectorMasks();
+                auto SmallF = vectorsF.MakeSmallVectorMasks();
+
+                auto MaskSmallB = vectorsB.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - time256));
+                auto MaskSmallF = vectorsF.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - time256));
+
+                auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
+
+                auto [dstTileMaskF, dstTileMaskB, dstTileXF, dstTileYF, dstTileXB, dstTileYB] = MaskResizer::GetTileBuffers<6>();
+
+                auto bufMaskF = MaskResizer::MakeBufferPair(MaskSmallF->mask, MaskSmallF->stride, dstTileMaskF.get());
+                auto bufMaskB = MaskResizer::MakeBufferPair(MaskSmallB->mask, MaskSmallB->stride, dstTileMaskB.get());
+
+                auto bufSmallFX = MaskResizer::MakeBufferPair(SmallF->VXSmallY, SmallF->pitchVSmallY, dstTileXF.get());
+                auto bufSmallFY = MaskResizer::MakeBufferPair(SmallF->VYSmallY, SmallF->pitchVSmallY, dstTileYF.get());
+                auto bufSmallBX = MaskResizer::MakeBufferPair(SmallB->VXSmallY, SmallB->pitchVSmallY, dstTileXB.get());
+                auto bufSmallBY = MaskResizer::MakeBufferPair(SmallB->VYSmallY, SmallB->pitchVSmallY, dstTileYB.get());
+
+                MotionBlockPyramid vectorsFF(d->extraMask ? vsapi->getFrameFilter(nleft, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+                MotionBlockPyramid vectorsBB(d->extraMask ? vsapi->getFrameFilter(nright, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+
+                if (d->extraMask && vectorsBB.IsUsable(d->thscd1, d->thscd2) && vectorsFF.IsUsable(d->thscd1, d->thscd2)) {
+                    // get vector mask from extra frames
+                    auto SmallBB = vectorsBB.MakeSmallVectorMasks();
+                    auto SmallFF = vectorsFF.MakeSmallVectorMasks();
+
+                    auto [dstTileXFF, dstTileYFF, dstTileXBB, dstTileYBB] = MaskResizer::GetTileBuffers<4>();
+
+                    auto bufSmallFFX = MaskResizer::MakeBufferPair(SmallFF->VXSmallY, SmallFF->pitchVSmallY, dstTileXFF.get());
+                    auto bufSmallFFY = MaskResizer::MakeBufferPair(SmallFF->VYSmallY, SmallFF->pitchVSmallY, dstTileYFF.get());
+                    auto bufSmallBBX = MaskResizer::MakeBufferPair(SmallBB->VXSmallY, SmallBB->pitchVSmallY, dstTileXBB.get());
+                    auto bufSmallBBY = MaskResizer::MakeBufferPair(SmallBB->VYSmallY, SmallBB->pitchVSmallY, dstTileYBB.get());
+
+                    ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
+                    uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
+
+                    for (auto &tile : d->maskResizerFull.tiles) {
+                        tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
+
+                        FlowInterExtra<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
+                             ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
+                             dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                             dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
+                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
+                             dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
+                    }
+
+                    if (d->vi.format.numPlanes == 3) {
+                        SmallF->AdjustSmallVectorMaskSubSampling(vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                        SmallB->AdjustSmallVectorMaskSubSampling(vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                        SmallFF->AdjustSmallVectorMaskSubSampling(vectorsFF.nBlkX, vectorsFF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                        SmallBB->AdjustSmallVectorMaskSubSampling(vectorsBB.nBlkX, vectorsBB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+
+                        ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
+                        ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
+                        uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
+                        uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
+
+                        for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                            tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
+
+                            FlowInterExtra<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
+                                 ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
+                                 dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                                 dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
+                                 tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
+                                 dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
+
+                            FlowInterExtra<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
+                                 ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
+                                 dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                                 dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
+                                 tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
+                                 dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
+                        }
+                    }
+                } else { // old method without extra frames
+                    ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
+                    uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
+
+                    for (auto &tile : d->maskResizerFull.tiles) {
+                        tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
+
+                        FlowInter<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
+                             ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
+                             dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                             dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
+                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
+
+                    }
+
+                    if (d->vi.format.numPlanes == 3) {
+                        SmallF->AdjustSmallVectorMaskSubSampling(vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                        SmallB->AdjustSmallVectorMaskSubSampling(vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+
+                        ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
+                        ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
+                        uint8_t *dstPtrU = vsapi->getWritePtr(dst, 1);
+                        uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
+
+                        for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
+                            tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
+
+                            FlowInter<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
+                                    ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
+                                    dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                                    dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
+                                    tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
+
+                            FlowInter<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
+                                    ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
+                                    dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
+                                    dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
+                                    tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
+                        }
+                    }
+                }
 
                 return dst;
             } else {
-                return vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx);
+                if (d->blend) {
+                    const VSFrame *src = vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx);
+                    const VSFrame *ref = vsapi->getFrameFilter(std::min(nright, d->oldvi->numFrames - 1), d->node, frameCtx);
+                    VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, src, core);
+
+                    for (int plane = 0; plane < d->vi.format.numPlanes; plane++)
+                        Blend<PixelType>(vsapi->getWritePtr(dst, plane), vsapi->getReadPtr(src, plane), vsapi->getReadPtr(ref, plane), vsapi->getFrameHeight(dst, plane), vsapi->getFrameWidth(dst, plane), vsapi->getStride(dst, plane), time256);
+
+                    vsapi->freeFrame(src);
+                    vsapi->freeFrame(ref);
+
+                    return dst;
+                } else {
+                    return vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx);
+                }
             }
+        } catch (std::runtime_error &e) {
+            vsapi->freeFrame(dst);
+            vsapi->setFilterError(e.what(), frameCtx);
+            return nullptr;
         }
     }
 
@@ -441,7 +447,6 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
         return;
     }
 
-    // FIXME, are mvbw and mvfw  strictspatial when extraMask is false?
     VSFilterDependency deps[4] = { 
         {d->node, rpGeneral},
         {d->super, rpGeneral},

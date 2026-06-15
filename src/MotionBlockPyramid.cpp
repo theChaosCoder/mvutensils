@@ -1755,7 +1755,6 @@ bool MotionBlockPyramid::IsCompatibleForRecalc(const FramePyramid &other) const 
 //////////////////////////
 // Mask relatted functions
 
-// FIXME, is double really needed? probably not
 template<typename PixelType>
 static PixelType MaskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma, int maxVal) noexcept {
     double norme = (double)(v.x * v.x + v.y * v.y) / (pel * pel);
