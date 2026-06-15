@@ -3690,6 +3690,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         // use next frame to fill borders
         if (d->next > 0) {
             if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi)) {
+                free(work2width4356);
                 vsapi->freeFrame(dst);
                 vsapi->freeFrame(src);
                 return NULL;
@@ -3866,6 +3867,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
         // use next frame to fill borders
         if (d->next > 0) {
             if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi)) {
+                free(work2width4356);
                 vsapi->freeFrame(dst);
                 vsapi->freeFrame(src);
                 return NULL;
