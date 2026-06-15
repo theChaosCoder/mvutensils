@@ -283,9 +283,9 @@ static unsigned int SquareDifferenceNorm(const VECTOR &v1, const int v2x, const 
 
 
 /* computes the cost of a vector (vx, vy) */
-int MotionBlockLevel::MotionDistorsion(int vx, int vy) const noexcept {
+int64_t MotionBlockLevel::MotionDistorsion(int vx, int vy) const noexcept {
     int dist = SquareDifferenceNorm(predictor, vx, vy);
-    return (int)((nLambda * dist) >> 8);
+    return (int64_t)((nLambda * dist) >> 8);
 }
 
 /* check if a vector is inside search boundaries */
