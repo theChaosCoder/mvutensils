@@ -308,7 +308,7 @@ public:
     bool IsCompatibleForRecalc(const FramePyramid &other) const noexcept;
 
     template<typename PixelType>
-    std::unique_ptr<BlockMask<PixelType>> MakeVectorLengthMask(float normFactor, float fGamma, int time256) const noexcept;
+    std::unique_ptr<BlockMask<PixelType>> MakeVectorLengthMask(float normFactor, float fGamma) const noexcept;
     template<typename PixelType>
     std::unique_ptr<BlockMask<PixelType>> MakeSADMask(float dSADNormFactor, float fGamma, int time256) const noexcept;
     template<typename PixelType>

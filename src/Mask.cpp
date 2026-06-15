@@ -77,7 +77,7 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
             if (vectors.IsUsable(d->thscd1, d->thscd2)) {
                 std::unique_ptr<BlockMask<PixelType>> Mask;
                 if (d->kind == 0) {
-                    Mask = vectors.MakeVectorLengthMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256);
+                    Mask = vectors.MakeVectorLengthMask<PixelType>(d->fMaskNormFactor, d->fGamma);
                 } else if (d->kind == 1) {
                     Mask = vectors.MakeSADMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256);
                 } else if (d->kind == 2) {

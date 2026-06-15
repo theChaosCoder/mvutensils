@@ -119,7 +119,6 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
         const int nPel = vectors.nPel;
         const int nHPadding[3] = { vectors.nHPadding, nHPadding[0] >> xSubUV, nHPadding[1] };
         const int nVPadding[3] = { vectors.nVPadding, nVPadding[0] >> ySubUV, nVPadding[1] };
-        const int scBehavior = d->scBehavior;
         const int fields = d->fields;
         const int time256 = d->time256;
 
@@ -285,7 +284,6 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                         }
 
                         // Output the finalized rows (non-overlapping portion)
-                        int rowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[0] : (nBlkSizeY[0] - nOverlapY[0]);
                         for (int plane = 0; plane < num_planes; plane++) {
                             int planeRowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : (nBlkSizeY[plane] - nOverlapY[plane]);
                             int outputHeight = std::min(planeRowsToOutput, std::min(vsapi->getFrameHeight(dst, plane), nHeight_B[plane]) - by * (nBlkSizeY[plane] - nOverlapY[plane]));

@@ -1072,7 +1072,7 @@ void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) cons
         }
     }
 
-    for (int level = 1; level < pyramidLevels.size(); level++) {
+    for (int level = 1; level < static_cast<int>(pyramidLevels.size()); level++) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
             assert(pyramidLevels[level].planes[plane].storage[0]);
             vsapi->mapSetFrame(props, (prefix + "SuperLevel" + std::to_string(level)).c_str(), pyramidLevels[level].planes[plane].storage[0], maAppend);

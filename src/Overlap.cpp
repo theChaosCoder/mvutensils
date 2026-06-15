@@ -289,8 +289,6 @@ OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigne
     OverlapsFunction overs = overlaps_functions.at(KEY(width, height, bits, MVOPT_SCALAR));
 
 #if defined(MVTOOLS_X86)
-    int cpu = g_cpuinfo;
-
     try {
         overs = overlaps_functions.at(KEY(width, height, bits, MVOPT_SSE2));
     } catch (std::out_of_range &) { }

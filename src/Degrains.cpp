@@ -172,8 +172,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
             const int nBlkX = fgops[0]->nBlkX;
             const int nBlkY = fgops[0]->nBlkY;
             const ptrdiff_t dstTempPitch = d->dstTempPitch;
-            const int *nWidth = d->nWidth;
-            const int *nHeight = d->nHeight;
             const int *nOverlapX = d->nOverlapX;
             const int *nOverlapY = d->nOverlapY;
             const int *nBlkSizeX = d->nBlkSizeX;
