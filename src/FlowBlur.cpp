@@ -134,13 +134,8 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
         int off = d->deltaFrame;
         bool vectorsLoadFrame = (n + off >= 0 && n - off < d->vi->numFrames);
 
-        const VSFrame *mvF = vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvfw, frameCtx) : nullptr;
-        MotionBlockPyramid vectorsfw(mvF, 1, d->prefix, core, vsapi);
-        vsapi->freeFrame(mvF);
-            
-        const VSFrame *mvB = vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvbw, frameCtx) : nullptr;
-        MotionBlockPyramid vectorsbw(mvB, 1, d->prefix, core, vsapi);
-        vsapi->freeFrame(mvB);
+        MotionBlockPyramid vectorsfw(vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+        MotionBlockPyramid vectorsbw(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
 
         if (vectorsfw.IsUsable(d->thscd1, d->thscd2) && vectorsbw.IsUsable(d->thscd1, d->thscd2)) {
             const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);

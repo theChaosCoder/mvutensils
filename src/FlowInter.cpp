@@ -86,13 +86,8 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
 
         bool vectorsLoadFrame = (n + off < d->vi->numFrames);
 
-        const VSFrame *mvF = vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvfw, frameCtx) : nullptr;
-        MotionBlockPyramid vectorsF(mvF, 1, d->prefix, core, vsapi);
-        vsapi->freeFrame(mvF);
-
-        const VSFrame *mvB = vectorsLoadFrame ? vsapi->getFrameFilter(n, d->mvbw, frameCtx) : nullptr;
-        MotionBlockPyramid vectorsB(mvB, 1, d->prefix, core, vsapi);
-        vsapi->freeFrame(mvB);
+        MotionBlockPyramid vectorsF(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+        MotionBlockPyramid vectorsB(vectorsLoadFrame ? vsapi->getFrameFilter(n, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
 
         if (vectorsB.IsUsable(d->thscd1, d->thscd2) && vectorsF.IsUsable(d->thscd1, d->thscd2)) {
             FramePyramid src(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, core, vsapi);
@@ -132,15 +127,8 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
             auto dstBufSmallXB = MaskResizer::MakeDstBuffer(dstTileXB.get());
             auto dstBufSmallYB = MaskResizer::MakeDstBuffer(dstTileYB.get());
 
-            // forward from previous to current
-            const VSFrame *mvFF = vsapi->getFrameFilter(n, d->mvfw, frameCtx);
-            MotionBlockPyramid vectorsFF(mvFF, 1, d->prefix, core, vsapi);
-            vsapi->freeFrame(mvFF);
-
-            // backward from next next to next
-            const VSFrame *mvBB = vsapi->getFrameFilter(n + off, d->mvbw, frameCtx);
-            MotionBlockPyramid vectorsBB(mvBB, 1, d->prefix, core, vsapi);
-            vsapi->freeFrame(mvBB);
+            MotionBlockPyramid vectorsFF(vsapi->getFrameFilter(n, d->mvfw, frameCtx), 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectorsBB(vsapi->getFrameFilter(n + off, d->mvbw, frameCtx), 1, d->prefix, core, vsapi);
 
             if (vectorsBB.IsUsable(d->thscd1, d->thscd2) && vectorsFF.IsUsable(d->thscd1, d->thscd2)) {
                 // get vector mask from extra frames

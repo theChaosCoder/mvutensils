@@ -51,9 +51,7 @@ static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, voi
         vsapi->freeFrame(src);
 
         try {
-            const VSFrame *mvn = vsapi->getFrameFilter(n, d->node2, frameCtx);
-            MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
-            vsapi->freeFrame(mvn);
+            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->node2, frameCtx), 1, d->prefix, core, vsapi);
 
             constexpr const char *propNames[2] = { "_SceneChangePrev", "_SceneChangeNext" };
             VSMap *props = vsapi->getFramePropertiesRW(dst);

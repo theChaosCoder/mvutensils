@@ -78,9 +78,7 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
             if (d->tff_exists)
                 src_top_field = d->tff ^ (n % 2);
 
-            const VSFrame *mvn = vsapi->getFrameFilter(n, d->node2, frameCtx);
-            MotionBlockPyramid fgop(mvn, 1, d->prefix, core, vsapi);
-            vsapi->freeFrame(mvn);
+            MotionBlockPyramid fgop(vsapi->getFrameFilter(n, d->node2, frameCtx), 1, d->prefix, core, vsapi);
 
             if (fgop.HasMotionVectors() && nref >= 0 && nref < d->vi->numFrames) {
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->node1, frameCtx);

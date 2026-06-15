@@ -281,6 +281,8 @@ private:
     DivideExtra divideExtra = DivideExtra::No;
     std::vector<VECTOR> dividedVectors;
     std::vector<MotionBlockLevel> pyramidLevels;
+    const VSFrame *sourceFrame = nullptr;
+    const VSAPI *vsapi;
     void LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi);
 public:
     // The FramePyramid in src is only used as a template for the internal data structures, the actual motion estimation is performed on the frames passed to SearchMVs
@@ -289,11 +291,12 @@ public:
     // de-serialization from a frame, can choose to omit some levels by setting maxLevel, if -1 all levels are loaded, 0 means only metadata and no vectors are loaded,
     // positive numbers mean that many levels are loaded. When loading from clips passing 1 is usually enough.
     // Object can be in an invalid or limited state after this constructor
-    // FIXME, take ownership of src by default?
     MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept;
 
     // Constructor to load metadata and do nothing else
     MotionBlockPyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
+
+    ~MotionBlockPyramid();
 
     void ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept; // serialization to a frame, oneLevel means that only the finest level is exported, otherwise all levels are exported as separate properties
 

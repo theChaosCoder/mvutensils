@@ -151,7 +151,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                 const VSFrame *frame = vsapi->getFrameFilter(n, d->vectors[r], frameCtx);
                 fgops[r].emplace(frame, 1, d->prefix, core, vsapi);
                 isUsable[r] = fgops[r]->IsUsable(d->nSCD1, d->nSCD2);
-                vsapi->freeFrame(frame);
 
                 if (isUsable[r]) {
                     int offset = fgops[r]->nDeltaFrame;
@@ -517,7 +516,7 @@ static void selectFunctions(DegrainData<radius> &d, const MotionBlockPyramid &ve
 }
 
 
-// FIXME, maybe move to shared header
+// FIXME, is individual plane processing in degrainN even a thing?
 static inline void getProcessPlanesArg(const VSMap *in, bool process[3], const VSAPI *vsapi) {
     int m = vsapi->mapNumElements(in, "planes");
 
@@ -584,27 +583,27 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (numVectors != radius * 2)
             throw std::runtime_error("the number of vector clips must be exactly " + std::to_string(radius * 2));
 
-        std::optional<MotionBlockPyramid> evilVectors[radius * 2];
+        std::optional<MotionBlockPyramid> vectors[radius * 2];
 
         for (int r = 0; r < radius * 2; r++) {
             d->vectors[r] = vsapi->mapGetNode(in, "vectors", r, nullptr);
 
-            evilVectors[r].emplace(d->vectors[r], d->prefix, core, vsapi);
+            vectors[r].emplace(d->vectors[r], d->prefix, core, vsapi);
 
-            if (r > 0 && !evilVectors[r]->IsCompatible(*evilVectors[r - 1]))
+            if (r > 0 && !vectors[r]->IsCompatible(*vectors[r - 1]))
                 throw std::runtime_error("The motion vectors passed are not compatible with each other");
 
-            if (!evilVectors[r]->IsCompatibleForAnalysis(super))
+            if (!vectors[r]->IsCompatibleForAnalysis(super))
                 throw std::runtime_error("The motion vectors passed are not compatible with the super clip");
 
-            d->deltaFrame[r] = evilVectors[r]->nDeltaFrame;
+            d->deltaFrame[r] = vectors[r]->nDeltaFrame;
         }
 
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("super clip is not compatible with the source clip");
 
         int64_t nSCD1_old = d->nSCD1;
-        evilVectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
+        vectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
 
         // FIXME, more checks? better checks?
         // bw1, fw1, bw2, fw2, ...
@@ -667,33 +666,33 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->nLimit[1] < 0 || d->nLimit[1] > pixelMax)
             throw std::runtime_error("limitc must be between 0 and " + std::to_string(pixelMax));
 
-        d->dstTempPitch = ((evilVectors[0]->nWidth + 15) / 16) * 16 * d->vi->format.bytesPerSample * 2;
+        d->dstTempPitch = ((vectors[0]->nWidth + 15) / 16) * 16 * d->vi->format.bytesPerSample * 2;
 
         d->xSubUV = d->vi->format.subSamplingW;
         d->ySubUV = d->vi->format.subSamplingH;
 
-        d->nWidth[0] = evilVectors[0]->nWidth;
+        d->nWidth[0] = vectors[0]->nWidth;
         d->nWidth[1] = d->nWidth[2] = d->nWidth[0] >> d->xSubUV;
 
-        d->nHeight[0] = evilVectors[0]->nHeight;
+        d->nHeight[0] = vectors[0]->nHeight;
         d->nHeight[1] = d->nHeight[2] = d->nHeight[0] >> d->ySubUV;
 
-        d->nOverlapX[0] = evilVectors[0]->nOverlapX;
+        d->nOverlapX[0] = vectors[0]->nOverlapX;
         d->nOverlapX[1] = d->nOverlapX[2] = d->nOverlapX[0] >> d->xSubUV;
 
-        d->nOverlapY[0] = evilVectors[0]->nOverlapY;
+        d->nOverlapY[0] = vectors[0]->nOverlapY;
         d->nOverlapY[1] = d->nOverlapY[2] = d->nOverlapY[0] >> d->ySubUV;
 
-        d->nBlkSizeX[0] = evilVectors[0]->nBlkSizeX;
+        d->nBlkSizeX[0] = vectors[0]->nBlkSizeX;
         d->nBlkSizeX[1] = d->nBlkSizeX[2] = d->nBlkSizeX[0] >> d->xSubUV;
 
-        d->nBlkSizeY[0] = evilVectors[0]->nBlkSizeY;
+        d->nBlkSizeY[0] = vectors[0]->nBlkSizeY;
         d->nBlkSizeY[1] = d->nBlkSizeY[2] = d->nBlkSizeY[0] >> d->ySubUV;
 
-        d->nWidth_B[0] = evilVectors[0]->nBlkX * (d->nBlkSizeX[0] - d->nOverlapX[0]) + d->nOverlapX[0];
+        d->nWidth_B[0] = vectors[0]->nBlkX * (d->nBlkSizeX[0] - d->nOverlapX[0]) + d->nOverlapX[0];
         d->nWidth_B[1] = d->nWidth_B[2] = d->nWidth_B[0] >> d->xSubUV;
 
-        d->nHeight_B[0] = evilVectors[0]->nBlkY * (d->nBlkSizeY[0] - d->nOverlapY[0]) + d->nOverlapY[0];
+        d->nHeight_B[0] = vectors[0]->nBlkY * (d->nBlkSizeY[0] - d->nOverlapY[0]) + d->nOverlapY[0];
         d->nHeight_B[1] = d->nHeight_B[2] = d->nHeight_B[0] >> d->ySubUV;
 
         if (d->nOverlapX[0] || d->nOverlapY[0]) {
@@ -705,7 +704,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
             }
         }
 
-        selectFunctions<radius>(*d, *evilVectors[0]);
+        selectFunctions<radius>(*d, *vectors[0]);
 
         const int numDeps = 2 + radius * 2; // input clip, super, and corresponding backward and forward vectors.
         std::vector<VSFilterDependency> deps;

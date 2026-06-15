@@ -125,13 +125,8 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
 
         bool vectorsLoadFrame = (nleft < d->oldvi->numFrames && nright < d->oldvi->numFrames);
 
-        const VSFrame *mvF = vectorsLoadFrame ? vsapi->getFrameFilter(nright, d->mvfw, frameCtx) : nullptr;
-        MotionBlockPyramid vectorsF(mvF, 1, d->prefix, core, vsapi);
-        vsapi->freeFrame(mvF);
-
-        const VSFrame *mvB = vectorsLoadFrame ? vsapi->getFrameFilter(nleft, d->mvbw, frameCtx) : nullptr;
-        MotionBlockPyramid vectorsB(mvB, 1, d->prefix, core, vsapi);
-        vsapi->freeFrame(mvB);
+        MotionBlockPyramid vectorsF(vectorsLoadFrame ? vsapi->getFrameFilter(nright, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+        MotionBlockPyramid vectorsB(vectorsLoadFrame ? vsapi->getFrameFilter(nleft, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
 
         if (vectorsB.IsUsable(d->thscd1, d->thscd2) && vectorsF.IsUsable(d->thscd1, d->thscd2)) {
             // If both are usable, that means both nleft and nright are less than oldvi->numFrames. Thus there is no need to check nleft and nright here.
@@ -172,15 +167,8 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
             auto dstBufSmallXB = MaskResizer::MakeDstBuffer(dstTileXB.get());
             auto dstBufSmallYB = MaskResizer::MakeDstBuffer(dstTileYB.get());
 
-            // forward from previous to current
-            const VSFrame *mvFF = d->extraMask ? vsapi->getFrameFilter(nleft, d->mvfw, frameCtx) : nullptr;
-            MotionBlockPyramid vectorsFF(mvFF, 1, d->prefix, core, vsapi);
-            vsapi->freeFrame(mvFF);
-
-            // backward from next next to next
-            const VSFrame *mvBB = d->extraMask ? vsapi->getFrameFilter(nright, d->mvbw, frameCtx) : nullptr;
-            MotionBlockPyramid vectorsBB(mvBB, 1, d->prefix, core, vsapi);
-            vsapi->freeFrame(mvBB);
+            MotionBlockPyramid vectorsFF(d->extraMask ? vsapi->getFrameFilter(nleft, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectorsBB(d->extraMask ? vsapi->getFrameFilter(nright, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
 
             if (d->extraMask && vectorsBB.IsUsable(d->thscd1, d->thscd2) && vectorsFF.IsUsable(d->thscd1, d->thscd2)) {
                 // get vector mask from extra frames
@@ -487,7 +475,7 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSC
     vsapi->createVideoFilter(out, "FlowFPS", &d->vi, (d->vi.format.bitsPerSample == 8) ? flowfpsGetFrame<uint8_t> : flowfpsGetFrame<uint16_t>, filterFree<FlowFPSData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 
-    // FIXME, why is assumefps being called here originally instead of just setting the properties directly?
+    // FIXME, verify new fps being correctly set
 }
 
 void flowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {

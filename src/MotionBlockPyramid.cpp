@@ -1559,6 +1559,8 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
 }
 
 void MotionBlockPyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi) {
+    sourceFrame = srcFrame;
+
     if (!srcFrame)
         return;
 
@@ -1646,7 +1648,11 @@ MotionBlockPyramid::MotionBlockPyramid(VSNode *node, const std::string &prefix, 
     if (!srcFrame)
         throw std::runtime_error("Failed to retrieve first frame from super clip. Error message: " + std::string(errorMsg));
     LoadFrameData(srcFrame, 0, prefix, vsapi);
-    vsapi->freeFrame(srcFrame);
+}
+
+MotionBlockPyramid::~MotionBlockPyramid() {
+    if (vsapi)
+        vsapi->freeFrame(sourceFrame);
 }
 
 void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,

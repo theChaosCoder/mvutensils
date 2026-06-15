@@ -106,9 +106,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             }
         }
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *mvn = vsapi->getFrameFilter(n, d->vectors, frameCtx);
-        MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
-        vsapi->freeFrame(mvn);
+        MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
 
         if (vectors.IsUsable(d->thscd1, d->thscd2)) {
             const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);

@@ -65,9 +65,7 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
         VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, nullptr, core);
 
         try {
-            const VSFrame *mvn = vsapi->getFrameFilter(n, d->node, frameCtx);
-            MotionBlockPyramid vectors(mvn, 1, d->prefix, core, vsapi);
-            vsapi->freeFrame(mvn);
+            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->node, frameCtx), 1, d->prefix, core, vsapi);
 
             if (vectors.IsUsable(d->thscd1, d->thscd2)) {
                 std::unique_ptr<BlockMask<PixelType>> Mask;
@@ -82,10 +80,8 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                 BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), vsapi->getFrameWidth(dst, 0), vsapi->getFrameHeight(dst, 0),
                     Mask->mask, Mask->stride, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY, d->vi.format.bitsPerSample);
             } else {
-                if constexpr (sizeof(PixelType) == 1)
-                    memset(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, vsapi->getStride(dst, 0) * vsapi->getFrameHeight(dst, 0));
-                else
-                    vs_memset<uint16_t>(vsapi->getWritePtr(dst, 0), d->nSceneChangeValue, (vsapi->getStride(dst, 0) / sizeof(PixelType)) * vsapi->getFrameHeight(dst, 0));
+                PixelType *dstPtr = reinterpret_cast<PixelType *>(vsapi->getWritePtr(dst, 0));
+                std::fill(dstPtr, dstPtr + (vsapi->getStride(dst, 0) / sizeof(PixelType)) * vsapi->getFrameHeight(dst, 0), d->nSceneChangeValue);
             }
 
             vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_Range", VSC_RANGE_FULL, maAppend);
