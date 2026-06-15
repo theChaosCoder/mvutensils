@@ -1048,8 +1048,11 @@ void FramePyramid::SetExternalPelPlanes(const VSFrame *pelFrame, int pel, VSCore
     if (!vsh::isSameVideoFormat(pelFormat, format))
         throw SuperPyramidError("Pel frame format does not match source frame format");
 
-    if (vsapi->getFrameWidth(pelFrame, 0) != vsapi->getFrameWidth(storageFrame, 0) * pel ||
-        vsapi->getFrameHeight(pelFrame, 0) != vsapi->getFrameHeight(storageFrame, 0) * pel)
+    // The pel frame is the unpadded source upscaled by pel (SetExtPel2/4 read it over
+    // [0, nRealHeight) x [0, nRealWidth)), so compare against the real dimensions, not the
+    // padded storage frame (nPaddedWidth/Height), which would reject every valid pel clip.
+    if (vsapi->getFrameWidth(pelFrame, 0) != pyramidLevels[0].planes[0].nRealWidth * pel ||
+        vsapi->getFrameHeight(pelFrame, 0) != pyramidLevels[0].planes[0].nRealHeight * pel)
         throw SuperPyramidError("Pel frame dimensions are not a suitable multiple of the source frame dimensions");
 
     if (bitsPerSample == 8) {
