@@ -146,21 +146,13 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
 
             auto [dstTileMaskF, dstTileMaskB, dstTileXF, dstTileYF, dstTileXB, dstTileYB] = MaskResizer::GetTileBuffers<6>();
 
-            auto srcBufMaskF = MaskResizer::MakeSrcBuffer(MaskSmallF->mask, MaskSmallF->stride);
-            auto srcBufMaskB = MaskResizer::MakeSrcBuffer(MaskSmallB->mask, MaskSmallB->stride);
+            auto bufMaskF = MaskResizer::MakeBufferPair(MaskSmallF->mask, MaskSmallF->stride, dstTileMaskF.get());
+            auto bufMaskB = MaskResizer::MakeBufferPair(MaskSmallB->mask, MaskSmallB->stride, dstTileMaskB.get());
 
-            auto srcBufSmallFX = MaskResizer::MakeSrcBuffer(SmallF->VXSmallY, SmallF->pitchVSmallY);
-            auto srcBufSmallFY = MaskResizer::MakeSrcBuffer(SmallF->VYSmallY, SmallF->pitchVSmallY);
-            auto srcBufSmallBX = MaskResizer::MakeSrcBuffer(SmallB->VXSmallY, SmallB->pitchVSmallY);
-            auto srcBufSmallBY = MaskResizer::MakeSrcBuffer(SmallB->VYSmallY, SmallB->pitchVSmallY);
-
-            auto dstBufMaskF = MaskResizer::MakeDstBuffer(dstTileMaskF.get());
-            auto dstBufMaskB = MaskResizer::MakeDstBuffer(dstTileMaskB.get());
-
-            auto dstBufSmallXF = MaskResizer::MakeDstBuffer(dstTileXF.get());
-            auto dstBufSmallYF = MaskResizer::MakeDstBuffer(dstTileYF.get());
-            auto dstBufSmallXB = MaskResizer::MakeDstBuffer(dstTileXB.get());
-            auto dstBufSmallYB = MaskResizer::MakeDstBuffer(dstTileYB.get());
+            auto bufSmallFX = MaskResizer::MakeBufferPair(SmallF->VXSmallY, SmallF->pitchVSmallY, dstTileXF.get());
+            auto bufSmallFY = MaskResizer::MakeBufferPair(SmallF->VYSmallY, SmallF->pitchVSmallY, dstTileYF.get());
+            auto bufSmallBX = MaskResizer::MakeBufferPair(SmallB->VXSmallY, SmallB->pitchVSmallY, dstTileXB.get());
+            auto bufSmallBY = MaskResizer::MakeBufferPair(SmallB->VYSmallY, SmallB->pitchVSmallY, dstTileYB.get());
 
             MotionBlockPyramid vectorsFF(d->extraMask ? vsapi->getFrameFilter(nleft, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
             MotionBlockPyramid vectorsBB(d->extraMask ? vsapi->getFrameFilter(nright, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
@@ -170,36 +162,18 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                 auto SmallBB = vectorsBB.MakeSmallVectorMasks();
                 auto SmallFF = vectorsFF.MakeSmallVectorMasks();
 
-                auto srcBufSmallFFX = MaskResizer::MakeSrcBuffer(SmallFF->VXSmallY, SmallFF->pitchVSmallY);
-                auto srcBufSmallFFY = MaskResizer::MakeSrcBuffer(SmallFF->VYSmallY, SmallFF->pitchVSmallY);
-                auto srcBufSmallBBX = MaskResizer::MakeSrcBuffer(SmallBB->VXSmallY, SmallBB->pitchVSmallY);
-                auto srcBufSmallBBY = MaskResizer::MakeSrcBuffer(SmallBB->VYSmallY, SmallBB->pitchVSmallY);
-
                 auto [dstTileXFF, dstTileYFF, dstTileXBB, dstTileYBB] = MaskResizer::GetTileBuffers<4>();
 
-                auto dstBufSmallXFF = MaskResizer::MakeDstBuffer(dstTileXFF.get());
-                auto dstBufSmallYFF = MaskResizer::MakeDstBuffer(dstTileYFF.get());
-                auto dstBufSmallXBB = MaskResizer::MakeDstBuffer(dstTileXBB.get());
-                auto dstBufSmallYBB = MaskResizer::MakeDstBuffer(dstTileYBB.get());
+                auto bufSmallFFX = MaskResizer::MakeBufferPair(SmallFF->VXSmallY, SmallFF->pitchVSmallY, dstTileXFF.get());
+                auto bufSmallFFY = MaskResizer::MakeBufferPair(SmallFF->VYSmallY, SmallFF->pitchVSmallY, dstTileYFF.get());
+                auto bufSmallBBX = MaskResizer::MakeBufferPair(SmallBB->VXSmallY, SmallBB->pitchVSmallY, dstTileXBB.get());
+                auto bufSmallBBY = MaskResizer::MakeBufferPair(SmallBB->VYSmallY, SmallBB->pitchVSmallY, dstTileYBB.get());
 
                 ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
                 uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
 
                 for (auto &tile : d->maskResizerFull.tiles) {
-                    tile.graph.process(srcBufMaskF, dstBufMaskF, tmp.get());
-                    tile.graph.process(srcBufMaskB, dstBufMaskB, tmp.get());
-
-                    tile.graph.process(srcBufSmallFX, dstBufSmallXF, tmp.get());
-                    tile.graph.process(srcBufSmallFY, dstBufSmallYF, tmp.get());
-
-                    tile.graph.process(srcBufSmallBX, dstBufSmallXB, tmp.get());
-                    tile.graph.process(srcBufSmallBY, dstBufSmallYB, tmp.get());
-
-                    tile.graph.process(srcBufSmallFFX, dstBufSmallXFF, tmp.get());
-                    tile.graph.process(srcBufSmallFFY, dstBufSmallYFF, tmp.get());
-
-                    tile.graph.process(srcBufSmallBBX, dstBufSmallXBB, tmp.get());
-                    tile.graph.process(srcBufSmallBBY, dstBufSmallYBB, tmp.get());
+                    tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
 
                     FlowInterExtra<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
                          ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
@@ -221,20 +195,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                     uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
 
                     for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
-                        tile.graph.process(srcBufMaskF, dstBufMaskF, tmp.get());
-                        tile.graph.process(srcBufMaskB, dstBufMaskB, tmp.get());
-
-                        tile.graph.process(srcBufSmallFX, dstBufSmallXF, tmp.get());
-                        tile.graph.process(srcBufSmallFY, dstBufSmallYF, tmp.get());
-
-                        tile.graph.process(srcBufSmallBX, dstBufSmallXB, tmp.get());
-                        tile.graph.process(srcBufSmallBY, dstBufSmallYB, tmp.get());
-
-                        tile.graph.process(srcBufSmallFFX, dstBufSmallXFF, tmp.get());
-                        tile.graph.process(srcBufSmallFFY, dstBufSmallYFF, tmp.get());
-
-                        tile.graph.process(srcBufSmallBBX, dstBufSmallXBB, tmp.get());
-                        tile.graph.process(srcBufSmallBBY, dstBufSmallYBB, tmp.get());
+                        tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
 
                         FlowInterExtra<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
                              ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
@@ -256,15 +217,8 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                 uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
 
                 for (auto &tile : d->maskResizerFull.tiles) {
-                    tile.graph.process(srcBufMaskF, dstBufMaskF, tmp.get());
-                    tile.graph.process(srcBufMaskB, dstBufMaskB, tmp.get());
-
-                    tile.graph.process(srcBufSmallFX, dstBufSmallXF, tmp.get());
-                    tile.graph.process(srcBufSmallFY, dstBufSmallYF, tmp.get());
-
-                    tile.graph.process(srcBufSmallBX, dstBufSmallXB, tmp.get());
-                    tile.graph.process(srcBufSmallBY, dstBufSmallYB, tmp.get());
-
+                    tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
+     
                     FlowInter<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
                          ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
                          dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
@@ -283,14 +237,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                     uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
 
                     for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
-                        tile.graph.process(srcBufMaskF, dstBufMaskF, tmp.get());
-                        tile.graph.process(srcBufMaskB, dstBufMaskB, tmp.get());
-
-                        tile.graph.process(srcBufSmallFX, dstBufSmallXF, tmp.get());
-                        tile.graph.process(srcBufSmallFY, dstBufSmallYF, tmp.get());
-
-                        tile.graph.process(srcBufSmallBX, dstBufSmallXB, tmp.get());
-                        tile.graph.process(srcBufSmallBY, dstBufSmallYB, tmp.get());
+                        tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
 
                         FlowInter<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
                                 ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],

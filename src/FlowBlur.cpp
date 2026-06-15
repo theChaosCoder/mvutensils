@@ -64,7 +64,7 @@ struct FlowBlurData {
 template<typename PixelType>
 static void FlowBlur(uint8_t * VS_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref,
                          const uint16_t * VS_RESTRICT VXFullB, const uint16_t *VS_RESTRICT VXFullF, const uint16_t *VS_RESTRICT VYFullB, const uint16_t *VS_RESTRICT VYFullF,
-                         int tilePitch, int dstX, int dstY, int width, int height, int blur256, int prec) {
+                         ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int blur256, int prec) {
     PixelType *pdst = (PixelType *)pdst8;
 
     dst_pitch /= sizeof(PixelType);
@@ -153,24 +153,16 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
 
                 auto [dstTileVXFw, dstTileVYFw, dstTileVXBw, dstTileVYBw] = MaskResizer::GetTileBuffers<4>();
 
-                auto srcBufVXFw = MaskResizer::MakeSrcBuffer(smallMasksFw->VXSmallY, smallMasksFw->pitchVSmallY);
-                auto srcBufVYFw = MaskResizer::MakeSrcBuffer(smallMasksFw->VYSmallY, smallMasksFw->pitchVSmallY);
-                auto srcBufVXBw = MaskResizer::MakeSrcBuffer(smallMasksBw->VXSmallY, smallMasksBw->pitchVSmallY);
-                auto srcBufVYBw = MaskResizer::MakeSrcBuffer(smallMasksBw->VYSmallY, smallMasksBw->pitchVSmallY);
-
-                auto dstBufVXFw = MaskResizer::MakeDstBuffer(dstTileVXFw.get(), MaskResizer::GetTileBufferStride());
-                auto dstBufVYFw = MaskResizer::MakeDstBuffer(dstTileVYFw.get(), MaskResizer::GetTileBufferStride());
-                auto dstBufVXBw = MaskResizer::MakeDstBuffer(dstTileVXBw.get(), MaskResizer::GetTileBufferStride());
-                auto dstBufVYBw = MaskResizer::MakeDstBuffer(dstTileVYBw.get(), MaskResizer::GetTileBufferStride());
+                auto bufVXFw = MaskResizer::MakeBufferPair(smallMasksFw->VXSmallY, smallMasksFw->pitchVSmallY, dstTileVXFw.get());
+                auto bufVYFw = MaskResizer::MakeBufferPair(smallMasksFw->VYSmallY, smallMasksFw->pitchVSmallY, dstTileVYFw.get());
+                auto bufVXBw = MaskResizer::MakeBufferPair(smallMasksBw->VXSmallY, smallMasksBw->pitchVSmallY, dstTileVXBw.get());
+                auto bufVYBw = MaskResizer::MakeBufferPair(smallMasksBw->VYSmallY, smallMasksBw->pitchVSmallY, dstTileVYBw.get());
 
                 ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
                 uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
 
                 for (auto &tile : d->maskResizerFull.tiles) {
-                    tile.graph.process(srcBufVXFw, dstBufVXFw, tmp.get());
-                    tile.graph.process(srcBufVYFw, dstBufVYFw, tmp.get());
-                    tile.graph.process(srcBufVXBw, dstBufVXBw, tmp.get());
-                    tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
+                    tile.Process(tmp.get(), bufVXFw, bufVYFw, bufVXBw, bufVYBw);
 
                     FlowBlur<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
                              dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), MaskResizer::GetTileBufferStride(),
@@ -187,10 +179,7 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                     uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
 
                     for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
-                        tile.graph.process(srcBufVXFw, dstBufVXFw, tmp.get());
-                        tile.graph.process(srcBufVYFw, dstBufVYFw, tmp.get());
-                        tile.graph.process(srcBufVXBw, dstBufVXBw, tmp.get());
-                        tile.graph.process(srcBufVYBw, dstBufVYBw, tmp.get());
+                        tile.Process(tmp.get(), bufVXFw, bufVYFw, bufVXBw, bufVYBw);
 
                         FlowBlur<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
                              dstTileVXBw.get(), dstTileVXFw.get(), dstTileVYBw.get(), dstTileVYFw.get(), MaskResizer::GetTileBufferStride(),

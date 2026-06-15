@@ -151,18 +151,14 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
 
                 auto [dstTileVX, dstTileVY] = MaskResizer::GetTileBuffers<2>();
 
-                auto srcBufVX = MaskResizer::MakeSrcBuffer(smallMasks->VXSmallY, smallMasks->pitchVSmallY);
-                auto srcBufVY = MaskResizer::MakeSrcBuffer(smallMasks->VYSmallY, smallMasks->pitchVSmallY);
-
-                auto dstBufVX = MaskResizer::MakeDstBuffer(dstTileVX.get());
-                auto dstBufVY = MaskResizer::MakeDstBuffer(dstTileVY.get());
+                auto bufVX = MaskResizer::MakeBufferPair(smallMasks->VXSmallY, smallMasks->pitchVSmallY, dstTileVX.get());
+                auto bufVY = MaskResizer::MakeBufferPair(smallMasks->VYSmallY, smallMasks->pitchVSmallY, dstTileVY.get());
 
                 ptrdiff_t dstStrideY = vsapi->getStride(dst, 0);
                 uint8_t *dstPtrY = vsapi->getWritePtr(dst, 0);
 
                 for (auto &tile : d->maskResizerFull.tiles) {
-                    tile.graph.process(srcBufVX, dstBufVX, tmp.get());
-                    tile.graph.process(srcBufVY, dstBufVY, tmp.get());
+                    tile.Process(tmp.get(), bufVX, bufVY);
 
                     flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
                         dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
@@ -178,8 +174,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                     uint8_t *dstPtrV = vsapi->getWritePtr(dst, 2);
 
                     for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
-                        tile.graph.process(srcBufVX, dstBufVX, tmp.get());
-                        tile.graph.process(srcBufVY, dstBufVY, tmp.get());
+                        tile.Process(tmp.get(), bufVX, bufVY);
 
                         flowFetch<PixelType>(vsapi->getWritePtr(dst, 1) + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
                             dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
