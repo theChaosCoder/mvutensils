@@ -1757,7 +1757,7 @@ bool MotionBlockPyramid::IsCompatibleForRecalc(const FramePyramid &other) const 
 
 // FIXME, is double really needed? probably not
 template<typename PixelType>
-static PixelType MaskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma, int maxVal) {
+static PixelType MaskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma, int maxVal) noexcept {
     double norme = (double)(v.x * v.x + v.y * v.y) / (pel * pel);
 
     double l = maxVal * pow(norme * fMaskNormFactor2, fHalfGamma);
@@ -1915,26 +1915,37 @@ std::unique_ptr<SmallVectorMasks> MotionBlockPyramid::MakeSmallVectorMasks(int f
     return masks;
 }
 
-void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) noexcept {
-    ptrdiff_t pitch = masks.pitchVSmallY / sizeof(uint16_t);
+void SmallVectorMasks::AdjustSmallVectorMaskSubSampling(int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) noexcept {
+    ptrdiff_t pitch = pitchVSmallY / sizeof(uint16_t);
 
     if (subSamplingW > 0) {
-        uint16_t *VXSmallY = masks.VXSmallY;
+        uint16_t *cVXSmallY = VXSmallY;
         for (int by = 0; by < nBlkY; by++) {
             for (int bx = 0; bx < nBlkX; bx++)
-                VXSmallY[bx] = ((static_cast<int>(VXSmallY[bx]) - (1 << 15)) >> subSamplingW) + (1 << 15);
-            VXSmallY += pitch;
+                cVXSmallY[bx] = ((static_cast<int>(cVXSmallY[bx]) - (1 << 15)) >> subSamplingW) + (1 << 15);
+            cVXSmallY += pitch;
         }
     }
 
     if (subSamplingH > 0) {
-        uint16_t *VYSmallY = masks.VYSmallY;
+        uint16_t *cVYSmallY = VYSmallY;
         for (int by = 0; by < nBlkY; by++) {
             for (int bx = 0; bx < nBlkX; bx++)
-                VYSmallY[bx] = ((static_cast<int>(VYSmallY[bx]) - (1 << 15)) >> subSamplingH) + (1 << 15);
-            VYSmallY += pitch;
+                cVYSmallY[bx] = ((static_cast<int>(cVYSmallY[bx]) - (1 << 15)) >> subSamplingH) + (1 << 15);
+            cVYSmallY += pitch;
         }
     }
+}
+
+SmallVectorMasks::SmallVectorMasks(int nBlkX, int nBlkY) {
+    pitchVSmallY = roundUpTo64(nBlkX * sizeof(uint16_t));
+    VXSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
+    VYSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
+}
+
+SmallVectorMasks::~SmallVectorMasks() {
+    mvu_aligned_free(VXSmallY);
+    mvu_aligned_free(VYSmallY);
 }
 
 // Explicit instantiations to keep the headers somewhat clean and readable

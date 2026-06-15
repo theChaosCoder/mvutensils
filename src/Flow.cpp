@@ -165,7 +165,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 }
 
                 if (d->vi->format.numPlanes == 3) {
-                    AdjustSmallVectorMaskSubSampling(*smallMasks, vectors.nBlkX, vectors.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+                    smallMasks->AdjustSmallVectorMaskSubSampling(vectors.nBlkX, vectors.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
 
                     ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
                     ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);

@@ -169,8 +169,8 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                 }
 
                 if (d->vi->format.numPlanes == 3) {
-                    AdjustSmallVectorMaskSubSampling(*smallMasksFw, vectorsfw.nBlkX, vectorsfw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
-                    AdjustSmallVectorMaskSubSampling(*smallMasksBw, vectorsbw.nBlkX, vectorsbw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+                    smallMasksFw->AdjustSmallVectorMaskSubSampling(vectorsfw.nBlkX, vectorsfw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
+                    smallMasksBw->AdjustSmallVectorMaskSubSampling(vectorsbw.nBlkX, vectorsbw.nBlkY, d->vi->format.subSamplingW, d->vi->format.subSamplingH);
 
                     ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
                     ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);

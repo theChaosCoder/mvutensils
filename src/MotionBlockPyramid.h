@@ -23,16 +23,9 @@ struct SmallVectorMasks {
     uint16_t *VYSmallY;
     ptrdiff_t pitchVSmallY;
 
-    SmallVectorMasks(int nBlkX, int nBlkY) {
-        pitchVSmallY = roundUpTo64(nBlkX * sizeof(uint16_t));
-        VXSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
-        VYSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
-    }
-
-    ~SmallVectorMasks() {
-        mvu_aligned_free(VXSmallY);
-        mvu_aligned_free(VYSmallY);
-    }
+    void AdjustSmallVectorMaskSubSampling(int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) noexcept;
+    SmallVectorMasks(int nBlkX, int nBlkY);
+    ~SmallVectorMasks();
 };
 
 template<typename PixelType>
@@ -323,6 +316,3 @@ public:
 
     std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks(int fieldOffset = 0) const noexcept;
 };
-
-// FIXME, turn into member function?
-void AdjustSmallVectorMaskSubSampling(SmallVectorMasks &masks, int nBlkX, int nBlkY, int subSamplingW, int subSamplingH) noexcept;

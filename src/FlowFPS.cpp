@@ -183,10 +183,10 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                 }
 
                 if (d->vi.format.numPlanes == 3) {
-                    AdjustSmallVectorMaskSubSampling(*SmallF, vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    AdjustSmallVectorMaskSubSampling(*SmallB, vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    AdjustSmallVectorMaskSubSampling(*SmallFF, vectorsFF.nBlkX, vectorsFF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    AdjustSmallVectorMaskSubSampling(*SmallBB, vectorsBB.nBlkX, vectorsBB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                    SmallF->AdjustSmallVectorMaskSubSampling(vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                    SmallB->AdjustSmallVectorMaskSubSampling(vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                    SmallFF->AdjustSmallVectorMaskSubSampling(vectorsFF.nBlkX, vectorsFF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                    SmallBB->AdjustSmallVectorMaskSubSampling(vectorsBB.nBlkX, vectorsBB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
 
                     ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
                     ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
@@ -227,8 +227,8 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                 }
 
                 if (d->vi.format.numPlanes == 3) {
-                    AdjustSmallVectorMaskSubSampling(*SmallF, vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
-                    AdjustSmallVectorMaskSubSampling(*SmallB, vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                    SmallF->AdjustSmallVectorMaskSubSampling(vectorsF.nBlkX, vectorsF.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
+                    SmallB->AdjustSmallVectorMaskSubSampling(vectorsB.nBlkX, vectorsB.nBlkY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
 
                     ptrdiff_t dstStrideU = vsapi->getStride(dst, 1);
                     ptrdiff_t dstStrideV = vsapi->getStride(dst, 2);
