@@ -297,7 +297,7 @@ public:
         int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany,
         SearchType coarseSearchType, bool chroma);
 
-    // FIXME, currnently you can't SearchMVs and then RecalculateMVs on the same object and instead it needs to be exported and imported into a new one
+    // FIXME, currently you can't SearchMVs and then RecalculateMVs on the same object and instead it needs to be exported and imported into a new one
     // this should probably be improved
     void RecalculateMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, bool chroma,
