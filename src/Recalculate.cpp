@@ -112,112 +112,74 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
     return nullptr;
 }
 
-
 static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<RecalculateData> d(new RecalculateData(vsapi));
-
     int err;
 
-    d->thSAD = vsapi->mapGetInt(in, "thsad", 0, &err);
-    if (err)
-        d->thSAD = 200;
-
-    d->smooth = !!vsapi->mapGetIntSaturated(in, "smooth", 0, &err);
-    if (err)
-        d->smooth = true;
-
-    d->nBlkSizeX = vsapi->mapGetIntSaturated(in, "blksizeh", 0, &err);
-    if (err)
-        d->nBlkSizeX = 8;
-
-    d->nBlkSizeY = vsapi->mapGetIntSaturated(in, "blksizev", 0, &err);
-    if (err)
-        d->nBlkSizeY = d->nBlkSizeX;
-
-    d->searchType = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search", 0, &err));
-    if (err)
-        d->searchType = SearchType::Hex2;
-
-    d->searchparam = std::max(vsapi->mapGetIntSaturated(in, "searchparam", 0, &err), 1);
-    if (err)
-        d->searchparam = 2;
-
-    d->chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
-    if (err)
-        d->chroma = 1;
-
-    d->truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
-    if (err)
-        d->truemotion = 1;
-
-    d->nLambda = vsapi->mapGetIntSaturated(in, "lambda", 0, &err);
-    if (err)
-        d->nLambda = d->truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
-
-    d->pnew = vsapi->mapGetIntSaturated(in, "pnew", 0, &err);
-    if (err)
-        d->pnew = d->truemotion ? 50 : 0; // relative to 256
-
-    d->nOverlapX = vsapi->mapGetIntSaturated(in, "overlaph", 0, &err);
-
-    d->nOverlapY = vsapi->mapGetIntSaturated(in, "overlapv", 0, &err);
-    if (err)
-        d->nOverlapY = d->nOverlapX;
-
-    d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
-
-    d->meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
-    if (err)
-        d->meander = true;
-
-    d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
-
-    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
-    d->tff_exists = !err;
-
-    const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
-    if (prefix)
-        d->prefix = prefix;
-    else
-        d->prefix = DEFAULT_MVUTENSILS_PREFIX;
-
     try {
+        d->node1 = vsapi->mapGetNode(in, "super", 0, nullptr);
+        d->vi = vsapi->getVideoInfo(d->node1);
+        FramePyramid super(d->node1, d->prefix, core, vsapi);
+
+        GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", super.nBlkSizeX, super.nBlkSizeY, in, vsapi);
+        GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", super.nOverlapX, super.nOverlapY, in, vsapi);
+
+        d->thSAD = vsapi->mapGetInt(in, "thsad", 0, &err);
+        if (err)
+            d->thSAD = 200;
+
+        d->smooth = !!vsapi->mapGetIntSaturated(in, "smooth", 0, &err);
+        if (err)
+            d->smooth = true;
+
+        d->searchType = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search", 0, &err));
+        if (err)
+            d->searchType = SearchType::Hex2;
+
+        d->searchparam = std::max(vsapi->mapGetIntSaturated(in, "searchparam", 0, &err), 1);
+        if (err)
+            d->searchparam = 2;
+
+        d->chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
+        if (err)
+            d->chroma = 1;
+
+        d->truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
+        if (err)
+            d->truemotion = 1;
+
+        d->nLambda = vsapi->mapGetIntSaturated(in, "lambda", 0, &err);
+        if (err)
+            d->nLambda = d->truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
+
+        d->pnew = vsapi->mapGetIntSaturated(in, "pnew", 0, &err);
+        if (err)
+            d->pnew = d->truemotion ? 50 : 0; // relative to 256
+
+        d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
+
+        d->meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
+        if (err)
+            d->meander = true;
+
+        d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
+
+        d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
+        d->tff_exists = !err;
+
+        const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+        if (prefix)
+            d->prefix = prefix;
+        else
+            d->prefix = DEFAULT_MVUTENSILS_PREFIX;
+
         if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
             throw std::runtime_error("search must be between 0 and 5");
 
-        if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
-            throw std::runtime_error("satd cannot work with 16x2 blocks");
-
-        if ((d->nBlkSizeX != 4 || d->nBlkSizeY != 4) &&
-            (d->nBlkSizeX != 8 || d->nBlkSizeY != 4) &&
-            (d->nBlkSizeX != 8 || d->nBlkSizeY != 8) &&
-            (d->nBlkSizeX != 16 || d->nBlkSizeY != 2) &&
-            (d->nBlkSizeX != 16 || d->nBlkSizeY != 8) &&
-            (d->nBlkSizeX != 16 || d->nBlkSizeY != 16) &&
-            (d->nBlkSizeX != 32 || d->nBlkSizeY != 16) &&
-            (d->nBlkSizeX != 32 || d->nBlkSizeY != 32) &&
-            (d->nBlkSizeX != 64 || d->nBlkSizeY != 32) &&
-            (d->nBlkSizeX != 64 || d->nBlkSizeY != 64) &&
-            (d->nBlkSizeX != 128 || d->nBlkSizeY != 64) &&
-            (d->nBlkSizeX != 128 || d->nBlkSizeY != 128))
-            throw std::runtime_error("the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64 or 128x128");
-
+        CheckBlkSize(d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->vi->format.subSamplingW, d->vi->format.subSamplingH, d->useSatd);
 
         if (d->pnew < 0 || d->pnew > 256)
             throw std::runtime_error("pnew must be between 0 and 256");
-
-        if (d->nOverlapX < 0 || d->nOverlapX > d->nBlkSizeX / 2 ||
-            d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2)
-            throw std::runtime_error("overlap must be at most half of blksize, overlapv must be at most half of blksizev, and they both need to be at least 0");
-
-        d->node1 = vsapi->mapGetNode(in, "super", 0, nullptr);
-        d->vi = vsapi->getVideoInfo(d->node1);
-
-        if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
-            d->nOverlapY % (1 << d->vi->format.subSamplingH))
-            throw std::runtime_error("The requested overlap is incompatible with the super clip's subsampling");
-
-        FramePyramid super(d->node1, d->prefix, core, vsapi);
 
         d->node2 = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
@@ -264,16 +226,14 @@ void recalculateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "vectors:vnode;"
                  "thsad:int:opt;"
                  "smooth:int:opt;"
-                 "blksizeh:int:opt;"
-                 "blksizev:int:opt;"
+                 "blksize:int[]:opt;"
                  "search:int:opt;"
                  "searchparam:int:opt;"
                  "lambda:int:opt;"
                  "chroma:int:opt;"
                  "truemotion:int:opt;"
                  "pnew:int:opt;"
-                 "overlaph:int:opt;"
-                 "overlapv:int:opt;"
+                 "overlap:int[]:opt;"
                  "meander:int:opt;"
                  "fields:int:opt;"
                  "tff:int:opt;"

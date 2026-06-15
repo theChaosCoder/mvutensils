@@ -134,108 +134,100 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
     return nullptr;
 }
 
-
 static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<AnalyseData> d(new AnalyseData(vsapi));
-
     int err;
 
-    d->nBlkSizeX = vsapi->mapGetIntSaturated(in, "blksizeh", 0, &err);
-    if (err)
-        d->nBlkSizeX = 8;
-
-    d->nBlkSizeY = vsapi->mapGetIntSaturated(in, "blksizev", 0, &err);
-    if (err)
-        d->nBlkSizeY = d->nBlkSizeX;
-
-    d->levels = vsapi->mapGetIntSaturated(in, "levels", 0, &err);
-
-    d->searchType = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search", 0, &err));
-    if (err)
-        d->searchType = SearchType::Hex2;
-
-    d->searchTypeCoarse = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search_coarse", 0, &err));
-    if (err)
-        d->searchTypeCoarse = SearchType::Exhaustive;
-
-    d->searchparam = vsapi->mapGetIntSaturated(in, "searchparam", 0, &err);
-    if (err)
-        d->searchparam = 2;
-
-    d->nPelSearch = vsapi->mapGetIntSaturated(in, "pelsearch", 0, &err);
-
-    d->chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
-    if (err)
-        d->chroma = true;
-
-    d->deltaFrame = vsapi->mapGetIntSaturated(in, "delta", 0, &err);
-    if (err)
-        d->deltaFrame = 1;
-
-    d->truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
-    if (err)
-        d->truemotion = true;
-
-    d->nLambda = vsapi->mapGetIntSaturated(in, "lambda", 0, &err);
-    if (err)
-        d->nLambda = d->truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
-
-    d->lsad = vsapi->mapGetIntSaturated(in, "lsad", 0, &err);
-    if (err)
-        d->lsad = d->truemotion ? 1200 : 400;
-
-    d->plevel = vsapi->mapGetIntSaturated(in, "plevel", 0, &err);
-    if (err)
-        d->plevel = d->truemotion ? 1 : 0;
-
-    d->global = !!vsapi->mapGetInt(in, "global", 0, &err);
-    if (err)
-        d->global = d->truemotion;
-
-    d->pnew = vsapi->mapGetIntSaturated(in, "pnew", 0, &err);
-    if (err)
-        d->pnew = d->truemotion ? 50 : 0; // relative to 256
-
-    d->pzero = vsapi->mapGetIntSaturated(in, "pzero", 0, &err);
-    if (err)
-        d->pzero = d->pnew;
-
-    d->pglobal = vsapi->mapGetIntSaturated(in, "pglobal", 0, &err);
-
-    d->nOverlapX = vsapi->mapGetIntSaturated(in, "overlaph", 0, &err);
-
-    d->nOverlapY = vsapi->mapGetIntSaturated(in, "overlapv", 0, &err);
-    if (err)
-        d->nOverlapY = d->nOverlapX;
-
-    d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
-
-    d->badSAD = vsapi->mapGetIntSaturated(in, "badsad", 0, &err);
-    if (err)
-        d->badSAD = 10000;
-
-    d->badrange = vsapi->mapGetIntSaturated(in, "badrange", 0, &err);
-    if (err)
-        d->badrange = 24;
-
-    d->meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
-    if (err)
-        d->meander = true;
-
-    d->tryMany = !!vsapi->mapGetInt(in, "trymany", 0, &err);
-
-    d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
-
-    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
-    d->tff_exists = !err;
-
-    const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
-    if (prefix)
-        d->prefix = prefix;
-    else
-        d->prefix = DEFAULT_MVUTENSILS_PREFIX;
-
     try {
+        d->node = vsapi->mapGetNode(in, "super", 0, nullptr);
+        d->supervi = vsapi->getVideoInfo(d->node);
+        d->vi = d->supervi;
+
+        FramePyramid super(d->node, d->prefix, core, vsapi);
+
+        GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", super.nBlkSizeX, super.nBlkSizeY, in, vsapi);
+        GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", super.nOverlapX, super.nOverlapY, in, vsapi);
+
+        d->levels = vsapi->mapGetIntSaturated(in, "levels", 0, &err);
+
+        d->searchType = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search", 0, &err));
+        if (err)
+            d->searchType = SearchType::Hex2;
+
+        d->searchTypeCoarse = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search_coarse", 0, &err));
+        if (err)
+            d->searchTypeCoarse = SearchType::Exhaustive;
+
+        d->searchparam = vsapi->mapGetIntSaturated(in, "searchparam", 0, &err);
+        if (err)
+            d->searchparam = 2;
+
+        d->nPelSearch = vsapi->mapGetIntSaturated(in, "pelsearch", 0, &err);
+
+        d->chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
+        if (err)
+            d->chroma = true;
+
+        d->deltaFrame = vsapi->mapGetIntSaturated(in, "delta", 0, &err);
+        if (err)
+            d->deltaFrame = 1;
+
+        d->truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
+        if (err)
+            d->truemotion = true;
+
+        d->nLambda = vsapi->mapGetIntSaturated(in, "lambda", 0, &err);
+        if (err)
+            d->nLambda = d->truemotion ? (1000 * d->nBlkSizeX * d->nBlkSizeY / 64) : 0;
+
+        d->lsad = vsapi->mapGetIntSaturated(in, "lsad", 0, &err);
+        if (err)
+            d->lsad = d->truemotion ? 1200 : 400;
+
+        d->plevel = vsapi->mapGetIntSaturated(in, "plevel", 0, &err);
+        if (err)
+            d->plevel = d->truemotion ? 1 : 0;
+
+        d->global = !!vsapi->mapGetInt(in, "global", 0, &err);
+        if (err)
+            d->global = d->truemotion;
+
+        d->pnew = vsapi->mapGetIntSaturated(in, "pnew", 0, &err);
+        if (err)
+            d->pnew = d->truemotion ? 50 : 0; // relative to 256
+
+        d->pzero = vsapi->mapGetIntSaturated(in, "pzero", 0, &err);
+        if (err)
+            d->pzero = d->pnew;
+
+        d->pglobal = vsapi->mapGetIntSaturated(in, "pglobal", 0, &err);
+
+        d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
+
+        d->badSAD = vsapi->mapGetIntSaturated(in, "badsad", 0, &err);
+        if (err)
+            d->badSAD = 10000;
+
+        d->badrange = vsapi->mapGetIntSaturated(in, "badrange", 0, &err);
+        if (err)
+            d->badrange = 24;
+
+        d->meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
+        if (err)
+            d->meander = true;
+
+        d->tryMany = !!vsapi->mapGetInt(in, "trymany", 0, &err);
+
+        d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
+
+        d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
+        d->tff_exists = !err;
+
+        const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+        if (prefix)
+            d->prefix = prefix;
+        else
+            d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
         if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
             throw std::runtime_error("search must be between 0 and 5");
@@ -243,23 +235,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical)
             throw std::runtime_error("search_coarse must be between 0 and 5");
 
-        if (d->useSatd && d->nBlkSizeX == 16 && d->nBlkSizeY == 2)
-            throw std::runtime_error("satd cannot work with 16x2 blocks");
-
-        if ((d->nBlkSizeX != 4 || d->nBlkSizeY != 4) &&
-            (d->nBlkSizeX != 8 || d->nBlkSizeY != 4) &&
-            (d->nBlkSizeX != 8 || d->nBlkSizeY != 8) &&
-            (d->nBlkSizeX != 16 || d->nBlkSizeY != 2) &&
-            (d->nBlkSizeX != 16 || d->nBlkSizeY != 8) &&
-            (d->nBlkSizeX != 16 || d->nBlkSizeY != 16) &&
-            (d->nBlkSizeX != 32 || d->nBlkSizeY != 16) &&
-            (d->nBlkSizeX != 32 || d->nBlkSizeY != 32) &&
-            (d->nBlkSizeX != 64 || d->nBlkSizeY != 32) &&
-            (d->nBlkSizeX != 64 || d->nBlkSizeY != 64) &&
-            (d->nBlkSizeX != 128 || d->nBlkSizeY != 64) &&
-            (d->nBlkSizeX != 128 || d->nBlkSizeY != 128))
-            throw std::runtime_error("the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64 or 128x128");
-
+        CheckBlkSize(d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->vi->format.subSamplingW, d->vi->format.subSamplingH, d->useSatd);
 
         if (d->plevel < 0 || d->plevel > 2)
             throw std::runtime_error("plevel must be between 0 and 2");
@@ -273,15 +249,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->pglobal < 0 || d->pglobal > 256)
             throw std::runtime_error("pglobal must be between 0 and 256");
 
-        if (d->nOverlapX < 0 || d->nOverlapX > d->nBlkSizeX / 2 ||
-            d->nOverlapY < 0 || d->nOverlapY > d->nBlkSizeY / 2)
-            throw std::runtime_error("overlaph must be at most half of blksizeh, overlapv must be at most half of blksizev, and they both need to be at least 0");
-
         d->nSearchParam = std::max(d->searchparam, 1);
-
-        d->node = vsapi->mapGetNode(in, "super", 0, 0);
-        d->supervi = vsapi->getVideoInfo(d->node);
-        d->vi = d->supervi;
 
         if (d->vi->format.colorFamily == cfGray)
             d->chroma = false;
@@ -294,14 +262,8 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->lsad = (int64_t)d->lsad * (d->nBlkSizeX * d->nBlkSizeY) / 64;
         d->badSAD = d->badSAD * (d->nBlkSizeX * d->nBlkSizeY) / 64;
 
-        if (d->nOverlapX % (1 << d->vi->format.subSamplingW) ||
-            d->nOverlapY % (1 << d->vi->format.subSamplingH))
-            throw std::runtime_error("The requested overlap is incompatible with the super clip's subsampling"); 
-
         if (d->deltaFrame == 0)
             throw std::runtime_error("delta can't be 0");
-
-        FramePyramid super(d->node, d->prefix, core, vsapi);
 
         if (d->nPelSearch <= 0)
             d->nPelSearch = super.nPel;
@@ -325,8 +287,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
 void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("Analyse",
                  "super:vnode;"
-                 "blksizeh:int:opt;"
-                 "blksizev:int:opt;"
+                 "blksize:int[]:opt;"
                  "levels:int:opt;"
                  "search:int:opt;"
                  "searchparam:int:opt;"
@@ -341,8 +302,7 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "pnew:int:opt;"
                  "pzero:int:opt;"
                  "pglobal:int:opt;"
-                 "overlaph:int:opt;"
-                 "overlapv:int:opt;"
+                 "overlap:int[]:opt;"
                  "badsad:int:opt;"
                  "badrange:int:opt;"
                  "meander:int:opt;"

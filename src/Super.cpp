@@ -71,38 +71,30 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
 
 static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<SuperData> d(new SuperData(vsapi));
-
     int err;
 
-    d->nHPad = vsapi->mapGetIntSaturated(in, "hpad", 0, &err);
-    if (err)
-        d->nHPad = 16;
-
-    d->nVPad = vsapi->mapGetIntSaturated(in, "vpad", 0, &err);
-    if (err)
-        d->nVPad = 16;
-
-    d->nPel = vsapi->mapGetIntSaturated(in, "pel", 0, &err);
-    if (err)
-        d->nPel = 2;
-
-    d->nLevels = vsapi->mapGetIntSaturated(in, "levels", 0, &err);
-
-    d->sharp = static_cast<SharpParam>(vsapi->mapGetIntSaturated(in, "sharp", 0, &err));
-    if (err)
-        d->sharp = SharpParam::Wiener;
-
-    d->rfilter = static_cast<RFilterParam>(vsapi->mapGetIntSaturated(in, "rfilter", 0, &err));
-    if (err)
-        d->rfilter = RFilterParam::Bilinear;
-
-    const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
-    if (prefix)
-        d->prefix = prefix;
-    else
-        d->prefix = DEFAULT_MVUTENSILS_PREFIX;
-
     try {
+        GetHVPairArgument(d->nHPad, d->nVPad, "pad", 16, 16, in, vsapi);
+
+        d->nPel = vsapi->mapGetIntSaturated(in, "pel", 0, &err);
+        if (err)
+            d->nPel = 2;
+
+        d->nLevels = vsapi->mapGetIntSaturated(in, "levels", 0, &err);
+
+        d->sharp = static_cast<SharpParam>(vsapi->mapGetIntSaturated(in, "sharp", 0, &err));
+        if (err)
+            d->sharp = SharpParam::Wiener;
+
+        d->rfilter = static_cast<RFilterParam>(vsapi->mapGetIntSaturated(in, "rfilter", 0, &err));
+        if (err)
+            d->rfilter = RFilterParam::Bilinear;
+
+        const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+        if (prefix)
+            d->prefix = prefix;
+        else
+            d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
         if ((d->nPel != 1) && (d->nPel != 2) && (d->nPel != 4))
             throw std::runtime_error("pel must be 1, 2, or 4");
@@ -113,7 +105,7 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
         if (d->rfilter != RFilterParam::Simple && d->rfilter != RFilterParam::Bilinear && d->rfilter != RFilterParam::Cubic)
             throw std::runtime_error("rfilter must be between 0 and 2");
 
-        d->node1 = vsapi->mapGetNode(in, "clip", 0, 0);
+        d->node1 = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = *vsapi->getVideoInfo(d->node1);
 
         if (!vsh::isConstantVideoFormat(&d->vi) || d->vi.format.bitsPerSample > 16 || d->vi.format.sampleType != stInteger ||
@@ -123,21 +115,10 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
         int xRatioUV = 1 << d->vi.format.subSamplingW;
         int yRatioUV = 1 << d->vi.format.subSamplingH;
 
-        d->nBlkSizeX = vsapi->mapGetIntSaturated(in, "blksizeh", 0, &err);
-        d->nBlkSizeY = vsapi->mapGetIntSaturated(in, "blksizev", 0, &err);
-        if (err)
-            d->nBlkSizeY = d->nBlkSizeX;
+        GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", 8, 8, in, vsapi);
+        GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", 0, 0, in, vsapi);
 
-        if (d->nBlkSizeX < 0 || d->nBlkSizeY < 0)
-            throw std::runtime_error("block size must be non-negative");
-
-        d->nOverlapX = vsapi->mapGetIntSaturated(in, "overlaph", 0, &err);
-        d->nOverlapY = vsapi->mapGetIntSaturated(in, "overlapv", 0, &err);
-        if (err)
-            d->nOverlapY = d->nOverlapX;
-
-        if (d->nOverlapY < 0 || d->nOverlapX < 0)
-            throw std::runtime_error("overlap must be non-negative");
+        CheckBlkSize(d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->vi.format.subSamplingW, d->vi.format.subSamplingH);
 
         int nLevelsMax = FramePyramid::GetMaxLevelsForBlockSize(d->vi.width, d->vi.height, xRatioUV, yRatioUV, d->nBlkSizeX, d->nBlkSizeY, d->nHPad, d->nVPad);
 
@@ -177,16 +158,12 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCor
     d.release();
 }
 
-
 void superRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("Super", 
                  "clip:vnode;"
-                 "hpad:int:opt;"
-                 "vpad:int:opt;"
-                 "blksizeh:int:opt;"
-                 "blksizev:int:opt;"
-                 "overlaph:int:opt;"
-                 "overlapv:int:opt;"
+                 "pad:int[]:opt;"
+                 "blksize:int[];"
+                 "overlap:int[];"
                  "levels:int:opt;"
                  "sharp:int:opt;"
                  "rfilter:int:opt;"

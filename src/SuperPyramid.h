@@ -12,6 +12,9 @@ class SuperPyramidError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+void GetHVPairArgument(int &h, int &v, const char *name, int defaultH, int defaultV, const VSMap *in, const VSAPI *vsapi);
+void CheckBlkSize(int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int subSamplingW, int subSamplingH, bool useSatd = false);
+
 enum class SharpParam {
     Bilinear,
     Bicubic,
@@ -161,6 +164,11 @@ public:
     int xRatioUV = 1;
     int yRatioUV = 1;
 
+    int nBlkSizeX = -1;
+    int nBlkSizeY = -1;
+    int nOverlapX = -1;
+    int nOverlapY = -1;
+
     bool chroma;
 
     int bitsPerSample = -1;
@@ -178,7 +186,7 @@ public:
     // You can pass maxLevel = -1 to load all levels, maxLevel = 0 to load only metadata and no planes, maxLevel > 0 to load that many levels, note that only analyse uses more than 1 level
     FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
 
-    // Constructor to load metadata and do nothing else
+    // Constructor to load metadata from a node and do nothing else
     FramePyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
 
     ~FramePyramid();

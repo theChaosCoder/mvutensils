@@ -5,6 +5,50 @@
 #include <cassert>
 #include <memory>
 
+void GetHVPairArgument(int &h, int &v, const char *name, int defaultH, int defaultV, const VSMap *in, const VSAPI *vsapi) {
+    int err;
+    int numElems = vsapi->mapNumElements(in, name);
+    if (numElems > 2)
+        throw std::runtime_error(std::string("Too many values passed to ") + name);
+
+    h = vsapi->mapGetIntSaturated(in, name, 0, &err);
+    if (err)
+        h = defaultH;
+
+    v = vsapi->mapGetIntSaturated(in, name, 1, &err);
+    if (err) {
+        if (numElems == 1)
+            v = h;
+        else
+            v = defaultV;
+    }
+}
+
+void CheckBlkSize(int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int subSamplingW, int subSamplingH, bool useSatd) {
+    if (useSatd && nBlkSizeX == 16 && nBlkSizeY == 2)
+        throw std::runtime_error("satd cannot work with 16x2 blocks");
+
+    if ((nBlkSizeX != 4 || nBlkSizeY != 4) &&
+        (nBlkSizeX != 8 || nBlkSizeY != 4) &&
+        (nBlkSizeX != 8 || nBlkSizeY != 8) &&
+        (nBlkSizeX != 16 || nBlkSizeY != 2) &&
+        (nBlkSizeX != 16 || nBlkSizeY != 8) &&
+        (nBlkSizeX != 16 || nBlkSizeY != 16) &&
+        (nBlkSizeX != 32 || nBlkSizeY != 16) &&
+        (nBlkSizeX != 32 || nBlkSizeY != 32) &&
+        (nBlkSizeX != 64 || nBlkSizeY != 32) &&
+        (nBlkSizeX != 64 || nBlkSizeY != 64) &&
+        (nBlkSizeX != 128 || nBlkSizeY != 64) &&
+        (nBlkSizeX != 128 || nBlkSizeY != 128))
+        throw std::runtime_error("the block size must be 4x4, 8x4, 8x8, 16x2, 16x8, 16x16, 32x16, 32x32, 64x32, 64x64, 128x64 or 128x128");
+
+    if (nOverlapX < 0 || nOverlapX > nBlkSizeX / 2 || nOverlapY < 0 || nOverlapY > nBlkSizeY / 2)
+        throw std::runtime_error("overlap must be between 0 and half of blksize");
+
+    if (nOverlapX % (1 << subSamplingW) || nOverlapY % (1 << subSamplingH))
+        throw std::runtime_error("the specified overlap is incompatible with the super clip's subsampling");
+}
+
 template<typename PixelType>
 void PyramidPlane::CopyAndPadPlane(const VSFrame *src, int plane, int hPad, int vPad, int nBlkSizePadX, int nBlkSizePadY, VSCore *core, const VSAPI *vsapi) noexcept {
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(src);
@@ -763,6 +807,11 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
     if (vPad <= 0)
         throw SuperPyramidError("Vertical padding must be positive");
 
+    this->nBlkSizeX = nBlkSizeX;
+    this->nBlkSizeY = nBlkSizeY;
+    this->nOverlapX = nOverlapX;
+    this->nOverlapY = nOverlapY;
+
     pyramidLevels.resize(levels);
 
     const VSVideoFormat *srcFormat = vsapi->getVideoFrameFormat(srcFrame);
@@ -850,6 +899,11 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
     nHPad[0] = vsapi->mapGetIntSaturated(props, (prefix + "SuperHPad").c_str(), 0, &err);
     nVPad[0] = vsapi->mapGetIntSaturated(props, (prefix + "SuperVPad").c_str(), 0, &err);
     bitsPerSample = vsapi->mapGetIntSaturated(props, (prefix + "SuperBitsPerSample").c_str(), 0, &err);
+    nBlkSizeX = vsapi->mapGetIntSaturated(props, (prefix + "SuperBlkSizeX").c_str(), 0, &err);
+    nBlkSizeY = vsapi->mapGetIntSaturated(props, (prefix + "SuperBlkSizeY").c_str(), 0, &err);
+    nOverlapX = vsapi->mapGetIntSaturated(props, (prefix + "SuperOverlapX").c_str(), 0, &err);
+    nOverlapY = vsapi->mapGetIntSaturated(props, (prefix + "SuperOverlapY").c_str(), 0, &err);
+
     nBlkSizePadX[0] = nWidth[0] - nRealWidth[0];
     nBlkSizePadY[0] = nHeight[0] - nRealHeight[0];
 
@@ -1037,6 +1091,10 @@ void FramePyramid::ExportFrameData(VSFrame *dst, const std::string &prefix) cons
     vsapi->mapSetInt(props, (prefix + "SuperXRatioUV").c_str(), xRatioUV, maReplace);
     vsapi->mapSetInt(props, (prefix + "SuperYRatioUV").c_str(), yRatioUV, maReplace);
     vsapi->mapSetInt(props, (prefix + "SuperBitsPerSample").c_str(), bitsPerSample, maReplace);
+    vsapi->mapSetInt(props, (prefix + "SuperBlkSizeX").c_str(), nBlkSizeX, maReplace);
+    vsapi->mapSetInt(props, (prefix + "SuperBlkSizeY").c_str(), nBlkSizeY, maReplace);
+    vsapi->mapSetInt(props, (prefix + "SuperOverlapX").c_str(), nOverlapX, maReplace);
+    vsapi->mapSetInt(props, (prefix + "SuperOverlapY").c_str(), nOverlapY, maReplace);
 }
 
 const FramePyramidLevel &FramePyramid::GetLevel(int level) const noexcept {

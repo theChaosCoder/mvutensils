@@ -27,11 +27,17 @@ Changes
 	* The opt argument was dropped from all functions
 
 * Super:
-    * Now takes blksizeh/v and overlaph/v values to properly pad the source frame so the edges also are processed and not generate excessive levels that are unused, these are basically mandatory and may be changed to be later
+    * Now takes blksize=[h, v], overlap=[h, v] values to properly pad the source frame so the edges also are processed and not generate excessive levels that are unused
+
+    * blksize and overlap are mandatory arguments
+
+    * The pad arguments also got changed to pad=[h, v], if no value is provided it uses the default, if only one value is provided it's used for both horizontal and vertical
 
 	* Greatly reduced memory usage
 
 * Analyse/Recalculate:
+    * Now takes blksize=[h, v] and overlap=[h, v] like Super. These values also default to the ones used when creating the super clip.
+
     * The dct argument was replaced with satd (true/false), satd=false is equivalent to dct=0 and satd=true is the same as dct=5 in the original mvtools
 
     * The rfilter argument was changed and mode 1/3 was removed, as a result the new mapping is 2=>1 and 4=>2
@@ -42,7 +48,7 @@ Changes
     
     * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction
     
-    * Will throw an error when not all pixels can be processed due to the chosen blocksize/overlap combination in contrast to the values used in Super
+    * Will throw an error when not all pixels can be processed due to the chosen blksize/overlap combination in contrast to the values used in Super. Note that generally halving blksize+overlap and reusing the Super clip will work. Other more esoteric splits may or may not require a new Super clip to be derived.
     
 * Compensate:
     * None
@@ -94,6 +100,8 @@ Changes
 Planned changes/mysteries
 =========================
 
+* Does the delta sign direction make sense? Flip it?
+
 * Is the planes argument in DegrainN useful?
 
 * Have an Analyse wrapper that outputs a full array of all clips required for DegrainN
@@ -102,7 +110,9 @@ Planned changes/mysteries
 
 * Make overlaph/v and blksizeh/v simply blocksize=[w, h] and overlap=[w, h] arrays
 
-* Make overlap and blksize default to the values in the super clip for analyse (maybe)
+* Make overlap and blksize default to the values in the super clip for analyse/recalculate (maybe)
+
+* Make hpad/vpad work like blksize/overlap?
 
 * Have a general Degrain function that maps to the right DegrainN depending on the number of vectors passed (maybe, feedback welcome)
 
