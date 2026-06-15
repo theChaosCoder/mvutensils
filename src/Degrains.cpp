@@ -124,11 +124,9 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         };
 
         VSFrame *dst = vsapi->newVideoFrame2(&d->vi->format, d->vi->width, d->vi->height, fr, pl, src, core);
-
         vsapi->freeFrame(src);
 
         int bitsPerSample = d->vi->format.bitsPerSample;
-
         
         constexpr int bytesPerSample = sizeof(PixelType);
 
@@ -159,7 +157,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
             int nLogPel = (fgops[0]->nPel == 4) ? 2 : (fgops[0]->nPel == 2) ? 1 : 0;
 
-
             FramePyramid pSrcFrame(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, core, vsapi);
             const auto &srcLevel = pSrcFrame.GetLevel(0);
 
@@ -168,7 +165,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                 nDstPitches[i] = vsapi->getStride(dst, i);
                 pSrc[i] = srcLevel.planes[i].GetPointer<PixelType>(0, 0);
                 nSrcPitches[i] = srcLevel.planes[i].nPitch;
-
             }
 
             const int xSubUV = d->xSubUV;
@@ -186,7 +182,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
             const int *nHeight_B = d->nHeight_B;
             const int64_t *thSAD = d->thSAD;
             const int *nLimit = d->nLimit;
-
 
             std::optional<FramePyramid> pRefGOF[radius * 2];
             for (int r = 0; r < radius * 2; r++)
@@ -211,7 +206,6 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                 if (isUsable[r])
                     pPlanes[r] = &pRefGOF[r]->GetLevel(0);
             }
-
 
             pDstCur[0] = pDst[0];
             pDstCur[1] = pDst[1];

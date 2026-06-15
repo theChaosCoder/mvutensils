@@ -41,24 +41,29 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
         if (d->usePelClip)
             vsapi->requestFrameFilter(n, d->node2, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *src = vsapi->getFrameFilter(n, d->node1, frameCtx);
+        try {
+            const VSFrame *src = vsapi->getFrameFilter(n, d->node1, frameCtx);
 
-        FramePyramid pyramid(src, d->nLevels, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->nHPad, d->nVPad, d->rfilter, core, vsapi);
+            FramePyramid pyramid(src, d->nLevels, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->nHPad, d->nVPad, d->rfilter, core, vsapi);
 
-        if (d->usePelClip) {
-            const VSFrame *srcPel = vsapi->getFrameFilter(n, d->node2, frameCtx);
-            pyramid.SetExternalPelPlanes(srcPel, d->nPel, core, vsapi);
-            vsapi->freeFrame(srcPel);
-        } else if (d->nPel > 1) {
-            pyramid.GeneratePelPlanes(d->nPel, d->sharp, core, vsapi);
+            if (d->usePelClip) {
+                const VSFrame *srcPel = vsapi->getFrameFilter(n, d->node2, frameCtx);
+                pyramid.SetExternalPelPlanes(srcPel, d->nPel, core, vsapi);
+                vsapi->freeFrame(srcPel);
+            } else if (d->nPel > 1) {
+                pyramid.GeneratePelPlanes(d->nPel, d->sharp, core, vsapi);
+            }
+
+            VSFrame *dst = vsapi->copyFrame(src, core);
+            vsapi->freeFrame(src);
+
+            pyramid.ExportFrameData(dst, d->prefix);
+
+            return dst;
+        } catch (std::runtime_error &e) {
+            vsapi->setFilterError(("Super: " + std::string(e.what())).c_str(), frameCtx);
+            return nullptr;
         }
-
-        VSFrame *dst = vsapi->copyFrame(src, core);
-        vsapi->freeFrame(src);
-
-        pyramid.ExportFrameData(dst, d->prefix);
-
-        return dst;
     }
 
     return nullptr;

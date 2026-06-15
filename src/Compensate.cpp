@@ -309,7 +309,6 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                     }
                 }
             } else {
-                // Return source frame when no processing can be done
                 assert(!dst);
                 return vsapi->getFrameFilter(n, d->node, frameCtx);
             }

@@ -91,8 +91,10 @@ Changes
 * Finest:
 	* Removed since its only real use was as a support function for other filters due to lazy frame data access code
 
-Planned changes
-===============
+Planned changes/mysteries
+=========================
+
+* Is the planes argument in DegrainN useful?
 
 * Have an Analyse wrapper that outputs a full array of all clips required for DegrainN
 

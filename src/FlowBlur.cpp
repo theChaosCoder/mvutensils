@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <stdexcept>
 
 #include <VapourSynth4.h>
 
@@ -130,18 +131,20 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
         vsapi->requestFrameFilter(n, d->super, frameCtx);
         vsapi->requestFrameFilter(n, d->node, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        int off = d->deltaFrame;
-        bool vectorsLoadFrame = (n + off >= 0 && n - off < d->vi->numFrames);
+        VSFrame *dst = nullptr;
 
-        MotionBlockPyramid vectorsfw(vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
-        MotionBlockPyramid vectorsbw(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+        try {
+            int off = d->deltaFrame;
+            bool vectorsLoadFrame = (n + off >= 0 && n - off < d->vi->numFrames);
 
-        if (vectorsfw.IsUsable(d->thscd1, d->thscd2) && vectorsbw.IsUsable(d->thscd1, d->thscd2)) {
-            const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
-            VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
-            vsapi->freeFrame(src);
+            MotionBlockPyramid vectorsfw(vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectorsbw(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
 
-            try {
+            if (vectorsfw.IsUsable(d->thscd1, d->thscd2) && vectorsbw.IsUsable(d->thscd1, d->thscd2)) {
+                const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
+                dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
+                vsapi->freeFrame(src);
+
                 const VSFrame *ref = vsapi->getFrameFilter(n, d->super, frameCtx);
                 FramePyramid refGOF(ref, 1, d->prefix, core, vsapi);
 
@@ -188,15 +191,15 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                              tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->blur256, d->prec);
                     }
                 }
-            } catch (std::runtime_error &e) {
-                vsapi->freeFrame(dst);
-                vsapi->setFilterError(("FlowBlur: " + std::string(e.what())).c_str(), frameCtx);
-                return nullptr;
-            }
 
-            return dst;
-        } else {
-            return vsapi->getFrameFilter(n, d->node, frameCtx);
+                return dst;
+            } else {
+                return vsapi->getFrameFilter(n, d->node, frameCtx);
+            }
+        } catch (std::runtime_error &e) {
+            vsapi->freeFrame(dst);
+            vsapi->setFilterError(("FlowBlur: " + std::string(e.what())).c_str(), frameCtx);
+            return nullptr;
         }
     }
 
