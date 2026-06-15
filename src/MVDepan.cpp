@@ -1448,6 +1448,12 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
 
     *data1 = *data2 = *data3 = d;
 
+    // The struct copy aliased the single owned d.clip into all three stages. data1 keeps it
+    // (stage 1 reads the original clip); data2/data3 receive their real input (the previous
+    // stage's output) just before their own createVideoFilter below. Null them now so that an
+    // early-failure path does not free the same d.clip reference two or three times.
+    data2->clip = data3->clip = nullptr;
+
     data1->stage = 1;
     data2->stage = 2;
     data3->stage = 3;
