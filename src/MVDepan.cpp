@@ -683,8 +683,9 @@ static void mult_conj_data2d(const fftwf_complex * MVU_RESTRICT fftnext, const f
     // (hermit)
     int nx = winx / 2 + 1; //padded, odd
 
-    int total = winy * nx;                                                                            // even
-    for (int k = 0; k < total; k += 2) { //paired for speed
+    int total = winy * nx;
+    int k = 0;
+    for (; k + 1 < total; k += 2) { //paired for speed
         // real part
         mult[k][0] = fftnext[k][0] * fftsrc[k][0] + fftnext[k][1] * fftsrc[k][1];
         // imaginary part
@@ -693,6 +694,13 @@ static void mult_conj_data2d(const fftwf_complex * MVU_RESTRICT fftnext, const f
         mult[k + 1][0] = fftnext[k + 1][0] * fftsrc[k + 1][0] + fftnext[k + 1][1] * fftsrc[k + 1][1];
         // imaginary part
         mult[k + 1][1] = fftnext[k + 1][0] * fftsrc[k + 1][1] - fftnext[k + 1][1] * fftsrc[k + 1][0];
+    }
+    // total = winy * (winx/2 + 1) is only even for the auto power-of-two window sizes; a
+    // user-supplied odd window leaves one element, which the paired loop would read past
+    // the end of mult[]. Handle the tail explicitly.
+    if (k < total) {
+        mult[k][0] = fftnext[k][0] * fftsrc[k][0] + fftnext[k][1] * fftsrc[k][1];
+        mult[k][1] = fftnext[k][0] * fftsrc[k][1] - fftnext[k][1] * fftsrc[k][0];
     }
 }
 
