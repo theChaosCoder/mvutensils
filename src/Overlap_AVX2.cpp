@@ -50,6 +50,36 @@ static void overlaps_avx2(uint8_t *pDst8, ptrdiff_t nDstPitch, const uint8_t *pS
     }
 }
 
+// 16-bit source variant (width >= 16; narrower sizes use the SSE2 16-bit path). Unsigned
+// 16x16->32 product (mulhi_epu16, since 16-bit source exceeds the signed range), >>6,
+// accumulated into the uint32 buffer. unpack interleaves within 128-bit lanes, so
+// permute2x128 restores the linear product order before accumulation.
+template <int blockWidth, int blockHeight>
+static void overlaps_u16_avx2(uint8_t *pDst8, ptrdiff_t nDstPitch, const uint8_t *pSrc8, ptrdiff_t nSrcPitch, const int16_t *pWin, ptrdiff_t nWinPitch) {
+    static_assert(blockWidth >= 16, "");
+    for (unsigned y = 0; y < blockHeight; y++) {
+        const uint16_t *pSrc = (const uint16_t *)pSrc8;
+        uint32_t *pDst = (uint32_t *)pDst8;
+        for (unsigned x = 0; x < blockWidth; x += 16) {
+            __m256i src = _mm256_loadu_si256((const __m256i *)&pSrc[x]);
+            __m256i win = _mm256_loadu_si256((const __m256i *)&pWin[x]);
+            __m256i lo = _mm256_mullo_epi16(src, win);
+            __m256i hi = _mm256_mulhi_epu16(src, win);
+            __m256i pa = _mm256_unpacklo_epi16(lo, hi);
+            __m256i pb = _mm256_unpackhi_epi16(lo, hi);
+            __m256i p0 = _mm256_srli_epi32(_mm256_permute2x128_si256(pa, pb, 0x20), 6);
+            __m256i p1 = _mm256_srli_epi32(_mm256_permute2x128_si256(pa, pb, 0x31), 6);
+            __m256i d0 = _mm256_loadu_si256((const __m256i *)&pDst[x]);
+            __m256i d1 = _mm256_loadu_si256((const __m256i *)&pDst[x + 8]);
+            _mm256_storeu_si256((__m256i *)&pDst[x], _mm256_add_epi32(d0, p0));
+            _mm256_storeu_si256((__m256i *)&pDst[x + 8], _mm256_add_epi32(d1, p1));
+        }
+        pDst8 += nDstPitch;
+        pSrc8 += nSrcPitch;
+        pWin += nWinPitch;
+    }
+}
+
 #endif
 
 
@@ -66,8 +96,11 @@ enum InstructionSets {
 #if defined(MVTOOLS_X86)
 #define OVERS_AVX2(width, height) \
     { KEY(width, height, 8, AVX2), overlaps_avx2<width, height> },
+#define OVERS_AVX2_U16(width, height) \
+    { KEY(width, height, 16, AVX2), overlaps_u16_avx2<width, height> },
 #else
 #define OVERS_AVX2(width, height)
+#define OVERS_AVX2_U16(width, height)
 #endif
 
 static const std::unordered_map<uint32_t, OverlapsFunction> overlaps_functions = {
@@ -92,6 +125,23 @@ static const std::unordered_map<uint32_t, OverlapsFunction> overlaps_functions =
     OVERS_AVX2(128, 32)
     OVERS_AVX2(128, 64)
     OVERS_AVX2(128, 128)
+    OVERS_AVX2_U16(16, 1)
+    OVERS_AVX2_U16(16, 2)
+    OVERS_AVX2_U16(16, 4)
+    OVERS_AVX2_U16(16, 8)
+    OVERS_AVX2_U16(16, 16)
+    OVERS_AVX2_U16(16, 32)
+    OVERS_AVX2_U16(32, 8)
+    OVERS_AVX2_U16(32, 16)
+    OVERS_AVX2_U16(32, 32)
+    OVERS_AVX2_U16(32, 64)
+    OVERS_AVX2_U16(64, 16)
+    OVERS_AVX2_U16(64, 32)
+    OVERS_AVX2_U16(64, 64)
+    OVERS_AVX2_U16(64, 128)
+    OVERS_AVX2_U16(128, 32)
+    OVERS_AVX2_U16(128, 64)
+    OVERS_AVX2_U16(128, 128)
 };
 
 
