@@ -46,7 +46,7 @@ Changes
 	
 	* Removed the divide argument since no good use case seems to exist, in recalculate Recalculate you can already get an effect similar to divide=1/2 depending on smooth=False/True
     
-    * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction
+    * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction, as a result the little known fixed frame reference with negative delta in the original mvtools has been removed
     
     * Will throw an error when not all pixels can be processed due to the chosen blksize/overlap combination in contrast to the values used in Super. Note that generally halving blksize+overlap and reusing the Super clip will work. Other more esoteric splits may or may not require a new Super clip to be derived.
     
