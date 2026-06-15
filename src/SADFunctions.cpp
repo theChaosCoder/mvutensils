@@ -636,7 +636,11 @@ static unsigned int Satd_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_
         const int partition_width = 8;
         const int partition_height = 4;
 
-        unsigned sum = 0;
+        // 64-bit accumulator: for 16-bit pixels a large block (e.g. 128x128) can sum past
+        // UINT32_MAX. Saturate on return since the SADFunction signature returns unsigned int
+        // (the result is stored in an int64_t cost upstream); wrapping would make a maximally
+        // different block look cheap.
+        uint64_t sum = 0;
 
         for (int y = 0; y < nBlkHeight; y += partition_height) {
             for (int x = 0; x < nBlkWidth; x += partition_width)
@@ -647,7 +651,7 @@ static unsigned int Satd_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_
             pRef += nRefPitch * partition_height;
         }
 
-        return sum;
+        return static_cast<unsigned int>(sum > 0xFFFFFFFFu ? 0xFFFFFFFFu : sum);
     }
 }
 
