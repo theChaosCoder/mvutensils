@@ -1,6 +1,7 @@
 #include <mutex>
 #include <string>
 #include <cmath>
+#include <vector>
 
 #include <fftw3.h>
 
@@ -2694,7 +2695,11 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
         const VSFrame *src = vsapi->getFrameFilter(nsrc, d->clip, frameCtx);
         VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
 
-        int *work2width4356 = (int *)malloc((2 * d->vi->width + 4356) * sizeof(int));
+        // Per-thread reusable scratch (filter is fmParallel, so a shared buffer would race);
+        // sized once per thread, so no per-frame malloc/free.
+        thread_local std::vector<int> work2width4356_storage;
+        work2width4356_storage.resize(2 * d->vi->width + 4356);
+        int *work2width4356 = work2width4356_storage.data();
 
         int border[3] = { 0, 1 << (d->vi->format.bitsPerSample - 1), border[1] };
         int blur[3] = { d->blur, d->blur, d->blur };
@@ -2726,7 +2731,6 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
             d->compensate_plane(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356, blur[plane], d->pixel_max);
         }
 
-        free(work2width4356);
 
         vsapi->freeFrame(src);
 
@@ -3688,7 +3692,11 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         //--------------------------------------------------------------------------
         // Ready to make motion stabilization,
 
-        int *work2width4356 = (int *)malloc((2 * d->vi->width + 4356) * sizeof(int)); // work
+        // Per-thread reusable scratch (filter is fmParallel, so a shared buffer would race);
+        // sized once per thread, so no per-frame malloc/free.
+        thread_local std::vector<int> work2width4356_storage;
+        work2width4356_storage.resize(2 * d->vi->width + 4356);
+        int *work2width4356 = work2width4356_storage.data();
 
         // --------------------------------------------------------------------
         // use some previous frame to fill borders
@@ -3700,7 +3708,6 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         // use next frame to fill borders
         if (d->next > 0) {
             if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi)) {
-                free(work2width4356);
                 vsapi->freeFrame(dst);
                 vsapi->freeFrame(src);
                 return NULL;
@@ -3709,7 +3716,6 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
 
         compensateFrame(src, dst, d, notfilled, &trdif, work2width4356, vsapi);
 
-        free(work2width4356);
 
         vsapi->freeFrame(src);
 
@@ -3865,7 +3871,11 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
         //--------------------------------------------------------------------------
         // Ready to make motion stabilization,
 
-        int *work2width4356 = (int *)malloc((2 * d->vi->width + 4356) * sizeof(int)); // work
+        // Per-thread reusable scratch (filter is fmParallel, so a shared buffer would race);
+        // sized once per thread, so no per-frame malloc/free.
+        thread_local std::vector<int> work2width4356_storage;
+        work2width4356_storage.resize(2 * d->vi->width + 4356);
+        int *work2width4356 = work2width4356_storage.data();
 
         // --------------------------------------------------------------------
         // use some previous frame to fill borders
@@ -3877,7 +3887,6 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
         // use next frame to fill borders
         if (d->next > 0) {
             if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi)) {
-                free(work2width4356);
                 vsapi->freeFrame(dst);
                 vsapi->freeFrame(src);
                 return NULL;
@@ -3886,7 +3895,6 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
 
         compensateFrame(src, dst, d, notfilled, &trdif, work2width4356, vsapi);
 
-        free(work2width4356);
 
         vsapi->freeFrame(src);
 
