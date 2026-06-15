@@ -91,13 +91,8 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
         if (nref >= n && nref < d->vi->numFrames)
             vsapi->requestFrameFilter(nref, d->super, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        uint8_t *pDst[3] = {};
         uint8_t *pDstCur[3] = {};
-        const uint8_t *pRef[3] = {};
         ptrdiff_t nDstPitches[3] = {};
-        ptrdiff_t nRefPitches[3] = {};
-        const uint8_t *pSrc[3] = {};
-        ptrdiff_t nSrcPitches[3] = {};
 
         MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
 
@@ -147,12 +142,8 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                 vsapi->freeFrame(realSrc);
 
                 for (int i = 0; i < d->supervi->format.numPlanes; i++) {
-                    pDstCur[i] = pDst[i] = vsapi->getWritePtr(dst, i);
+                    pDstCur[i] = vsapi->getWritePtr(dst, i);
                     nDstPitches[i] = vsapi->getStride(dst, i);
-                    pSrc[i] = pSrcGOF.GetLevel(0).planes[i].pPlane[0];
-                    nSrcPitches[i] = pSrcGOF.GetLevel(0).planes[i].nPitch;
-                    pRef[i] = pRefGOF.GetLevel(0).planes[i].pPlane[0];
-                    nRefPitches[i] = pRefGOF.GetLevel(0).planes[i].nPitch;
                 }
 
                 int fieldShift = 0;

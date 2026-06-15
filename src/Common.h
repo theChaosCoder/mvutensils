@@ -17,12 +17,12 @@ class MVUtensilsError : public std::runtime_error {
 };
 
 template<typename T, size_t U>
-constexpr int ARRAY_SIZE(const T (&arr)[U]) {
+constexpr int ARRAY_SIZE(const T (&)[U]) {
     return static_cast<int>(U);
 }
 
 template<typename T>
-static void VS_CC filterFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC filterFree(void *instanceData, [[maybe_unused]] VSCore *core, [[maybe_unused]] const VSAPI *vsapi) {
     delete reinterpret_cast<T *>(instanceData);
 }
 
@@ -35,7 +35,7 @@ constexpr int ERROR_SIZE = 1024;
 static constexpr const int MV_DEFAULT_SCD1 = 400;
 static constexpr const int MV_DEFAULT_SCD2 = 130;
 
-constexpr char DEFAULT_MVUTENSILS_PREFIX[] = "MVUtensils";
+static constexpr char DEFAULT_MVUTENSILS_PREFIX[] = "MVUtensils";
 
 static inline void mvu_bitblt(void *dstp, ptrdiff_t dst_stride, const void *srcp, ptrdiff_t src_stride, size_t row_size, size_t height) {
     if (height) {
