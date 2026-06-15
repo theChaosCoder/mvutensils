@@ -797,7 +797,7 @@ int GetPyramidLevelForBlockSize(int blkSizeX, int blkSizeY, int overlapX, int ov
 }
 
 FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int hPad, int vPad, RFilterParam rFilter, VSCore *core, const VSAPI *vsapi)
-: core(core), vsapi(vsapi) {
+: vsapi(vsapi) {
     if (!srcFrame)
         throw SuperPyramidError("Invalid source frame");
     if (levels < 1)
@@ -986,12 +986,12 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
 }
 
 FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi)
-: core(core), vsapi(vsapi) {
+: vsapi(vsapi) {
     LoadFrameData(srcFrame, maxLevel, prefix);
 }
 
 FramePyramid::FramePyramid(VSNode *node, const std::string &prefix, const VSAPI *vsapi)
-    : core(core), vsapi(vsapi) {
+    : vsapi(vsapi) {
 
     char errorMsg[ERROR_SIZE] = {};
     const VSFrame *srcFrame = vsapi->getFrame(0, node, errorMsg, ERROR_SIZE);

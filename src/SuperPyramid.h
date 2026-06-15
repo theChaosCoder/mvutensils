@@ -181,7 +181,6 @@ public:
 
 private:
     const VSFrame *serializedData = nullptr;
-    VSCore *core;
     const VSAPI *vsapi;
     void FreeFrames() noexcept;
     void LoadFrameData(const VSFrame *srcFrame, int maxLevel, const std::string &prefix);

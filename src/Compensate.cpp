@@ -314,7 +314,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 }
 
 
-static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC compensateCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<CompensateData> d(new CompensateData(vsapi));
     int err;
 

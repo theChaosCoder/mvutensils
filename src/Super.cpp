@@ -78,7 +78,7 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
     return nullptr;
 }
 
-static void VS_CC superCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+static void VS_CC superCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<SuperData> d(new SuperData(vsapi));
     int err;
 

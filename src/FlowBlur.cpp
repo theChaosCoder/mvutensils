@@ -205,7 +205,7 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
     return nullptr;
 }
 
-static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<FlowBlurData> d(new FlowBlurData(vsapi));
     int err;
 
@@ -304,5 +304,5 @@ void flowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "thscd2:int:opt;"
                  "prefix:data:opt;",
                  "clip:vnode;",
-                 flowblurCreate, 0, plugin);
+                 flowblurCreate, nullptr, plugin);
 }

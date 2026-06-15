@@ -681,7 +681,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
     }
 }
 
-static void VS_CC degrainNCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC degrainNCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     int numElems = vsapi->mapNumElements(in, "vectors");
     if (numElems % 2 != 0) {
         vsapi->mapSetError(out, "Degrain: number of vectors must be even");

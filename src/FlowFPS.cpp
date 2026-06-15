@@ -282,7 +282,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
     return nullptr;
 }
 
-static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<FlowFPSData> d(new FlowFPSData(vsapi));
     int err;
 

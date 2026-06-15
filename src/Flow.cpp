@@ -199,7 +199,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
     return nullptr;
 }
 
-static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<FlowData> d(new FlowData(vsapi));
 
     int err;

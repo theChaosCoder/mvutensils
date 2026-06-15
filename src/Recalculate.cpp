@@ -115,7 +115,7 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
     return nullptr;
 }
 
-static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<RecalculateData> d(new RecalculateData(vsapi));
     int err;
 

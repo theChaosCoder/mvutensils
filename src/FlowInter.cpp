@@ -254,7 +254,7 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
     return nullptr;
 }
 
-static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<FlowInterData> d(new FlowInterData(vsapi));
     int err;
 
@@ -358,5 +358,5 @@ void flowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "thscd2:int:opt;"
                  "prefix:data:opt;",
                  "clip:vnode;",
-                 flowinterCreate, 0, plugin);
+                 flowinterCreate, nullptr, plugin);
 }

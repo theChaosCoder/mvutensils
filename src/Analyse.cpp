@@ -131,7 +131,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
     return nullptr;
 }
 
-static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<AnalyseData> d(new AnalyseData(vsapi));
     int err;
 
@@ -280,7 +280,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
 }
 
 
-static void VS_CC analyseManyCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+static void VS_CC analyseManyCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     int err;
 
     int radius = vsapi->mapGetIntSaturated(in, "radius", 0, &err);

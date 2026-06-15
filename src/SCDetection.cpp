@@ -76,7 +76,7 @@ static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, voi
     return nullptr;
 }
 
-static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<SCDetectionData> d(new SCDetectionData(vsapi));
 
     int err;
