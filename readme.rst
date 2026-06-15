@@ -6,6 +6,12 @@ with the goals of fixing several long standing bugs in the original such as the 
 border not being properly processed. As a result of this many operations should also be considerably faster since more CPU cache friendly
 algorithms are being used.
 
+Usage hints
+===========
+
+Super/Recalculate:
+	* Recalculate only needs a single level super clip so remember to pass levels=1 to save memory and speed things up
+
 Changes
 =======
 
@@ -36,7 +42,7 @@ Changes
     
     * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction
     
-    * Will throw an error when not all pixels can be processed due to the chosen blocksize/overlap combination
+    * Will throw an error when not all pixels can be processed due to the chosen blocksize/overlap combination in contrast to the values used in Super
     
 * Compensate:
     * None
