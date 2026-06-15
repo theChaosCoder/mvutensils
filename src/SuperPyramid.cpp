@@ -739,7 +739,7 @@ void PyramidPlane::PadPlaneData(int plane) noexcept {
     }
 }
 
-void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept {
+void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, const VSAPI *vsapi) noexcept {
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(planeFrame);
     storage[0] = planeFrame;
     pPlane[0] = vsapi->getReadPtr(planeFrame, 0);
@@ -757,7 +757,7 @@ void PyramidPlane::FromExternalPlane(const VSFrame *planeFrame, int hPad, int vP
     nHeight = nPaddedHeight - 2 * nVPadding;
 }
 
-void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) {
+void PyramidPlane::FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, const VSAPI *vsapi) {
     assert(pel == 2 || pel == 4);
     nPel = pel;
     const VSVideoFormat *format = vsapi->getVideoFrameFormat(planeFrames[0]);
@@ -956,7 +956,7 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
                         throw SuperPyramidError("Plane data missing in super frame metadata");
                     pelPlanes[i] = frame;
                 }
-                pyramidLevels[0].planes[plane].FromExternalPelPlanes(pelPlanes, nPel, nHPad[plane], nVPad[plane], core, vsapi);
+                pyramidLevels[0].planes[plane].FromExternalPelPlanes(pelPlanes, nPel, nHPad[plane], nVPad[plane], vsapi);
             }
         }
 
@@ -966,7 +966,7 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
                 const VSFrame *frame = vsapi->mapGetFrame(props, propStr.c_str(), plane, &err);
                 if (!frame)
                     throw SuperPyramidError("Plane data missing in super frame metadata");
-                pyramidLevels[level].planes[plane].FromExternalPlane(frame, nHPad[plane], nVPad[plane], core, vsapi);
+                pyramidLevels[level].planes[plane].FromExternalPlane(frame, nHPad[plane], nVPad[plane], vsapi);
             }
         }
 

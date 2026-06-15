@@ -59,13 +59,13 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
                 v4 = parentLevel.vectors[i / 2 + offx + (j / 2 + offy) * parentLevel.nBlkX];
             }
 
-            int64_t temp_sad = 0;
+            int64_t temp_sad;
 
             if (nOverlapX == 0 && nOverlapY == 0) {
                 vectors[index].x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
                 vectors[index].y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
                 temp_sad = 9 * v1.sad + 3 * v2.sad + 3 * v3.sad + v4.sad + 8;
-            } else if (nOverlapX <= (nBlkSizeX >> 1) && nOverlapY <= (nBlkSizeY >> 1)) {
+            } else {
                 int ax1 = (offx > 0) ? aoddx : aevenx;
                 int ax2 = (nBlkSizeX - nOverlapX) * 4 - ax1;
                 int ay1 = (offy > 0) ? aoddy : aeveny;

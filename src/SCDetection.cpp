@@ -76,13 +76,6 @@ static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, voi
     return nullptr;
 }
 
-
-static void VS_CC scdetectionFree(void *instanceData, VSCore *core, const VSAPI *vsapi) noexcept {
-    SCDetectionData *d = reinterpret_cast<SCDetectionData *>(instanceData);
-    delete d;
-}
-
-
 static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<SCDetectionData> d(new SCDetectionData(vsapi));
 
@@ -122,7 +115,7 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData,
         {d->vectors, rpStrictSpatial}
     };
 
-    vsapi->createVideoFilter(out, "SCDetection", d->vi, scdetectionGetFrame, scdetectionFree, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "SCDetection", d->vi, scdetectionGetFrame, filterFree<SCDetectionData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
     d.release();
 }
 

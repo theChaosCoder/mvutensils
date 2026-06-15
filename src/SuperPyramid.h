@@ -132,8 +132,8 @@ private:
     template<typename PixelType>
     void SetExternalPelPlanes(const VSFrame *pelFrame, int pel, int plane, VSCore *core, const VSAPI *vsapi);
 
-    void FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, VSCore *core, const VSAPI *vsapi) noexcept;
-    void FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, VSCore *core, const VSAPI *vsapi);
+    void FromExternalPlane(const VSFrame *planeFrame, int hPad, int vPad, const VSAPI *vsapi) noexcept;
+    void FromExternalPelPlanes(const VSFrame *const *planeFrames, int pel, int hPad, int vPad, const VSAPI *vsapi);
 
     template<typename PixelType>
     void SetExtPel2(const VSFrame *pelFrame, int plane, VSCore *core, const VSAPI *vsapi);
