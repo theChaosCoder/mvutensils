@@ -50,26 +50,35 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
         if (d->usePelClip)
             vsapi->requestFrameFilter(n, d->pelclip, frameCtx);
     } else if (activationReason == arAllFramesReady) {
+        const VSFrame *src = nullptr;
+        const VSFrame *srcPel = nullptr;
         try {
-            const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
+            src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
             FramePyramid pyramid(src, d->nLevels, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->nHPad, d->nVPad, d->rfilter, core, vsapi);
 
             if (d->usePelClip) {
-                const VSFrame *srcPel = vsapi->getFrameFilter(n, d->pelclip, frameCtx);
+                srcPel = vsapi->getFrameFilter(n, d->pelclip, frameCtx);
                 pyramid.SetExternalPelPlanes(srcPel, d->nPel, core, vsapi);
                 vsapi->freeFrame(srcPel);
+                srcPel = nullptr;
             } else if (d->nPel > 1) {
                 pyramid.GeneratePelPlanes(d->nPel, d->sharp, core, vsapi);
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
             vsapi->freeFrame(src);
+            src = nullptr;
 
             pyramid.ExportFrameData(dst, d->prefix);
 
             return dst;
         } catch (std::runtime_error &e) {
+            // FramePyramid's build-from-source constructor does not take ownership of src,
+            // and SetExternalPelPlanes/GeneratePelPlanes/the constructor can all throw, so
+            // free whatever is still owned here (freeFrame(nullptr) is a no-op).
+            vsapi->freeFrame(src);
+            vsapi->freeFrame(srcPel);
             vsapi->setFilterError(("Super: " + std::string(e.what())).c_str(), frameCtx);
             return nullptr;
         }
