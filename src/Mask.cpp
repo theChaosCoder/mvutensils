@@ -90,9 +90,6 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
         } catch (std::runtime_error &e) {
             vsapi->freeFrame(dst);
             vsapi->setFilterError((d->filterName + ": " + e.what()).c_str(), frameCtx);
-        } catch (mvuzimgxx::zerror &e) {
-            vsapi->freeFrame(dst);
-            vsapi->setFilterError((d->filterName + ": " + std::string(e.msg)).c_str(), frameCtx);
         }
     }
 
