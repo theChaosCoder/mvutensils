@@ -117,7 +117,7 @@ static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
 }
 
 template<typename PixelType>
-static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     FlowBlurData *d = reinterpret_cast<FlowBlurData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -137,8 +137,8 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
             int off = d->deltaFrame;
             bool vectorsLoadFrame = (n + off >= 0 && n - off < d->vi->numFrames);
 
-            MotionBlockPyramid vectorsfw(vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
-            MotionBlockPyramid vectorsbw(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectorsfw(vectorsLoadFrame ? vsapi->getFrameFilter(n - off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, vsapi);
+            MotionBlockPyramid vectorsbw(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvbw, frameCtx) : nullptr, 1, d->prefix, vsapi);
 
             if (vectorsfw.IsUsable(d->thscd1, d->thscd2) && vectorsbw.IsUsable(d->thscd1, d->thscd2)) {
                 const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
@@ -146,7 +146,7 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
                 vsapi->freeFrame(src);
 
                 const VSFrame *ref = vsapi->getFrameFilter(n, d->super, frameCtx);
-                FramePyramid refGOF(ref, 1, d->prefix, core, vsapi);
+                FramePyramid refGOF(ref, 1, d->prefix, vsapi);
 
                 auto smallMasksFw = vectorsfw.MakeSmallVectorMasks();
                 auto smallMasksBw = vectorsbw.MakeSmallVectorMasks();
@@ -244,7 +244,7 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VS
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-        FramePyramid super(d->super, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, vsapi);
 
         d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node);
@@ -258,8 +258,8 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, void *userData, VS
         d->mvbw = vsapi->mapGetNode(in, "vectors", 0, nullptr);
         d->mvfw = vsapi->mapGetNode(in, "vectors", 1, nullptr);
 
-        MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
-        MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
+        MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, vsapi);
+        MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, vsapi);
 
         vectorsFw.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
 

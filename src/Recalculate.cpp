@@ -50,7 +50,7 @@ struct RecalculateData {
     }
 };
 
-static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     RecalculateData *d = reinterpret_cast<RecalculateData *>(instanceData);
 
     int nref = n + d->deltaFrame;
@@ -67,7 +67,7 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
     } else if (activationReason == arAllFramesReady) {
         try {
             const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
-            FramePyramid pSrcGOF(src, 1, d->prefix, core, vsapi);
+            FramePyramid pSrcGOF(src, 1, d->prefix, vsapi);
 
             const VSMap *srcprops = vsapi->getFramePropertiesRO(src);
             int err;
@@ -80,11 +80,11 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
             if (d->tff_exists)
                 src_top_field = d->tff ^ (n % 2);
 
-            MotionBlockPyramid fgop(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
+            MotionBlockPyramid fgop(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
 
             if (fgop.HasMotionVectors() && nref >= 0 && nref < d->vi->numFrames) {
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-                FramePyramid pRefGOF(ref, 1, d->prefix, core, vsapi);
+                FramePyramid pRefGOF(ref, 1, d->prefix, vsapi);
                 const VSMap *refprops = vsapi->getFramePropertiesRO(ref);
 
                 int ref_top_field = !!vsapi->mapGetInt(refprops, "_Field", 0, &err);
@@ -105,7 +105,7 @@ static const VSFrame *VS_CC recalculateGetFrame(int n, int activationReason, voi
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
-            fgop.ExportFrameData(dst, true, d->prefix, core, vsapi);
+            fgop.ExportFrameData(dst, true, d->prefix, vsapi);
             return dst;
         } catch (const std::exception &e) {
             vsapi->setFilterError(("Recalculate: " + std::string(e.what())).c_str(), frameCtx);
@@ -129,7 +129,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->super);
-        FramePyramid super(d->super, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, vsapi);
 
         GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", super.nBlkSizeX, super.nBlkSizeY, in, vsapi);
         GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", super.nOverlapX, super.nOverlapY, in, vsapi);
@@ -187,7 +187,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, void *userData,
 
         d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
-        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, vsapi);
 
         d->deltaFrame = vectors.nDeltaFrame;
 

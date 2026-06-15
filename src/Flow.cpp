@@ -86,7 +86,7 @@ static void flowFetch(uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
 }
 
 template<typename PixelType>
-static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     FlowData *d =  reinterpret_cast<FlowData *>(instanceData);
 
     int nref = n + d->deltaFrame;
@@ -105,11 +105,11 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             }
         }
     } else if (activationReason == arAllFramesReady) {
-        MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
 
         if (vectors.IsUsable(d->thscd1, d->thscd2)) {
             const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-            FramePyramid refGOF(ref, 1, d->prefix, core, vsapi);
+            FramePyramid refGOF(ref, 1, d->prefix, vsapi);
 
             const VSFrame *propSrc = vsapi->getFrameFilter(n, d->clip, frameCtx);
             VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
@@ -238,7 +238,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-        FramePyramid super(d->super, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, vsapi);
 
         d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
@@ -248,7 +248,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("source clip isn't compatible with super clip");
 
-        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, vsapi);
 
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
 

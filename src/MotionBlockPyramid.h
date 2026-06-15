@@ -275,14 +275,14 @@ public:
     // de-serialization from a frame, can choose to omit some levels by setting maxLevel, if -1 all levels are loaded, 0 means only metadata and no vectors are loaded,
     // positive numbers mean that many levels are loaded. When loading from clips passing 1 is usually enough.
     // Object can be in an invalid or limited state after this constructor
-    MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept;
+    MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, const VSAPI *vsapi) noexcept;
 
     // Constructor to load metadata and do nothing else
-    MotionBlockPyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
+    MotionBlockPyramid(VSNode *node, const std::string &prefix, const VSAPI *vsapi);
 
     ~MotionBlockPyramid();
 
-    void ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept; // serialization to a frame, oneLevel means that only the finest level is exported, otherwise all levels are exported as separate properties
+    void ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, const VSAPI *vsapi) const noexcept; // serialization to a frame, oneLevel means that only the finest level is exported, otherwise all levels are exported as separate properties
 
     void SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
         SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,

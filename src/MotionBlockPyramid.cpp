@@ -1500,11 +1500,11 @@ void MotionBlockPyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, co
     }
 }
 
-MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) noexcept {
+MotionBlockPyramid::MotionBlockPyramid(const VSFrame *src, int maxLevel, const std::string &prefix, const VSAPI *vsapi) noexcept {
     LoadFrameData(src, maxLevel, prefix, vsapi);
 }
 
-MotionBlockPyramid::MotionBlockPyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi) {
+MotionBlockPyramid::MotionBlockPyramid(VSNode *node, const std::string &prefix, const VSAPI *vsapi) {
     char errorMsg[ERROR_SIZE] = {};
     const VSFrame *srcFrame = vsapi->getFrame(0, node, errorMsg, ERROR_SIZE);
     if (!srcFrame)
@@ -1615,7 +1615,7 @@ void MotionBlockPyramid::RecalculateMVs(const FramePyramid &pSrcGOF, const Frame
     state = State::AnalysisDone;
 }
 
-void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi) const noexcept {
+void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std::string &prefix, const VSAPI *vsapi) const noexcept {
     auto props = vsapi->getFramePropertiesRW(dst);
 
     vsapi->mapSetInt(props, (prefix + "AnalysisWidth").c_str(), nWidth, maReplace);
@@ -1629,7 +1629,6 @@ void MotionBlockPyramid::ExportFrameData(VSFrame *dst, bool oneLevel, const std:
     vsapi->mapSetInt(props, (prefix + "AnalysisChroma").c_str(), chroma, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisXRatioUV").c_str(), xRatioUV, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisYRatioUV").c_str(), yRatioUV, maReplace);
-
 
     vsapi->mapSetInt(props, (prefix + "AnalysisBlkSizeX").c_str(), nBlkSizeX, maReplace);
     vsapi->mapSetInt(props, (prefix + "AnalysisBlkSizeY").c_str(), nBlkSizeY, maReplace);

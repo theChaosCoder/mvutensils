@@ -42,7 +42,7 @@ struct SuperData {
     }
 };
 
-static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     SuperData *d = reinterpret_cast<SuperData *>(instanceData);
 
     if (activationReason == arInitial) {

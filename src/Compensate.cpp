@@ -74,7 +74,7 @@ struct CompensateData {
 
 
 template<typename PixelType>
-static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     CompensateData *d = reinterpret_cast<CompensateData *>(instanceData);
     int nref = n + d->deltaFrame;
 
@@ -94,7 +94,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
         uint8_t *pDstCur[3] = {};
         ptrdiff_t nDstPitches[3] = {};
 
-        MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
 
         const int xRatioUV = vectors.xRatioUV;
         const int yRatioUV = vectors.yRatioUV;
@@ -129,12 +129,12 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
         try {
             const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
-            FramePyramid pSrcGOF(src, 1, d->prefix, core, vsapi);
+            FramePyramid pSrcGOF(src, 1, d->prefix, vsapi);
             const auto &pSrcPlanes = pSrcGOF.GetLevel(0).planes;
 
             if (nref >= 0 && nref < d->vi->numFrames && vectors.IsUsable(d->nSCD1, d->nSCD2)) {
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-                FramePyramid pRefGOF(ref, 1, d->prefix, core, vsapi);
+                FramePyramid pRefGOF(ref, 1, d->prefix, vsapi);
                 const auto &pRefPlanes = pRefGOF.GetLevel(0).planes;
 
                 const VSFrame *realSrc = vsapi->getFrameFilter(n, d->node, frameCtx);
@@ -356,7 +356,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-        FramePyramid super(d->super, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, vsapi);
 
         d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
@@ -366,7 +366,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, void *userData, 
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("source clip isn't compatible with super clip");
 
-        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, vsapi);
 
         int64_t nSCD1_old = d->nSCD1;
         vectors.ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);

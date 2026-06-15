@@ -61,7 +61,7 @@ struct FlowInterData {
 };
 
 template<typename PixelType>
-static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     FlowInterData *d = reinterpret_cast<FlowInterData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -88,12 +88,12 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
 
             bool vectorsLoadFrame = (n + off < d->vi->numFrames);
 
-            MotionBlockPyramid vectorsF(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
-            MotionBlockPyramid vectorsB(vectorsLoadFrame ? vsapi->getFrameFilter(n, d->mvbw, frameCtx) : nullptr, 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectorsF(vectorsLoadFrame ? vsapi->getFrameFilter(n + off, d->mvfw, frameCtx) : nullptr, 1, d->prefix, vsapi);
+            MotionBlockPyramid vectorsB(vectorsLoadFrame ? vsapi->getFrameFilter(n, d->mvbw, frameCtx) : nullptr, 1, d->prefix, vsapi);
 
             if (vectorsB.IsUsable(d->thscd1, d->thscd2) && vectorsF.IsUsable(d->thscd1, d->thscd2)) {
-                FramePyramid src(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, core, vsapi);
-                FramePyramid ref(vsapi->getFrameFilter(n + off, d->super, frameCtx), 1, d->prefix, core, vsapi);
+                FramePyramid src(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, vsapi);
+                FramePyramid ref(vsapi->getFrameFilter(n + off, d->super, frameCtx), 1, d->prefix, vsapi);
                 const VSFrame *dstPropSrc = vsapi->getFrameFilter(n, d->super, frameCtx);
                 dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, dstPropSrc, core);
                 vsapi->freeFrame(dstPropSrc);
@@ -116,8 +116,8 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
                 auto bufSmallBX = MaskResizer::MakeBufferPair(SmallB->VXSmallY, SmallB->pitchVSmallY, dstTileXB.get());
                 auto bufSmallBY = MaskResizer::MakeBufferPair(SmallB->VYSmallY, SmallB->pitchVSmallY, dstTileYB.get());
 
-                MotionBlockPyramid vectorsFF(vsapi->getFrameFilter(n, d->mvfw, frameCtx), 1, d->prefix, core, vsapi);
-                MotionBlockPyramid vectorsBB(vsapi->getFrameFilter(n + off, d->mvbw, frameCtx), 1, d->prefix, core, vsapi);
+                MotionBlockPyramid vectorsFF(vsapi->getFrameFilter(n, d->mvfw, frameCtx), 1, d->prefix, vsapi);
+                MotionBlockPyramid vectorsBB(vsapi->getFrameFilter(n + off, d->mvbw, frameCtx), 1, d->prefix, vsapi);
 
                 if (vectorsBB.IsUsable(d->thscd1, d->thscd2) && vectorsFF.IsUsable(d->thscd1, d->thscd2)) {
                     // get vector mask from extra frames
@@ -300,7 +300,7 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, V
 
         d->super = vsapi->mapGetNode(in, "super", 0, nullptr);
 
-        FramePyramid super(d->super, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, vsapi);
 
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("super clip is not compatible with source clip");
@@ -311,8 +311,8 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, void *userData, V
         d->mvbw = vsapi->mapGetNode(in, "vectors", 0, nullptr);
         d->mvfw = vsapi->mapGetNode(in, "vectors", 1, nullptr);
 
-        MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, core, vsapi);
-        MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, core, vsapi);
+        MotionBlockPyramid vectorsFw(d->mvfw, d->prefix, vsapi);
+        MotionBlockPyramid vectorsBw(d->mvbw, d->prefix, vsapi);
 
         vectorsFw.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
 

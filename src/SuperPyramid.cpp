@@ -985,12 +985,12 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
 
 }
 
-FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
+FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi)
 : core(core), vsapi(vsapi) {
     LoadFrameData(srcFrame, maxLevel, prefix);
 }
 
-FramePyramid::FramePyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi)
+FramePyramid::FramePyramid(VSNode *node, const std::string &prefix, const VSAPI *vsapi)
     : core(core), vsapi(vsapi) {
 
     char errorMsg[ERROR_SIZE] = {};

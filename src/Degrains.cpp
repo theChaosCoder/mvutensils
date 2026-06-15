@@ -88,7 +88,7 @@ struct DegrainData {
 };
 
 template<int radius, typename PixelType>
-static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     DegrainData<radius> *d = reinterpret_cast<DegrainData<radius> *>(instanceData);
 
     // FIXME, investigate weird vector delta frame checks
@@ -147,7 +147,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
             for (int r = 0; r < radius * 2; r++) {
                 const VSFrame *frame = vsapi->getFrameFilter(n, d->vectors[r], frameCtx);
-                fgops[r].emplace(frame, 1, d->prefix, core, vsapi);
+                fgops[r].emplace(frame, 1, d->prefix, vsapi);
                 isUsable[r] = fgops[r]->IsUsable(d->nSCD1, d->nSCD2);
 
                 if (isUsable[r]) {
@@ -158,7 +158,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
             int nLogPel = (fgops[0]->nPel == 4) ? 2 : (fgops[0]->nPel == 2) ? 1 : 0;
 
-            FramePyramid pSrcFrame(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, core, vsapi);
+            FramePyramid pSrcFrame(vsapi->getFrameFilter(n, d->super, frameCtx), 1, d->prefix, vsapi);
             const auto &srcLevel = pSrcFrame.GetLevel(0);
 
             for (int i = 0; i < d->vi->format.numPlanes; i++) {
@@ -185,7 +185,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
             std::optional<FramePyramid> pRefGOF[radius * 2];
             for (int r = 0; r < radius * 2; r++)
                 if (isUsable[r])
-                    pRefGOF[r].emplace(refFrames[r], 1, d->prefix, core, vsapi);
+                    pRefGOF[r].emplace(refFrames[r], 1, d->prefix, vsapi);
 
             OverlapWindows *OverWins[3] = { &d->OverWins[0], &d->OverWins[1], &d->OverWins[2] };
             std::unique_ptr<uint8_t[]> DstTempAlloc;
@@ -529,7 +529,7 @@ static inline void getProcessPlanesArg(const VSMap *in, bool process[3], const V
 
 
 template <int radius>
-static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<DegrainData<radius>> d(new DegrainData<radius>(vsapi));
 
     d->filterName = "Degrain" + std::to_string(radius);
@@ -566,7 +566,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node);
 
-        FramePyramid super(d->super, d->prefix, core, vsapi);
+        FramePyramid super(d->super, d->prefix, vsapi);
 
         int numVectors = vsapi->mapNumElements(in, "vectors");
         if (numVectors != radius * 2)
@@ -577,7 +577,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
         for (int r = 0; r < radius * 2; r++) {
             d->vectors[r] = vsapi->mapGetNode(in, "vectors", r, nullptr);
 
-            vectors[r].emplace(d->vectors[r], d->prefix, core, vsapi);
+            vectors[r].emplace(d->vectors[r], d->prefix, vsapi);
 
             if (r > 0 && !vectors[r]->IsCompatible(*vectors[r - 1]))
                 throw std::runtime_error("The motion vectors passed are not compatible with each other");

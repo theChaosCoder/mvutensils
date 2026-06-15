@@ -190,10 +190,10 @@ public:
 
     // Constructor to reconstruct from frame properties, takes ownership of srcFrame and free it even if the constructor throws
     // You can pass maxLevel = -1 to load all levels, maxLevel = 0 to load only metadata and no planes, maxLevel > 0 to load that many levels, note that only analyse uses more than 1 level
-    FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
+    FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi);
 
     // Constructor to load metadata from a node and do nothing else
-    FramePyramid(VSNode *node, const std::string &prefix, VSCore *core, const VSAPI *vsapi);
+    FramePyramid(VSNode *node, const std::string &prefix, const VSAPI *vsapi);
 
     ~FramePyramid();
     void GeneratePelPlanes(int pel, SharpParam sharp, VSCore *core, const VSAPI *vsapi);

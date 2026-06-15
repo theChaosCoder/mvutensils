@@ -64,7 +64,7 @@ struct AnalyseData {
     }
 };
 
-static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     AnalyseData *d = reinterpret_cast<AnalyseData *>(instanceData);
 
     int nref = n + d->deltaFrame;
@@ -80,7 +80,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
     } else if (activationReason == arAllFramesReady) {
         try {
             const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
-            FramePyramid srcFramePyramid(src, -1, d->prefix, core, vsapi);
+            FramePyramid srcFramePyramid(src, -1, d->prefix, vsapi);
 
             const VSMap *srcProps = vsapi->getFramePropertiesRO(src);
             int err;
@@ -97,7 +97,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
 
             if (nref >= 0 && nref < d->vi->numFrames) {
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->node, frameCtx);
-                FramePyramid refFramePyramid(ref, -1, d->prefix, core, vsapi);
+                FramePyramid refFramePyramid(ref, -1, d->prefix, vsapi);
 
                 const VSMap *refProps = vsapi->getFramePropertiesRO(ref);
 
@@ -119,7 +119,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
-            vectorFields.ExportFrameData(dst, true, d->prefix, core, vsapi);
+            vectorFields.ExportFrameData(dst, true, d->prefix, vsapi);
 
             return dst;
 
@@ -147,7 +147,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->node = vsapi->mapGetNode(in, "super", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->node);
 
-        FramePyramid super(d->node, d->prefix, core, vsapi);
+        FramePyramid super(d->node, d->prefix, vsapi);
 
         GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", super.nBlkSizeX, super.nBlkSizeY, in, vsapi);
         GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", super.nOverlapX, super.nOverlapY, in, vsapi);

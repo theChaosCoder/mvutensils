@@ -234,7 +234,7 @@ static void RejectBadBlocks(const transform *tr, const float *blockDx, const flo
 }
 
 
-static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     (void)frameData;
 
     DepanAnalyseData *d = (DepanAnalyseData *)instanceData;
@@ -953,7 +953,7 @@ static void showcorrelation(const float * MVU_RESTRICT correl, int winx, int win
 }
 
 
-static const VSFrame *VS_CC depanEstimateStage1GetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC depanEstimateStage1GetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     (void)frameData;
 
     DepanEstimateData *d = (DepanEstimateData *)instanceData;
@@ -997,7 +997,7 @@ static const VSFrame *VS_CC depanEstimateStage1GetFrame(int n, int activationRea
 }
 
 
-static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     (void)frameData;
 
     DepanEstimateData *d = (DepanEstimateData *)instanceData;
@@ -1151,7 +1151,7 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
 }
 
 
-static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     (void)frameData;
 
     DepanEstimateData *d = (DepanEstimateData *)instanceData;
@@ -2585,7 +2585,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 }
 
 
-static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     (void)frameData;
 
     const DepanCompensateData *d = (const DepanCompensateData *)instanceData;
@@ -3559,7 +3559,7 @@ static void attachInfo(VSFrame *dst, int nbase, int ndest, float dxdif, float dy
 }
 
 
-static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     (void)frameData;
 
     DepanStabiliseData *d = (DepanStabiliseData *)instanceData;
@@ -3709,7 +3709,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
 }
 
 
-static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     (void)frameData;
 
     DepanStabiliseData *d = (DepanStabiliseData *)instanceData;

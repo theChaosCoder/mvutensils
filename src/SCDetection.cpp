@@ -47,7 +47,7 @@ struct SCDetectionData {
     }
 };
 
-static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     SCDetectionData *d = reinterpret_cast<SCDetectionData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -59,7 +59,7 @@ static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, voi
         vsapi->freeFrame(src);
 
         try {
-            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
 
             constexpr const char *propNames[2] = { "_SceneChangePrev", "_SceneChangeNext" };
             VSMap *props = vsapi->getFramePropertiesRW(dst);
@@ -102,7 +102,7 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, void *userData,
     d->vi = vsapi->getVideoInfo(d->node);
 
     try {
-        MotionBlockPyramid vectors(d->vectors, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->vectors, d->prefix, vsapi);
 
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
     } catch (std::runtime_error &e) {

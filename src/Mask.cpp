@@ -63,7 +63,7 @@ struct MaskData {
 
 
 template<typename PixelType>
-static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
     MaskData *d =  reinterpret_cast<MaskData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -72,7 +72,7 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
         VSFrame *dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, nullptr, core);
 
         try {
-            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->node, frameCtx), 1, d->prefix, core, vsapi);
+            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->node, frameCtx), 1, d->prefix, vsapi);
 
             if (vectors.IsUsable(d->thscd1, d->thscd2)) {
                 std::unique_ptr<BlockMask<PixelType>> Mask;
@@ -155,7 +155,7 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
             d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
         d->node = vsapi->mapGetNode(in, "vectors", 0, nullptr);
-        MotionBlockPyramid vectors(d->node, d->prefix, core, vsapi);
+        MotionBlockPyramid vectors(d->node, d->prefix, vsapi);
 
         d->vi = *vsapi->getVideoInfo(d->node);
         d->vi.width = vectors.nRealWidth;
