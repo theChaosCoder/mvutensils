@@ -363,6 +363,9 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 #define DEGRAIN_SSE2(radius, width, height) \
     { KEY(width, height, 8, MVOPT_SSE2), Degrain_sse2<radius, width, height> },
 
+#define DEGRAIN_SSE2_U16(radius, width, height) \
+    { KEY(width, height, 16, MVOPT_SSE2), Degrain_u16_sse2<radius, width, height> },
+
 #define DEGRAIN_LEVEL_SSE2(radius)\
     {\
         DEGRAIN_SSE2(radius, 4, 2)\
@@ -390,9 +393,35 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
         DEGRAIN_SSE2(radius, 128, 32)\
         DEGRAIN_SSE2(radius, 128, 64)\
         DEGRAIN_SSE2(radius, 128, 128)\
+        DEGRAIN_SSE2_U16(radius, 4, 2)\
+        DEGRAIN_SSE2_U16(radius, 4, 4)\
+        DEGRAIN_SSE2_U16(radius, 4, 8)\
+        DEGRAIN_SSE2_U16(radius, 8, 1)\
+        DEGRAIN_SSE2_U16(radius, 8, 2)\
+        DEGRAIN_SSE2_U16(radius, 8, 4)\
+        DEGRAIN_SSE2_U16(radius, 8, 8)\
+        DEGRAIN_SSE2_U16(radius, 8, 16)\
+        DEGRAIN_SSE2_U16(radius, 16, 1)\
+        DEGRAIN_SSE2_U16(radius, 16, 2)\
+        DEGRAIN_SSE2_U16(radius, 16, 4)\
+        DEGRAIN_SSE2_U16(radius, 16, 8)\
+        DEGRAIN_SSE2_U16(radius, 16, 16)\
+        DEGRAIN_SSE2_U16(radius, 16, 32)\
+        DEGRAIN_SSE2_U16(radius, 32, 8)\
+        DEGRAIN_SSE2_U16(radius, 32, 16)\
+        DEGRAIN_SSE2_U16(radius, 32, 32)\
+        DEGRAIN_SSE2_U16(radius, 32, 64)\
+        DEGRAIN_SSE2_U16(radius, 64, 16)\
+        DEGRAIN_SSE2_U16(radius, 64, 32)\
+        DEGRAIN_SSE2_U16(radius, 64, 64)\
+        DEGRAIN_SSE2_U16(radius, 64, 128)\
+        DEGRAIN_SSE2_U16(radius, 128, 32)\
+        DEGRAIN_SSE2_U16(radius, 128, 64)\
+        DEGRAIN_SSE2_U16(radius, 128, 128)\
     }
 #else
 #define DEGRAIN_SSE2(radius, width, height)
+#define DEGRAIN_SSE2_U16(radius, width, height)
 #define DEGRAIN_LEVEL_SSE2(radius)
 #endif
 
@@ -470,6 +499,7 @@ static DenoiseFunction selectDegrainFunction(unsigned radius, unsigned width, un
 
 #undef DEGRAIN
 #undef DEGRAIN_SSE2
+#undef DEGRAIN_SSE2_U16
 #undef DEGRAIN_LEVEL
 #undef DEGRAIN_LEVEL_SSE2
 

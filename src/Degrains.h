@@ -141,6 +141,69 @@ static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
     }
 }
 
+// 16-bit source variant of Degrain_sse2. The 8-bit version accumulates in 16-bit lanes, which
+// would overflow here (pixel * weight is up to ~16.7M), so accumulate in 32-bit lanes. The
+// unsigned 16x16->32 product (mullo + mulhi_epu16) is required because 16-bit source can exceed
+// 32767; weights are in [0, 256] and the normalised total is 256, so the >>8 result fits uint16.
+static inline void Degrain_u16_accum(__m128i &a0, __m128i &a1, __m128i v, __m128i w) {
+    __m128i lo = _mm_mullo_epi16(v, w);
+    __m128i hi = _mm_mulhi_epu16(v, w);
+    a0 = _mm_add_epi32(a0, _mm_unpacklo_epi16(lo, hi));
+    a1 = _mm_add_epi32(a1, _mm_unpackhi_epi16(lo, hi));
+}
+
+static inline __m128i Degrain_u16_pack(__m128i a0, __m128i a1) {
+    // pack two vectors of 4 uint32 (each <= 65535) into 8 uint16; SSE2 has no packus_epi32, so
+    // bias by 0x8000 into int16 range, signed-pack (exact, no saturation for values <= 65535),
+    // then bias back.
+    const __m128i bias = _mm_set1_epi32(0x8000);
+    return _mm_add_epi16(_mm_packs_epi32(_mm_sub_epi32(a0, bias), _mm_sub_epi32(a1, bias)), _mm_set1_epi16((short)0x8000));
+}
+
+template <int radius, int blockWidth, int blockHeight>
+static void Degrain_u16_sse2(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs8, const ptrdiff_t * MVU_RESTRICT nRefPitches, int WSrc, const int * MVU_RESTRICT WRefs) {
+    static_assert(blockWidth >= 4, "");
+
+    __m128i wsrc = _mm_set1_epi16((short)WSrc);
+    __m128i wrefs[12];
+    for (int r = 0; r < radius * 2; r++)
+        wrefs[r] = _mm_set1_epi16((short)WRefs[r]);
+
+    const __m128i k128 = _mm_set1_epi32(128);
+
+    for (int y = 0; y < blockHeight; y++) {
+        const uint16_t *pSrc = (const uint16_t *)pSrc8;
+        uint16_t *pDst = (uint16_t *)pDst8;
+
+        for (int x = 0; x < blockWidth; x += 8) {
+            __m128i a0 = k128, a1 = k128;
+
+            __m128i src = (blockWidth == 4) ? _mm_loadl_epi64((const __m128i *)pSrc) : _mm_loadu_si128((const __m128i *)&pSrc[x]);
+            Degrain_u16_accum(a0, a1, src, wsrc);
+
+            for (int r = 0; r < radius * 2; r++) {
+                const uint16_t *pRef = (const uint16_t *)pRefs8[r];
+                __m128i ref = (blockWidth == 4) ? _mm_loadl_epi64((const __m128i *)pRef) : _mm_loadu_si128((const __m128i *)&pRef[x]);
+                Degrain_u16_accum(a0, a1, ref, wrefs[r]);
+            }
+
+            a0 = _mm_srli_epi32(a0, 8);
+            a1 = _mm_srli_epi32(a1, 8);
+            __m128i out = Degrain_u16_pack(a0, a1);
+
+            if (blockWidth == 4)
+                _mm_storel_epi64((__m128i *)pDst, out);
+            else
+                _mm_storeu_si128((__m128i *)&pDst[x], out);
+        }
+
+        pDst8 += nDstPitch;
+        pSrc8 += nSrcPitch;
+        for (int r = 0; r < radius * 2; r++)
+            pRefs8[r] += nRefPitches[r];
+    }
+}
+
 static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit) {
     __m128i bytes_limit = _mm_set1_epi8(nLimit);
 
