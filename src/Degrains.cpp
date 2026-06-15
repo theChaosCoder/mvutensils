@@ -620,19 +620,12 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
 
-        d->nLimit[0] = vsapi->mapGetIntSaturated(in, "limit", 0, &err);
-        if (err)
-            d->nLimit[0] = pixelMax;
+        GetHVPairArgument(d->nLimit[0], d->nLimit[1], "limit", pixelMax, pixelMax, in, vsapi);
 
-        d->nLimit[1] = d->nLimit[2] = vsapi->mapGetIntSaturated(in, "limitc", 0, &err);
-        if (err)
-            d->nLimit[1] = d->nLimit[2] = d->nLimit[0];
+        d->nLimit[2] = d->nLimit[1];
 
-        if (d->nLimit[0] < 0 || d->nLimit[0] > pixelMax)
+        if (d->nLimit[0] < 0 || d->nLimit[0] > pixelMax || d->nLimit[1] < 0 || d->nLimit[1] > pixelMax)
             throw std::runtime_error("limit must be between 0 and " + std::to_string(pixelMax));
-
-        if (d->nLimit[1] < 0 || d->nLimit[1] > pixelMax)
-            throw std::runtime_error("limitc must be between 0 and " + std::to_string(pixelMax));
 
         d->dstTempPitch = ((vectors[0]->nWidth + 15) / 16) * 16 * d->vi->format.bytesPerSample * 2;
 
@@ -725,8 +718,7 @@ constexpr const char *degrain_args =
     "thsad:int:opt;"
     "thsadc:int:opt;"
     "planes:int[]:opt;"
-    "limit:int:opt;"
-    "limitc:int:opt;"
+    "limit:int[]:opt;"
     "thscd1:int:opt;"
     "thscd2:int:opt;"
     "prefix:data:opt;";

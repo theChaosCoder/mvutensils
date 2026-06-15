@@ -60,6 +60,8 @@ Changes
     
 * DegrainN:
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors
+	
+	* The limit and limitc arguments were combined into a single limit=[luma_limit, chroma_limit] argument where chroma_limit defaults to luma_limit if not specified much like blksize
 
 	* Greatly reduced memory usage
 
@@ -120,8 +122,6 @@ Planned changes/mysteries
 =========================
 
 * Does the delta sign direction make sense? Flip it?
-
-* Rework limit/limitc in degrain
 
 * Big additional code cleanups
 
