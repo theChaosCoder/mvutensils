@@ -71,7 +71,6 @@ struct SADWrapperU8_AVX2<16, height> {
 static const std::unordered_map<uint32_t, SADFunction> sad_functions = {
     SAD_U8_AVX2(16, 2)
     SAD_U8_AVX2(16, 4)
-    SAD_U8_AVX2(16, 4)
     SAD_U8_AVX2(16, 8)
     SAD_U8_AVX2(16, 16)
     SAD_U8_AVX2(16, 32)

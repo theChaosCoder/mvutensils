@@ -952,7 +952,7 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
     searchType = st;
     nSearchParam = stp;
 
-    int nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
+    int64_t nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
     if (plevel == 1)
         nLambdaLevel = nLambdaLevel * nScale;
     else if (plevel == 2)
@@ -1156,8 +1156,7 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
     searchType = st;
     nSearchParam = stp;
 
-    int nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
-
+    int64_t nLambdaLevel = lambda / ((1 << nLogPel) * (1 << nLogPel));
 
     // Functions using float must not be used here
     for (int blky = 0; blky < nBlkY; blky++) {
@@ -1406,6 +1405,10 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
 
     nLevelCount = nLevels > 0 ? nLevels : nLevelsMax + nLevels;
     nLevelCount = std::min(nLevelCount, static_cast<int>(src.pyramidLevels.size()));
+
+    if (nLevelCount < 1)
+        throw MotionBlockPyramidError("the levels argument resolves to a non-positive level count");
+
     pyramidLevels.resize(nLevelCount);
 
     for (int i = 0; i < nLevelCount; i++) {

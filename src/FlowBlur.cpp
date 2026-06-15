@@ -74,7 +74,7 @@ static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
     for (int h = 0; h < height; h++) {
         for (int w = 0; w < width; w++) {
             // FIXME, only accesses pel1 data, maybe add a faster function to access it
-            int bluredsum = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((w + dstX) << nPelLog, (h + dstY) << nPelLog));
+            int64_t bluredsum = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((w + dstX) << nPelLog, (h + dstY) << nPelLog));
             int vxF0 = (static_cast<int>(VXFullF[w]) - (1 << 15)) * blur256;
             int vyF0 = (static_cast<int>(VYFullF[w]) - (1 << 15)) * blur256;
             int mF = (std::max(abs(vxF0), abs(vyF0)) / prec) >> 8;
