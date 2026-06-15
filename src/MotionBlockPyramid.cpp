@@ -28,7 +28,7 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
     int aevenx = (nBlkSizeX * 3 - nOverlapX * 4);
     int aoddy = (nBlkSizeY * 3 - nOverlapY * 2);
     int aeveny = (nBlkSizeY * 3 - nOverlapY * 4);
-    // note: overlapping is still (v2.5.7) not processed properly
+
     double scaleov = 1.0 / normov;
     for (int l = 0, index = 0; l < nBlkY; l++) {
         for (int k = 0; k < nBlkX; k++, index++) {
@@ -59,13 +59,13 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
                 v4 = parentLevel.vectors[i / 2 + offx + (j / 2 + offy) * parentLevel.nBlkX];
             }
 
-            int64_t temp_sad;
+            int64_t temp_sad = 0;
 
             if (nOverlapX == 0 && nOverlapY == 0) {
                 vectors[index].x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
                 vectors[index].y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
                 temp_sad = 9 * v1.sad + 3 * v2.sad + 3 * v3.sad + v4.sad + 8;
-            } else if (nOverlapX <= (nBlkSizeX >> 1) && nOverlapY <= (nBlkSizeY >> 1)) { // corrected in v1.4.11
+            } else if (nOverlapX <= (nBlkSizeX >> 1) && nOverlapY <= (nBlkSizeY >> 1)) {
                 int ax1 = (offx > 0) ? aoddx : aevenx;
                 int ax2 = (nBlkSizeX - nOverlapX) * 4 - ax1;
                 int ay1 = (offy > 0) ? aoddy : aeveny;
@@ -75,9 +75,6 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
                 vectors[index].x = (int)((a11 * v1.x + a21 * v2.x + a12 * v3.x + a22 * v4.x) * scaleov);
                 vectors[index].y = (int)((a11 * v1.y + a21 * v2.y + a12 * v3.y + a22 * v4.y) * scaleov);
                 temp_sad = (a11 * v1.sad + a21 * v2.sad + a12 * v3.sad + a22 * v4.sad) * scaleov;
-            } else { // large overlap. Weights are not quite correct but let it be
-                // Dead branch. The overlap is no longer allowed to be more than half the block size.
-                assert(false);
             }
             vectors[index].x = (vectors[index].x >> normFactor) * (1 << mulFactor);
             vectors[index].y = (vectors[index].y >> normFactor) * (1 << mulFactor);
