@@ -106,14 +106,17 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
         MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
 
         if (vectors.IsUsable(d->thscd1, d->thscd2)) {
-            const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
-            FramePyramid refGOF(ref, 1, d->prefix, vsapi);
-
-            const VSFrame *propSrc = vsapi->getFrameFilter(n, d->clip, frameCtx);
-            VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
-            vsapi->freeFrame(propSrc);
-
+            // FramePyramid's deserialization constructor can throw, so it and the frame
+            // acquisitions must live inside the try; otherwise the exception would escape
+            // this VS_CC callback across the C ABI boundary.
+            VSFrame *dst = nullptr;
             try {
+                const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
+                FramePyramid refGOF(ref, 1, d->prefix, vsapi);
+
+                const VSFrame *propSrc = vsapi->getFrameFilter(n, d->clip, frameCtx);
+                dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
+                vsapi->freeFrame(propSrc);
 
                 // FIXME, this field shift and combined tff logic is a even more of a mess than usueal
                 int fieldShift = 0;
