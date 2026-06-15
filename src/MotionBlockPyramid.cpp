@@ -1846,7 +1846,7 @@ static void ByteOccMask(PixelType &occMask, int occlusion, float occnorm, float 
 }
 
 template<typename PixelType>
-std::unique_ptr<BlockMask<PixelType>> MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256) const noexcept {
+std::unique_ptr<BlockMask<PixelType>> MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256, int maskMax) const noexcept {
     auto RetMask = std::make_unique<BlockMask<PixelType>>(nBlkX, nBlkY);
 
     int nBlkStepX = nBlkSizeX - nOverlapX;
@@ -1862,7 +1862,7 @@ std::unique_ptr<BlockMask<PixelType>> MotionBlockPyramid::MakeVectorOcclusionMas
     float occnormX = (80.0f  * dMaskNormDivider) / (nBlkStepX * nPel);
     float occnormY = (80.0f * dMaskNormDivider) / (nBlkStepY * nPel);
 
-    int maxVal = (1 << bitsPerSample) - 1;
+    int maxVal = maskMax >= 0 ? maskMax : (1 << bitsPerSample) - 1;
     MaskPitch /= sizeof(PixelType);
 
     for (int by = 0; by < nBlkY; by++) {
@@ -1960,5 +1960,5 @@ template std::unique_ptr<BlockMask<uint16_t>> MotionBlockPyramid::MakeVectorLeng
 template std::unique_ptr<BlockMask<uint8_t>> MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, int time256) const noexcept;
 template std::unique_ptr<BlockMask<uint16_t>> MotionBlockPyramid::MakeSADMask(float dSADNormFactor, float fGamma, int time256) const noexcept;
 
-template std::unique_ptr<BlockMask<uint8_t>> MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256) const noexcept;
-template std::unique_ptr<BlockMask<uint16_t>> MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256) const noexcept;
+template std::unique_ptr<BlockMask<uint8_t>> MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256, int maskMax) const noexcept;
+template std::unique_ptr<BlockMask<uint16_t>> MotionBlockPyramid::MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256, int maskMax) const noexcept;

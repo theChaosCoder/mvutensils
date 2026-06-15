@@ -312,7 +312,11 @@ public:
     template<typename PixelType>
     std::unique_ptr<BlockMask<PixelType>> MakeSADMask(float dSADNormFactor, float fGamma, int time256) const noexcept;
     template<typename PixelType>
-    std::unique_ptr<BlockMask<PixelType>> MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256) const noexcept;
+    // maskMax sets the mask's value scale. Default (-1) uses the pixel range (1<<bits)-1, as
+    // needed when the mask is emitted as a clip (mvu.Mask). FlowInter/FlowFPS instead pass the
+    // full uint16 range (65535) so that their `Mask[w] >> 8` yields a proper [0,255] blend
+    // weight independent of bit depth (otherwise 8-bit masks shift to 0 and occlusion is lost).
+    std::unique_ptr<BlockMask<PixelType>> MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256, int maskMax = -1) const noexcept;
 
     std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks(int fieldOffset = 0) const noexcept;
 };
