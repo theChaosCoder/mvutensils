@@ -188,7 +188,10 @@ static inline int DegrainWeight(int64_t thSAD, int64_t blockSAD) {
     if (blockSAD >= thSAD)
         return 0;
 
-    return int((thSAD - blockSAD) * (thSAD + blockSAD) * 256 / (double)(thSAD * thSAD + blockSAD * blockSAD));
+    // Compute in double: (thSAD - blockSAD) * (thSAD + blockSAD) * 256 overflows int64 once
+    // thSAD exceeds ~1.9e8 (reachable with high bit depth + large blocks + a large thsad,
+    // all below the INT_MAX create-time guard), producing garbage weights.
+    return int((double)(thSAD - blockSAD) * (double)(thSAD + blockSAD) * 256.0 / ((double)thSAD * thSAD + (double)blockSAD * blockSAD));
 }
 
 template<typename PixelType>
