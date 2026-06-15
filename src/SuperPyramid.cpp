@@ -816,7 +816,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
     }
 
     size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8);
-    std::unique_ptr<uint8_t, decltype(&vsh::vsh_aligned_free)> tempBuffer(vsh::vsh_aligned_malloc<uint8_t>(tempBufferSize, 32), vsh::vsh_aligned_free);
+    std::unique_ptr<uint8_t, decltype(&mvu_aligned_free)> tempBuffer(mvu_aligned_malloc<uint8_t>(tempBufferSize, 32), mvu_aligned_free);
 
     if (srcFormat->bytesPerSample == 1) {
         for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {

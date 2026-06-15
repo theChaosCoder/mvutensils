@@ -421,9 +421,9 @@ void MotionBlockLevel::Initialize(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _n
 }
 
 MotionBlockLevel::~MotionBlockLevel() {
-    vsh::vsh_aligned_free(pSrc_temp[0]);
-    vsh::vsh_aligned_free(pSrc_temp[1]);
-    vsh::vsh_aligned_free(pSrc_temp[2]);
+    mvu_aligned_free(pSrc_temp[0]);
+    mvu_aligned_free(pSrc_temp[1]);
+    mvu_aligned_free(pSrc_temp[2]);
 }
 
 void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept {
@@ -499,9 +499,9 @@ void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma, int
     nSrcPitch_temp[2] = nSrcPitch_temp[1];
 
     // Four extra bytes because pixel_sad_4x4_mmx2 reads four bytes more than it should (but doesn't use them in any way).
-    pSrc_temp[0] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY * nSrcPitch_temp[0] + 4, ALIGN_PLANES);
-    pSrc_temp[1] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[1] + 4, ALIGN_PLANES);
-    pSrc_temp[2] = vsh::vsh_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[2] + 4, ALIGN_PLANES);
+    pSrc_temp[0] = mvu_aligned_malloc<uint8_t>(nBlkSizeY * nSrcPitch_temp[0] + 4, ALIGN_PLANES);
+    pSrc_temp[1] = mvu_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[1] + 4, ALIGN_PLANES);
+    pSrc_temp[2] = mvu_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[2] + 4, ALIGN_PLANES);
 
 #undef ALIGN_PLANES
 }

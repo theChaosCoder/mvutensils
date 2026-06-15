@@ -89,12 +89,10 @@ Changes
 	* Removed since nobody FlowFPS is generally both the better and more popular option
 
 * Finest:
-	* Removed since its only real use was as a support function for other filters due to lazy frame access code
+	* Removed since its only real use was as a support function for other filters due to lazy frame data access code
 
 Planned changes
 ===============
-
-* Remove the divide argument in Analyse/Recalculate if nobody can explain why it's useful, Recalculate is already similar to divide=1/2 depending on smooth=False/True
 
 * Have an Analyse wrapper that outputs a full array of all clips required for DegrainN
 

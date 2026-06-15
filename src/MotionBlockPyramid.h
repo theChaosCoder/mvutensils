@@ -8,7 +8,6 @@
 #include <stdexcept>
 #include <memory>
 #include <VapourSynth4.h>
-#include <VSHelper4.h>
 #include "SuperPyramid.h"
 #include "CopyCode.h"
 #include "SADFunctions.h"
@@ -26,13 +25,13 @@ struct SmallVectorMasks {
 
     SmallVectorMasks(int nBlkX, int nBlkY) {
         pitchVSmallY = roundUpTo64(nBlkX * sizeof(uint16_t));
-        VXSmallY = vsh::vsh_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
-        VYSmallY = vsh::vsh_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
+        VXSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
+        VYSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
     }
 
     ~SmallVectorMasks() {
-        vsh::vsh_aligned_free(VXSmallY);
-        vsh::vsh_aligned_free(VYSmallY);
+        mvu_aligned_free(VXSmallY);
+        mvu_aligned_free(VYSmallY);
     }
 };
 
@@ -43,11 +42,11 @@ struct BlockMask {
 
     BlockMask(int nBlkX, int nBlkY) {
         stride = roundUpTo64(nBlkX * sizeof(PixelType));
-        mask = vsh::vsh_aligned_malloc<PixelType>(stride * nBlkY, 64);
+        mask = mvu_aligned_malloc<PixelType>(stride * nBlkY, 64);
     }
 
     ~BlockMask() {
-        vsh::vsh_aligned_free(mask);
+        mvu_aligned_free(mask);
     }
 };
 

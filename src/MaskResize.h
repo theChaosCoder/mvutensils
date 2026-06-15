@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <vector>
 #include <memory>
-#include <VSHelper4.h>
 #include "Common.h"
 
 #define ZIMGXX_NAMESPACE mvuzimgxx
@@ -57,11 +56,11 @@ public:
         return roundUpTo64(TileSize * sizeof(uint16_t));
     }
 
-    static std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)> GetTileBuffer() {
-        return std::unique_ptr<uint16_t, decltype(&vsh::vsh_aligned_free)>{ vsh::vsh_aligned_malloc<uint16_t>(GetTileBufferStride() * TileSize, 64), vsh::vsh_aligned_free };
+    static std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)> GetTileBuffer() {
+        return std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<uint16_t>(GetTileBufferStride() * TileSize, 64), mvu_aligned_free };
     }
 
-    static std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)> GetTmpBuffer(size_t size) {
-        return std::unique_ptr<void, decltype(&vsh::vsh_aligned_free)>{ vsh::vsh_aligned_malloc<void>(size, 64), vsh::vsh_aligned_free };
+    static std::unique_ptr<void, decltype(&mvu_aligned_free)> GetTmpBuffer(size_t size) {
+        return std::unique_ptr<void, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<void>(size, 64), mvu_aligned_free };
     }
 };
