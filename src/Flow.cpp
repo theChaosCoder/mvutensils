@@ -157,7 +157,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 for (auto &tile : d->maskResizerFull.tiles) {
                     tile.Process(tmp.get(), bufVX, bufVY);
 
-                    flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
+                    flowFetch<PixelType>(dstPtrY + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
                         dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                 }
@@ -173,11 +173,11 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                     for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
                         tile.Process(tmp.get(), bufVX, bufVY);
 
-                        flowFetch<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
+                        flowFetch<PixelType>(dstPtrU + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
                             dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
 
-                        flowFetch<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                        flowFetch<PixelType>(dstPtrV + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
                             dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                     }
