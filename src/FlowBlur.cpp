@@ -29,11 +29,11 @@
 #include "MaskResize.h"
 
 struct FlowBlurData {
-    VSNode *node;
-    const VSVideoInfo *vi;
-    VSNode *super;
-    VSNode *mvbw;
-    VSNode *mvfw;
+    VSNode *node = nullptr;
+    const VSVideoInfo *vi = nullptr;
+    VSNode *super = nullptr;
+    VSNode *mvbw = nullptr;
+    VSNode *mvfw = nullptr;
 
     float blur;
     int prec;

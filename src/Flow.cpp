@@ -31,10 +31,10 @@
 #include "MaskResize.h"
 
 struct FlowData {
-    VSNode *clip;
-    VSNode *super;
-    VSNode *vectors;
-    const VSVideoInfo *vi;
+    VSNode *clip = nullptr;
+    VSNode *super = nullptr;
+    VSNode *vectors = nullptr;
+    const VSVideoInfo *vi = nullptr;
     
     int deltaFrame;
     int time256;

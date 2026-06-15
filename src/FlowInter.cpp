@@ -27,12 +27,12 @@
 #include "FlowShared.h"
 
 struct FlowInterData {
-    VSNode *node;
-    const VSVideoInfo *vi;
+    VSNode *node = nullptr;
+    const VSVideoInfo *vi = nullptr;
 
-    VSNode *super;
-    VSNode *mvbw;
-    VSNode *mvfw;
+    VSNode *super = nullptr;
+    VSNode *mvbw = nullptr;
+    VSNode *mvfw = nullptr;
 
     float time;
     float ml;

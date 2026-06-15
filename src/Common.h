@@ -50,6 +50,8 @@ public:
     }
 };
 
+
+// FIXME, drop this for naming clarity?
 template<typename T>
 struct DualNodeData : public T {
 private:

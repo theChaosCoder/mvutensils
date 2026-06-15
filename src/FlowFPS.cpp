@@ -27,13 +27,13 @@
 #include "FlowShared.h"
 
 struct FlowFPSData {
-    VSNode *node;
+    VSNode *node = nullptr;
     VSVideoInfo vi;
-    const VSVideoInfo *oldvi;
+    const VSVideoInfo *oldvi = nullptr;
 
-    VSNode *super;
-    VSNode *mvbw;
-    VSNode *mvfw;
+    VSNode *super = nullptr;
+    VSNode *mvbw = nullptr;
+    VSNode *mvfw = nullptr;
 
     int64_t num, den;
     bool extraMask;
