@@ -64,14 +64,10 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
 
     if (activationReason == arInitial) {
         if (nref >= 0 && nref < d->vi->numFrames) {
-            if (n < nref) {
-                vsapi->requestFrameFilter(n, d->node, frameCtx);
-                vsapi->requestFrameFilter(nref, d->node, frameCtx);
-            } else {
-                vsapi->requestFrameFilter(nref, d->node, frameCtx);
-                vsapi->requestFrameFilter(n, d->node, frameCtx);
-            }
-        } else { // too close to beginning/end of clip
+            vsapi->requestFrameFilter(std::min(n, nref), d->node, frameCtx);
+            vsapi->requestFrameFilter(std::max(n, nref), d->node, frameCtx);
+        } else {
+            // too close to beginning/end of clip
             vsapi->requestFrameFilter(n, d->node, frameCtx);
         }
     } else if (activationReason == arAllFramesReady) {
@@ -83,10 +79,8 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
             int err;
 
             bool src_top_field = !!vsapi->mapGetInt(srcProps, "_Field", 0, &err);
-            if (err && d->fields && !d->tff_exists) {
-                vsapi->setFilterError("Analyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                return nullptr;
-            }
+            if (err && d->fields && !d->tff_exists)
+                throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
 
             // if tff was passed, it overrides _Field.
             if (d->tff_exists)
@@ -101,10 +95,8 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
                 const VSMap *refProps = vsapi->getFramePropertiesRO(ref);
 
                 bool ref_top_field = !!vsapi->mapGetInt(refProps, "_Field", 0, &err);
-                if (err && d->fields && !d->tff_exists) {
-                    vsapi->setFilterError("Analyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                    return nullptr;
-                }
+                if (err && d->fields && !d->tff_exists)
+                    throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
 
                 // if tff was passed, it overrides _Field.
                 if (d->tff_exists)

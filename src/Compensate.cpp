@@ -314,7 +314,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
             }
 
         } catch (std::runtime_error &e) {
-            vsapi->setFilterError(e.what(), frameCtx);
+            vsapi->setFilterError((std::string("Compensate: ") + e.what()).c_str(), frameCtx);
             vsapi->freeFrame(dst);
             return nullptr;
         }

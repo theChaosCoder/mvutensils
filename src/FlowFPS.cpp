@@ -274,7 +274,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
             }
         } catch (std::runtime_error &e) {
             vsapi->freeFrame(dst);
-            vsapi->setFilterError(e.what(), frameCtx);
+            vsapi->setFilterError((std::string("FlowFPS: ") + e.what()).c_str(), frameCtx);
             return nullptr;
         }
     }
