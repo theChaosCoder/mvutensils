@@ -474,14 +474,19 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
 void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma, int bytesPerSample) {
     this->chroma = chroma;
 
-    if (useSatd || (nBlkSizeX == 16 && nBlkSizeY == 2))
+    // satd was never actually wired up: the original guard threw for every useSatd case
+    // before the selectSATDFunction() call below could run, so that branch was dead code and
+    // the user saw a misleading "Unsupported block size" error. Reject it with an honest
+    // message until SATD is properly supported (it also lacks a 16-bit accumulator and a
+    // scalar entry for every block size, see selectSATDFunction).
+    if (useSatd)
+        throw MotionBlockPyramidError("satd is not supported");
+
+    if (nBlkSizeX == 16 && nBlkSizeY == 2)
         throw MotionBlockPyramidError("Unsupported block size");
 
     /* function pointers initialization */
-    if (useSatd)
-        SAD = selectSATDFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
-    else
-        SAD = selectSADFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
+    SAD = selectSADFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
     BLITLUMA = selectCopyFunction(nBlkSizeX, nBlkSizeY, bytesPerSample * 8);
     if (chroma) {
         SADCHROMA = selectSADFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
