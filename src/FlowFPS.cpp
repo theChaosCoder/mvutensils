@@ -175,7 +175,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                     for (auto &tile : d->maskResizerFull.tiles) {
                         tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
 
-                        FlowInterExtra<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
+                        FlowInterExtra<PixelType>(dstPtrY + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideY, dstStrideY,
                              ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
                              dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
                              dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
@@ -197,14 +197,14 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                         for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
                             tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY, bufSmallFFX, bufSmallFFY, bufSmallBBX, bufSmallBBY);
 
-                            FlowInterExtra<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
+                            FlowInterExtra<PixelType>(dstPtrU + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideU, dstStrideU,
                                  ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
                                  dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
                                  dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                                  tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256,
                                  dstTileXBB.get(), dstTileXFF.get(), dstTileYBB.get(), dstTileYFF.get());
 
-                            FlowInterExtra<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
+                            FlowInterExtra<PixelType>(dstPtrV + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideV, dstStrideV,
                                  ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
                                  dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
                                  dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
@@ -219,7 +219,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                     for (auto &tile : d->maskResizerFull.tiles) {
                         tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
 
-                        FlowInter<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY,
+                        FlowInter<PixelType>(dstPtrY + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideY, dstStrideY,
                              ref.GetLevel(0).planes[0], src.GetLevel(0).planes[0],
                              dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
                              dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
@@ -239,13 +239,13 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                         for (auto &tile : (d->vi.format.subSamplingH > 0 || d->vi.format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
                             tile.Process(tmp.get(), bufMaskF, bufMaskB, bufSmallFX, bufSmallFY, bufSmallBX, bufSmallBY);
 
-                            FlowInter<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU,
+                            FlowInter<PixelType>(dstPtrU + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideU, dstStrideU,
                                     ref.GetLevel(0).planes[1], src.GetLevel(0).planes[1],
                                     dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
                                     dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),
                                     tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, time256);
 
-                            FlowInter<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV,
+                            FlowInter<PixelType>(dstPtrV + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideV, dstStrideV,
                                     ref.GetLevel(0).planes[2], src.GetLevel(0).planes[2],
                                     dstTileXB.get(), dstTileXF.get(), dstTileYB.get(), dstTileYF.get(),
                                     dstTileMaskB.get(), dstTileMaskF.get(), MaskResizer::GetTileBufferStride(),

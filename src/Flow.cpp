@@ -103,14 +103,16 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             }
         }
     } else if (activationReason == arAllFramesReady) {
-        MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
+        VSFrame *dst = nullptr;
 
-        if (vectors.IsUsable(d->thscd1, d->thscd2)) {
-            const VSFrame *propSrc = vsapi->getFrameFilter(n, d->clip, frameCtx);
-            VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
-            vsapi->freeFrame(propSrc);
+        try {
+            MotionBlockPyramid vectors(vsapi->getFrameFilter(n, d->vectors, frameCtx), 1, d->prefix, vsapi);
 
-            try {
+            if (vectors.IsUsable(d->thscd1, d->thscd2)) {
+                const VSFrame *propSrc = vsapi->getFrameFilter(n, d->clip, frameCtx);
+                dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, propSrc, core);
+                vsapi->freeFrame(propSrc);
+
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
                 FramePyramid refGOF(ref, 1, d->prefix, vsapi);
 
@@ -156,7 +158,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 for (auto &tile : d->maskResizerFull.tiles) {
                     tile.Process(tmp.get(), bufVX, bufVY);
 
-                    flowFetch<PixelType>(dstPtrY + tile.dstX + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
+                    flowFetch<PixelType>(dstPtrY + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideY, dstStrideY, refGOF.GetLevel(0).planes[0],
                         dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                         tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                 }
@@ -172,11 +174,11 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                     for (auto &tile : (d->vi->format.subSamplingH > 0 || d->vi->format.subSamplingW > 0) ? d->maskResizerSubSampled.tiles : d->maskResizerFull.tiles) {
                         tile.Process(tmp.get(), bufVX, bufVY);
 
-                        flowFetch<PixelType>(dstPtrU + tile.dstX + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
+                        flowFetch<PixelType>(dstPtrU + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideU, dstStrideU, refGOF.GetLevel(0).planes[1],
                             dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
 
-                        flowFetch<PixelType>(dstPtrV + tile.dstX + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
+                        flowFetch<PixelType>(dstPtrV + tile.dstX * sizeof(PixelType) + tile.dstY * dstStrideV, dstStrideV, refGOF.GetLevel(0).planes[2],
                             dstTileVX.get(), dstTileVY.get(), MaskResizer::GetTileBufferStride(),
                             tile.dstX, tile.dstY, tile.dstWidth, tile.dstHeight, d->time256);
                     }
@@ -184,13 +186,13 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
 
                 return dst;
 
-            } catch (std::runtime_error &e) {
-                vsapi->setFilterError(("Flow: " + std::string(e.what())).c_str(), frameCtx);
-                vsapi->freeFrame(dst);
-                return nullptr;
+            } else {
+                return vsapi->getFrameFilter(n, d->clip, frameCtx);
             }
-        } else {
-            return vsapi->getFrameFilter(n, d->clip, frameCtx);
+        } catch (std::runtime_error &e) {
+            vsapi->setFilterError(("Flow: " + std::string(e.what())).c_str(), frameCtx);
+            vsapi->freeFrame(dst);
+            return nullptr;
         }
     }
 
