@@ -1694,7 +1694,7 @@ void MotionBlockPyramid::ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSam
     // SCD thresholds
     thscd1 = (int64_t)(thscd1 * GetThSCDScaleFactor(bitsPerSample) + 0.5);
 
-    thscd2 = thscd2 * nBlkX * nBlkY / 256;
+    thscd2 = static_cast<int>(std::min<int64_t>((int64_t)thscd2 * nBlkX * nBlkY / 256, INT32_MAX));
 }
 
 MotionBlockPyramid::State MotionBlockPyramid::GetState() const noexcept {
