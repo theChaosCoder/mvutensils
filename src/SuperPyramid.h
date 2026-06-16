@@ -112,12 +112,6 @@ public:
         return GetAbsolutePointer<PixelType>(nX + nHPaddingPel, nY + nVPaddingPel);
     }
 
-    template<typename PixelType>
-    const uint8_t *GetPelPointer(int nX, int nY) const noexcept {
-        assert(nHPaddingPel >= 0 && nVPaddingPel >= 0);
-        return pPlane[0] + (nX + nHPaddingPel) * sizeof(PixelType) + (nY + nVPaddingPel) * nPitch;
-    }
-
 private:
     const VSFrame *storage[16] = {};
 

@@ -28,8 +28,6 @@
 
 extern uint32_t g_cpuinfo;
 
-// FIXME, use RAII
-// FIXME, why so much float? int version should be easily doable
 void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
     this->nx = nx;
     this->ny = ny;
