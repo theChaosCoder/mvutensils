@@ -77,6 +77,10 @@ uint32_t cpu_detect(void) {
                 mvtools_cpu_cpuid(7, &eax, &ebx, &ecx, &edx);
                 if (ebx & 0x00000020)
                     cpu |= X264_CPU_AVX2;
+                if (ebx & 0x00000008)
+                    cpu |= X264_CPU_BMI1;
+                if (ebx & 0x00000100)
+                    cpu |= X264_CPU_BMI2;
             }
         }
     }
