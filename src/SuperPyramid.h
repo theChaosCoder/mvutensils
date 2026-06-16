@@ -176,6 +176,8 @@ public:
     int nOverlapX = -1;
     int nOverlapY = -1;
 
+    int nLevels = 0;
+
     bool chroma;
 
     int bitsPerSample = -1;

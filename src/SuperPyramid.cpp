@@ -832,6 +832,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
     this->nOverlapY = nOverlapY;
 
     pyramidLevels.resize(levels);
+    nLevels = levels;
 
     const VSVideoFormat *srcFormat = vsapi->getVideoFrameFormat(srcFrame);
     chroma = (srcFormat->colorFamily != cfGray);
@@ -930,11 +931,11 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
     nBlkSizePadY[0] = nHeight[0] - nRealHeight[0];
 
     nPel = vsapi->mapGetIntSaturated(props, (prefix + "SuperPel").c_str(), 0, &err);
-    int levels = vsapi->mapGetIntSaturated(props, (prefix + "SuperLevels").c_str(), 0, &err);
+    nLevels = vsapi->mapGetIntSaturated(props, (prefix + "SuperLevels").c_str(), 0, &err);
     chroma = !!vsapi->mapGetInt(props, (prefix + "SuperChroma").c_str(), 0, &err);
 
     if (xRatioUV < 1 || yRatioUV < 1 || xRatioUV > 2 || yRatioUV > 2 || nRealWidth[0] > nWidth[0] || nRealHeight[0] > nHeight[0]
-        || nVPad[0] < 0 || nHPad[0] < 0 || nRealHeight[0] < 1 || nRealWidth[0] < 1 || levels < 1 || (nPel != 1 && nPel != 2 && nPel != 4)
+        || nVPad[0] < 0 || nHPad[0] < 0 || nRealHeight[0] < 1 || nRealWidth[0] < 1 || nLevels < 1 || (nPel != 1 && nPel != 2 && nPel != 4)
         || bitsPerSample < 8 || bitsPerSample > 16)
         throw SuperPyramidError("Invalid super frame metadata");
 
@@ -961,7 +962,7 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
 
     // FIXME, check so all levels match the declared metadata sizes
 
-    int loadLevels = (maxLevel < 0) ? levels : std::min(maxLevel, levels);
+    int loadLevels = (maxLevel < 0) ? nLevels : std::min(maxLevel, nLevels);
 
     try {
 

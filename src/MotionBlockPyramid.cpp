@@ -1400,14 +1400,10 @@ MotionBlockPyramid::MotionBlockPyramid(const FramePyramid &src, int nBlkSizeX, i
     if (nWidth_B > nWidth || nHeight_B > nHeight)
         throw MotionBlockPyramidError("The chosen block size has no multiple that will process the entire frame without exceeding the super clip padding, derive a new suitable super clip and try again");
 
-    // calculate valid levels
-    int nLevelsMax = 0;
-    while (((nWidth_B >> nLevelsMax) - nOverlapX) / (nBlkSizeX - nOverlapX) > 0 &&
-        ((nHeight_B >> nLevelsMax) - nOverlapY) / (nBlkSizeY - nOverlapY) > 0)
-        nLevelsMax++;
-
+    int nLevelsMax = FramePyramid::GetMaxLevelsForBlockSize(nWidth, nHeight, xRatioUV, yRatioUV, nBlkSizeX, nBlkSizeY, nHPadding, nVPadding);
+    
     nLevelCount = nLevels > 0 ? nLevels : nLevelsMax + nLevels;
-    nLevelCount = std::min(nLevelCount, static_cast<int>(src.pyramidLevels.size()));
+    nLevelCount = std::min(nLevelCount, static_cast<int>(src.nLevels));
 
     if (nLevelCount < 1)
         throw MotionBlockPyramidError("the levels argument resolves to a non-positive level count");

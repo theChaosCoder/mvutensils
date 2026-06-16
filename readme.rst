@@ -12,6 +12,12 @@ Usage hints
 Super/Recalculate:
     * Recalculate only needs a single level super clip so remember to pass levels=1 to save memory and speed things up and save memory
 
+Degrain:
+    * mvu.Degrain(clip, super, mvu.AnalyseMany(super, radius=3))
+
+FlowInter:
+    * mvu.FlowInter(clip, super, mvu.AnalyseMany(super))
+
 Changes
 =======
 
@@ -55,7 +61,7 @@ Changes
     * Renamed lambda to mvlamda and global to globalmv to not collide with python keywords
     
 * AnalyseMany:
-    * A helper function to generate a multiple analysis clips quickly to pass to DegrainN and friends, takes the same arguments as Analyse except that delta is a positive number controlling the step size backward and forward. The radius argument determines how many vectors are produced and defaults to 1. For example radius=2 will return [Analyse(delta=1), Analyse(delta=-1), Analyse(delta=2), Analyse(delta=-2)]
+    * A helper function to generate multiple analysis clips quickly to pass to DegrainN and friends, takes the same arguments as Analyse except that delta is a positive number controlling the step size backward and forward. The radius argument determines how many vectors are produced and defaults to 1. For example radius=2 will return [Analyse(delta=1), Analyse(delta=-1), Analyse(delta=2), Analyse(delta=-2)]
     
 * Compensate:
     * Removed scbehavior argument, its only function was to decide which source frame to copy the unprocessed parts of the frame from around scene changes
