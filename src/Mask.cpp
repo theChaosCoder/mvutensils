@@ -167,8 +167,8 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
 
         d->time256 = (int)(time * 256 / 100);
 
-        d->maskResizerFull.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY,
-            d->vi.width, d->vi.height, vectors.bitsPerSample);
+        d->maskResizerFull.Init(d->vi.width, d->vi.height, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY,
+            vectors.nOverlapX, vectors.nOverlapY, vectors.bitsPerSample);
 
     } catch (std::runtime_error &e) {
         vsapi->mapSetError(out, (d->filterName + ": " + e.what()).c_str());

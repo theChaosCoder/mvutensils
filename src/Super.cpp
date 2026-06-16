@@ -50,10 +50,11 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
         if (d->usePelClip)
             vsapi->requestFrameFilter(n, d->pelclip, frameCtx);
     } else if (activationReason == arAllFramesReady) {
+        const VSFrame *src = nullptr;
         const VSFrame *srcPel = nullptr;
 
         try {
-            const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
+            src = vsapi->getFrameFilter(n, d->node, frameCtx);
             FramePyramid pyramid(src, d->nLevels, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->nHPad, d->nVPad, d->rfilter, core, vsapi);
 
             if (d->usePelClip) {
@@ -66,10 +67,13 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
+            vsapi->freeFrame(src);
+            src = nullptr;
             pyramid.ExportFrameData(dst, d->prefix);
 
             return dst;
         } catch (std::runtime_error &e) {
+            vsapi->freeFrame(src);
             vsapi->freeFrame(srcPel);
             vsapi->setFilterError(("Super: " + std::string(e.what())).c_str(), frameCtx);
             return nullptr;
