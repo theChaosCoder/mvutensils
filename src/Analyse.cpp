@@ -165,6 +165,8 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
             searchparam = 2;
 
         d->nPelSearch = vsapi->mapGetIntSaturated(in, "pelsearch", 0, &err);
+        if (!err && d->nPelSearch < 0)
+            throw std::runtime_error("pelsearch must not be negative");
 
         d->chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
         if (err)
