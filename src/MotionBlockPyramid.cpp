@@ -468,7 +468,10 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
     // if there are no other planes, predictor is the median
     if (smallestPlane)
         predictor = predictors[0];
-    double scale = LSAD / (double)(LSAD + (predictor.sad >> 1));
+    // Clamp the denominator to >= 1: with lsad == 0 (LSAD == 0) and a zero/sentinel
+    // predictor SAD this would otherwise be 0/0 = NaN (or x/0 = inf), and the
+    // assignment to the integer nLambda would be undefined behaviour.
+    double scale = (double)LSAD / std::max<int64_t>(LSAD + (predictor.sad >> 1), 1);
     nLambda = nLambda * scale * scale;
 
     predictors[4] = ClipMV(zeroMV);
