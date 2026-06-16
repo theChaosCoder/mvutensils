@@ -886,6 +886,14 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         }
     }
 
+    // Recompute the block-size padding now that nWidth/nHeight may have grown
+    // above, so nBlkSizePadX/Y match what the deserialize path stores and what
+    // IsCompatible compares. Without this they would stay 0 from the loop above.
+    for (int plane = 0; plane < srcFormat->numPlanes; plane++) {
+        nBlkSizePadX[plane] = nWidth[plane] - nRealWidth[plane];
+        nBlkSizePadY[plane] = nHeight[plane] - nRealHeight[plane];
+    }
+
     size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8);
     std::unique_ptr<uint8_t, decltype(&mvu_aligned_free)> tempBuffer(mvu_aligned_malloc<uint8_t>(tempBufferSize, 32), mvu_aligned_free);
 
