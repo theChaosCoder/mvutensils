@@ -183,12 +183,12 @@ static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, co
     }
 }
 
-
 static inline int DegrainWeight(int64_t thSAD, int64_t blockSAD) {
     if (blockSAD >= thSAD)
         return 0;
 
-    return int((thSAD - blockSAD) * (thSAD + blockSAD) * 256 / (double)(thSAD * thSAD + blockSAD * blockSAD));
+    const double r = (double)blockSAD / (double)thSAD; // r in [0, 1)
+    return int(256.0 * (1.0 - r * r) / (1.0 + r * r));
 }
 
 template<typename PixelType>

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <vector>
 #include "Common.h"
 
 // top, middle, botom and left, middle, right windows
@@ -22,20 +23,19 @@ class OverlapWindows {
     int oy = -1;
     int size = -1; // full window size= nx*ny
 
-    int16_t *Overlap9Windows = nullptr;
+    std::vector<int16_t> Overlap9Windows;
 
-    float *fWin1UVx = nullptr;
-    float *fWin1UVxfirst = nullptr;
-    float *fWin1UVxlast = nullptr;
-    float *fWin1UVy = nullptr;
-    float *fWin1UVyfirst = nullptr;
-    float *fWin1UVylast = nullptr;
+    std::vector<float> fWin1UVx;
+    std::vector<float> fWin1UVxfirst;
+    std::vector<float> fWin1UVxlast;
+    std::vector<float> fWin1UVy;
+    std::vector<float> fWin1UVyfirst;
+    std::vector<float> fWin1UVylast;
 public:
     OverlapWindows() = default;
     void Init(int nx, int ny, int ox, int oy);
-    ~OverlapWindows();
     const int16_t *GetWindow(int i) const {
-        return Overlap9Windows + size * i;
+        return Overlap9Windows.data() + size * i;
     }
 };
 
