@@ -962,8 +962,6 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
 
     bitsPerSample = vsapi->getVideoFrameFormat(srcFrame)->bitsPerSample;
 
-    // FIXME, check so all levels match the declared metadata sizes
-
     int loadLevels = (maxLevel < 0) ? nLevels : std::min(maxLevel, nLevels);
 
     try {
@@ -995,6 +993,28 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
             }
         }
 
+        // Validate that every loaded plane's padded dimensions match the declared metadata.
+        // Padding is constant across all levels; only content shrinks via PlaneDimensionLuma,
+        // which is the same reduction ReducePlane applies when building the pyramid.
+        for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
+            int expectedWidth = nWidth[plane];
+            int expectedHeight = nHeight[plane];
+            for (int level = 0; level < loadLevels; level++) {
+                const PyramidPlane &p = pyramidLevels[level].planes[plane];
+                const int expectedPaddedWidth = expectedWidth + 2 * nHPad[plane];
+                const int expectedPaddedHeight = expectedHeight + 2 * nVPad[plane];
+                if (p.nPaddedWidth != expectedPaddedWidth || p.nPaddedHeight != expectedPaddedHeight)
+                    throw SuperPyramidError(
+                        "Level " + std::to_string(level) + " plane " + std::to_string(plane) +
+                        " dimensions mismatch: expected " +
+                        std::to_string(expectedPaddedWidth) + "x" + std::to_string(expectedPaddedHeight) +
+                        " but got " +
+                        std::to_string(p.nPaddedWidth) + "x" + std::to_string(p.nPaddedHeight));
+                expectedWidth = PlaneDimensionLuma(expectedWidth, xRatioUV, nHPad[plane]);
+                expectedHeight = PlaneDimensionLuma(expectedHeight, yRatioUV, nVPad[plane]);
+            }
+        }
+
         // Propagate real dimensions to level 0 where they're relevant
         if (!pyramidLevels.empty()) {
             for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
@@ -1007,7 +1027,6 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
         FreeFrames();
         throw;
     }
-
 }
 
 FramePyramid::FramePyramid(const VSFrame *srcFrame, int maxLevel, const std::string &prefix, const VSAPI *vsapi)
