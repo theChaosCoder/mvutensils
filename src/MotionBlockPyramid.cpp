@@ -134,7 +134,8 @@ void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcep
     int mediany = findMode(pairsY, numY);
 
     // Refinement: average vectors near the mode
-    int meanvx = 0, meanvy = 0, num = 0;
+    int64_t meanvx = 0, meanvy = 0;
+    int num = 0;
     for (int i = 0; i < nBlkCount; i++) {
         if (abs(vectors[i].x - medianx) < 6 && abs(vectors[i].y - mediany) < 6) {
             meanvx += vectors[i].x;
@@ -197,7 +198,8 @@ void MotionBlockLevel::EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const
     }
 
     // Refinement: average vectors near the mode
-    int meanvx = 0, meanvy = 0, num = 0;
+    int64_t meanvx = 0, meanvy = 0;
+    int num = 0;
     for (int i = 0; i < nBlkCount; i++) {
         if (abs(vectors[i].x - medianx) < 6 && abs(vectors[i].y - mediany) < 6) {
             meanvx += vectors[i].x;
