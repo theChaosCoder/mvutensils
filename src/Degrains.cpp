@@ -596,7 +596,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         d->thSAD[2] = d->thSAD[1];
 
         if (d->thSAD[0] >= INT_MAX || d->thSAD[1] >= INT_MAX) {
-            int64_t maximum = INT_MAX * nSCD1_old / d->nSCD1;
+            int64_t maximum = d->nSCD1 ? (INT_MAX * nSCD1_old / d->nSCD1) : 0;
 
             bool c = d->thSAD[0] < INT_MAX;
 
