@@ -73,7 +73,8 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
         int nleft = (int)(n * d->fa / d->fb);
         int nright = nleft + off;
 
-        int time256 = (int)(((double)n * d->fa / d->fb - nleft) * 256 + 0.5);
+        int64_t rem = n * d->fa - (int64_t)nleft * d->fb;
+        int time256 = (int)((rem * 256 + d->fb / 2) / d->fb);
         if (off > 1)
             time256 = time256 / off;
 
@@ -107,8 +108,10 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
 
         try {
             int nleft = (int)(n * d->fa / d->fb);
-            // intermediate product may be very large! Now I know how to multiply int64
-            int time256 = (int)(((double)n * d->fa / d->fb - nleft) * 256 + 0.5);
+            // Derive the sub-frame phase from the exact integer remainder so it stays
+            // consistent with nleft instead of diverging once n * fa exceeds 2^53 in double.
+            int64_t rem = n * d->fa - (int64_t)nleft * d->fb;
+            int time256 = (int)((rem * 256 + d->fb / 2) / d->fb);
 
             int off = -d->deltaFrame; // integer offset of reference frame
             // usually off must be = 1
