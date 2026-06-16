@@ -657,7 +657,7 @@ static unsigned int Satd_SIMD(const uint8_t *pSrc, intptr_t nSrcPitch, const uin
     const unsigned partition_width = 16;
     const unsigned partition_height = 16;
 
-    unsigned sum = 0;
+    uint64_t sum = 0;
 
     for (unsigned y = 0; y < nBlkHeight; y += partition_height) {
         for (unsigned x = 0; x < nBlkWidth; x += partition_width) {
@@ -679,7 +679,7 @@ static unsigned int Satd_SIMD(const uint8_t *pSrc, intptr_t nSrcPitch, const uin
         pRef += nRefPitch * partition_height;
     }
 
-    return sum;
+    return static_cast<unsigned int>(sum > 0xFFFFFFFFu ? 0xFFFFFFFFu : sum);
 }
 #endif
 

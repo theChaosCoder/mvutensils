@@ -857,6 +857,9 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
 
         nWidth[plane] = nRealWidth[plane];
         nHeight[plane] = nRealHeight[plane];
+
+        nBlkSizePadX[plane] = nWidth[plane] - nRealWidth[plane];
+        nBlkSizePadY[plane] = nHeight[plane] - nRealHeight[plane];
     }
 
     // Calculate padding needed to make the dimensions fit the block size and overlap, if specified
