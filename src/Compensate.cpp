@@ -231,7 +231,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                     }
 
                     for (int by = 0; by < nBlkY; by++) {
-                        int wby = ((by + nBlkY - 3) / (nBlkY - 2)) * 3;
+                        int wby = (by == 0) ? 0 : (by == nBlkY - 1) ? 6 : 3;
                         int wbx = 0;
                         int xx[3] = { 0 };
 
