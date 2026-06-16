@@ -11,12 +11,6 @@
 #include "CPU.h"
 #endif
 
-#ifdef _MSC_VER
-#define FORCE_INLINE __forceinline
-#else
-#define FORCE_INLINE __attribute__((always_inline))
-#endif
-
 ///////////////////////////////////
 
 void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &parentLevel) noexcept {
@@ -74,7 +68,7 @@ void MotionBlockLevel::InterpolatePredictorsFromParent(const MotionBlockLevel &p
                 int64_t a11 = ax1 * ay1, a12 = ax1 * ay2, a21 = ax2 * ay1, a22 = ax2 * ay2;
                 vectors[index].x = (int)((a11 * v1.x + a21 * v2.x + a12 * v3.x + a22 * v4.x) * scaleov);
                 vectors[index].y = (int)((a11 * v1.y + a21 * v2.y + a12 * v3.y + a22 * v4.y) * scaleov);
-                temp_sad = (a11 * v1.sad + a21 * v2.sad + a12 * v3.sad + a22 * v4.sad) * scaleov;
+                temp_sad = static_cast<int64_t>((a11 * v1.sad + a21 * v2.sad + a12 * v3.sad + a22 * v4.sad) * scaleov);
             }
             vectors[index].x = (vectors[index].x >> normFactor) * (1 << mulFactor);
             vectors[index].y = (vectors[index].y >> normFactor) * (1 << mulFactor);
@@ -146,8 +140,8 @@ void MotionBlockLevel::EstimateGlobalMVDoubled(VECTOR &globalMVec) const noexcep
 
     // Output vectors must be doubled for next (finer) scale level
     if (num > 0) {
-        globalMVec.x = 2 * meanvx / num;
-        globalMVec.y = 2 * meanvy / num;
+        globalMVec.x = static_cast<int>(2 * meanvx / num);
+        globalMVec.y = static_cast<int>(2 * meanvy / num);
     } else {
         globalMVec.x = 2 * medianx;
         globalMVec.y = 2 * mediany;
@@ -210,8 +204,8 @@ void MotionBlockLevel::EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const
 
     // Output vectors must be doubled for next (finer) scale level
     if (num > 0) {
-        globalMVec.x = 2 * meanvx / num;
-        globalMVec.y = 2 * meanvy / num;
+        globalMVec.x = static_cast<int>(2 * meanvx / num);
+        globalMVec.y = static_cast<int>(2 * meanvy / num);
     } else {
         globalMVec.x = 2 * medianx;
         globalMVec.y = 2 * mediany;
@@ -469,7 +463,7 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
     if (smallestPlane)
         predictor = predictors[0];
     double scale = (double)LSAD / std::max<int64_t>(LSAD + (predictor.sad >> 1), 1);
-    nLambda = nLambda * scale * scale;
+    nLambda = static_cast<int64_t>(nLambda * scale * scale);
 
     predictors[4] = ClipMV(zeroMV);
 }
@@ -1835,10 +1829,11 @@ std::unique_ptr<BlockMask<PixelType>> MotionBlockPyramid::MakeSADMask(float dSAD
 
 template<typename PixelType>
 static void ByteOccMask(PixelType &occMask, int occlusion, float occnorm, float fGamma, int maxVal) {
+    float maxValF = static_cast<float>(maxVal);
     if (fGamma == 1.0f)
-        occMask = std::max<PixelType>(occMask, static_cast<PixelType>(std::min<float>(maxVal * occlusion * occnorm, maxVal)));
+        occMask = std::max<PixelType>(occMask, static_cast<PixelType>(std::min<float>(maxValF * occlusion * occnorm, maxValF)));
     else
-        occMask = std::max<PixelType>(occMask, static_cast<PixelType>(std::min<float>(maxVal * pow(occlusion * occnorm, fGamma), maxVal)));
+        occMask = std::max<PixelType>(occMask, static_cast<PixelType>(std::min<float>(maxValF * pow(occlusion * occnorm, fGamma), maxValF)));
 }
 
 template<typename PixelType>

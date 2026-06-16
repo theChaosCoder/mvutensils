@@ -141,7 +141,7 @@ static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
     }
 }
 
-static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit) {
+static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) {
     __m128i bytes_limit = _mm_set1_epi8(nLimit);
 
     for (int y = 0; y < nHeight; y++) {
@@ -165,18 +165,17 @@ static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t 
 #endif // MVTOOLS_X86
 
 
-typedef void (*LimitFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit);
+typedef void (*LimitFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit);
 
 
 template <typename PixelType>
-static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit) {
+static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) {
     for (int h = 0; h < nHeight; h++) {
         for (int i = 0; i < nWidth; i++) {
             const PixelType *pSrc = (const PixelType *)pSrc8;
             PixelType *pDst = (PixelType *)pDst8;
 
-            // FIXME, suboptimally wide type
-            pDst[i] = (PixelType)std::min<ptrdiff_t>(std::max<ptrdiff_t>(pDst[i], (pSrc[i] - nLimit)), (pSrc[i] + nLimit));
+            pDst[i] = (PixelType)std::min<int>(std::max<int>(pDst[i], (pSrc[i] - nLimit)), (pSrc[i] + nLimit));
         }
         pDst8 += nDstPitch;
         pSrc8 += nSrcPitch;

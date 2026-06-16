@@ -105,7 +105,7 @@ static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
                     vyB += vyB0;
                 }
             }
-            pdst[w] = bluredsum / (mF + mB + 1);
+            pdst[w] = static_cast<PixelType>(bluredsum / (mF + mB + 1));
         }
         pdst += dst_pitch;
         VXFullB += tilePitch;

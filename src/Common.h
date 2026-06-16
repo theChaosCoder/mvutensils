@@ -96,7 +96,7 @@ inline bool GetTopField(const VSFrame *propsSrc, int n, bool tff_exists, bool tf
     if (err && requireField && !tff_exists)
         throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
     if (tff_exists)
-        top_field = tff ^ (n % 2);
+        top_field = tff ^ ((n % 2) != 0);
     return top_field;
 }
 

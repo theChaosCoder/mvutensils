@@ -40,7 +40,7 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
     fWin1UVxfirst.resize(nx);
     fWin1UVxlast.resize(nx);
     for (int i = 0; i < ox; i++) {
-        fWin1UVx[i] = cosf(M_PI * (i - ox + 0.5f) / (ox * 2));
+        fWin1UVx[i] = cosf(static_cast<float>(M_PI) * (i - ox + 0.5f) / (ox * 2));
         fWin1UVx[i] = fWin1UVx[i] * fWin1UVx[i];  // left window (rised cosine)
         fWin1UVxfirst[i] = 1;                                 // very first window
         fWin1UVxlast[i] = fWin1UVx[i];                  // very last
@@ -51,7 +51,7 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
         fWin1UVxlast[i] = 1;  // very last
     }
     for (int i = nx - ox; i < nx; i++) {
-        fWin1UVx[i] = cosf(M_PI * (i - nx + ox + 0.5f) / (ox * 2));
+        fWin1UVx[i] = cosf(static_cast<float>(M_PI) * (i - nx + ox + 0.5f) / (ox * 2));
         fWin1UVx[i] = fWin1UVx[i] * fWin1UVx[i];  // right window (falled cosine)
         fWin1UVxfirst[i] = fWin1UVx[i];                 // very first window
         fWin1UVxlast[i] = 1;                                  // very last
@@ -61,7 +61,7 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
     fWin1UVyfirst.resize(ny);
     fWin1UVylast.resize(ny);
     for (int i = 0; i < oy; i++) {
-        fWin1UVy[i] = cosf(M_PI * (i - oy + 0.5f) / (oy * 2));
+        fWin1UVy[i] = cosf(static_cast<float>(M_PI) * (i - oy + 0.5f) / (oy * 2));
         fWin1UVy[i] = fWin1UVy[i] * fWin1UVy[i];  // left window (rised cosine)
         fWin1UVyfirst[i] = 1;                                 // very first window
         fWin1UVylast[i] = fWin1UVy[i];                  // very last
@@ -72,7 +72,7 @@ void OverlapWindows::Init(int nx, int ny, int ox, int oy) {
         fWin1UVylast[i] = 1;  // very last
     }
     for (int i = ny - oy; i < ny; i++) {
-        fWin1UVy[i] = cosf(M_PI * (i - ny + oy + 0.5f) / (oy * 2));
+        fWin1UVy[i] = cosf(static_cast<float>(M_PI) * (i - ny + oy + 0.5f) / (oy * 2));
         fWin1UVy[i] = fWin1UVy[i] * fWin1UVy[i];  // right window (falled cosine)
         fWin1UVyfirst[i] = fWin1UVy[i];                 // very first window
         fWin1UVylast[i] = 1;                                  // very last
