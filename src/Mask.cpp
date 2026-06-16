@@ -140,6 +140,9 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         if (d->fGamma < 0.0f)
             throw std::runtime_error("gamma must not be negative");
 
+        if (ml <= 0.0f)
+            throw std::runtime_error("ml must be greater than 0");
+
         if (time < 0.0 || time > 100.0)
             throw std::runtime_error("time must be between 0.0 and 100.0");
 
