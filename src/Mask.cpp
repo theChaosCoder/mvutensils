@@ -75,7 +75,7 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                 } else if (d->kind == 1) {
                     Mask = vectors.MakeSADMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256);
                 } else if (d->kind == 2) {
-                    Mask = vectors.MakeVectorOcclusionMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256);
+                    Mask = vectors.MakeVectorOcclusionMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256, false);
                 }
 
                 BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), vsapi->getFrameWidth(dst, 0), vsapi->getFrameHeight(dst, 0),

@@ -50,8 +50,8 @@ static void FlowInter(
             int vyB = ((static_cast<int>(VYFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
             int64_t dstB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxB + ((w + dstX) << nPelLog), vyB + ((h + dstY) << nPelLog)));
             int dstB0 = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(((w + dstX) << nPelLog), ((h + dstY) << nPelLog)));
-            pdst[w] = (PixelType)((((dstF * (256 - (MaskF[w] >> 8)) + (((MaskF[w] >> 8) * (dstB * (256 - (MaskB[w] >> 8)) + (MaskB[w] >> 8) * dstF0) + 256) >> 8) + 256) >> 8) * (256 - time256) +
-                ((dstB * (256 - (MaskB[w] >> 8)) + (((MaskB[w] >> 8) * (dstF * (256 - (MaskF[w] >> 8)) + (MaskF[w] >> 8) * dstB0) + 256) >> 8) + 256) >> 8) * time256) >> 8) - 1;
+            pdst[w] = (PixelType)((((dstF * (256 - MaskF[w]) + ((MaskF[w] * (dstB * (256 - MaskB[w]) + MaskB[w] * dstF0) + 256) >> 8) + 256) >> 8) * (256 - time256) +
+                ((dstB * (256 - MaskB[w]) + ((MaskB[w] * (dstF * (256 - MaskF[w]) + MaskF[w] * dstB0) + 256) >> 8) + 256) >> 8) * time256) >> 8) - 1;
         }
 
         pdst += dst_pitch;
@@ -109,8 +109,8 @@ static void FlowInterExtra(
             int medianBB = std::max(minfb, std::min(dstBB, maxfb));
             int medianFF = std::max(minfb, std::min(dstFF, maxfb));
 
-            pdst[w] = ((((medianBB * (MaskF[w] >> 8) + dstF * (256 - (MaskF[w] >> 8)) + 256) >> 8) * (256 - time256) +
-                ((medianFF * (MaskB[w] >> 8) + dstB * (256 - (MaskB[w] >> 8)) + 256) >> 8) * time256) >> 8) - 1;
+            pdst[w] = ((((medianBB * MaskF[w] + dstF * (256 - MaskF[w]) + 256) >> 8) * (256 - time256) +
+                ((medianFF * MaskB[w] + dstB * (256 - MaskB[w]) + 256) >> 8) * time256) >> 8) - 1;
         }
         pdst += dst_pitch;
         VXFullB += tilePitch;

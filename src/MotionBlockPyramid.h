@@ -312,7 +312,7 @@ public:
     template<typename PixelType>
     std::unique_ptr<BlockMask<PixelType>> MakeSADMask(float dSADNormFactor, float fGamma, int time256) const noexcept;
     template<typename PixelType>
-    std::unique_ptr<BlockMask<PixelType>> MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256) const noexcept;
+    std::unique_ptr<BlockMask<PixelType>> MakeVectorOcclusionMask(float dMaskNormDivider, float fGamma, int time256, bool force8bitRange) const noexcept;
 
     std::unique_ptr<SmallVectorMasks> MakeSmallVectorMasks(int fieldOffset = 0) const noexcept;
 };
