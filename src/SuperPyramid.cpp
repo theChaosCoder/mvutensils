@@ -967,7 +967,20 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
 
     bitsPerSample = vsapi->getVideoFrameFormat(srcFrame)->bitsPerSample;
 
-    // FIXME, check so all levels match the declared metadata sizes
+    // Validate that the externally supplied plane frames are actually consistent
+    // with the declared metadata. Without this a corrupt or mismatched super clip
+    // (e.g. forged frame properties) could make motion estimation read out of
+    // bounds. (Replaces the previous "check so all levels match" FIXME.)
+    auto validatePlane = [&](const PyramidPlane &p, int plane, bool isLevel0) {
+        // The padding must fit inside the actual plane frame, otherwise nWidth/
+        // nHeight go negative and nOffsetPadding/GetPointer address out of bounds.
+        if (p.nPaddedWidth <= 2 * nHPad[plane] || p.nPaddedHeight <= 2 * nVPad[plane])
+            throw SuperPyramidError("Super plane is too small for the declared padding");
+        // At level 0 the usable (analysis) area must cover the declared dimensions
+        // so the block grid derived from the metadata stays in bounds.
+        if (isLevel0 && (p.nWidth < nWidth[plane] || p.nHeight < nHeight[plane]))
+            throw SuperPyramidError("Super plane dimensions are inconsistent with the declared metadata");
+    };
 
     int loadLevels = (maxLevel < 0) ? levels : std::min(maxLevel, levels);
 
@@ -987,6 +1000,7 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
                     pelPlanes[i] = frame;
                 }
                 pyramidLevels[0].planes[plane].FromExternalPelPlanes(pelPlanes, nPel, nHPad[plane], nVPad[plane], vsapi);
+                validatePlane(pyramidLevels[0].planes[plane], plane, true);
             }
         }
 
@@ -997,6 +1011,7 @@ void FramePyramid::LoadFrameData(const VSFrame *srcFrame, int maxLevel, const st
                 if (!frame)
                     throw SuperPyramidError("Plane data missing in super frame metadata");
                 pyramidLevels[level].planes[plane].FromExternalPlane(frame, nHPad[plane], nVPad[plane], vsapi);
+                validatePlane(pyramidLevels[level].planes[plane], plane, level == 0);
             }
         }
 
