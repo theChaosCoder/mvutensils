@@ -138,7 +138,7 @@ static void transform2motion(const transform *tr, int forward, float xcenter, fl
 //------------------------------------------------------------
 //  get  coefficients for inverse coordinates transformation,
 //  fransform_inv ( transform_A ) = null transform
-static void inversetransform(const transform *ta, transform *tinv) {
+static void inversetransform(const transform *ta, transform *tinv) noexcept {
     float pixaspect;
 
     if (ta->dxy != 0.0f)
@@ -422,7 +422,7 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
     return NULL;
 }
 
-static int invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VSAPI *vsapi) {
+static bool invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VSAPI *vsapi) noexcept {
     VSPlugin *text_plugin = vsapi->getPluginByID("com.vapoursynth.text", core);
 
     VSNode *node = vsapi->mapGetNode(out, "clip", 0, NULL);
@@ -437,7 +437,7 @@ static int invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VS
     if (vsapi->mapGetError(ret)) {
         vsapi->mapSetError(out, vsapi->mapGetError(ret));
         vsapi->freeMap(ret);
-        return 0;
+        return false;
     }
 
     node = vsapi->mapGetNode(ret, "clip", 0, NULL);
@@ -445,7 +445,7 @@ static int invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VS
     vsapi->mapSetNode(out, "clip", node, maReplace);
     vsapi->freeNode(node);
 
-    return 1;
+    return true;
 }
 
 
@@ -587,8 +587,6 @@ struct DepanEstimateData {
     fftwf_complex *unused_array;
 
     fftwf_plan plan, planinv;
-
-    std::string prefix;
 
     const VSAPI *vsapi;
 
@@ -1455,8 +1453,6 @@ struct DepanCompensateData {
     int pixel_max;
 
     CompensateFunction compensate_plane;
-
-    std::string prefix;
 
     const VSAPI *vsapi;
 
@@ -2852,8 +2848,6 @@ struct DepanStabiliseData {
     CompensateFunction compensate_plane_nearest;
 
     std::mutex motion_mutex;
-
-    std::string prefix;
 
     const VSAPI *vsapi;
 
