@@ -864,6 +864,13 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         }
     }
 
+    // Record the block-size padding per plane so this build path agrees with
+    // the reconstruct path (LoadFrameData) and FramePyramid::IsCompatible.
+    for (int plane = 0; plane < (chroma ? 3 : 1); plane++) {
+        nBlkSizePadX[plane] = nWidth[plane] - nRealWidth[plane];
+        nBlkSizePadY[plane] = nHeight[plane] - nRealHeight[plane];
+    }
+
     size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8);
     std::unique_ptr<uint8_t, decltype(&mvu_aligned_free)> tempBuffer(mvu_aligned_malloc<uint8_t>(tempBufferSize, 32), mvu_aligned_free);
 
