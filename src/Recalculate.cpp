@@ -151,7 +151,10 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, [[maybe_unused]
 
         d->chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
         if (err)
-            d->chroma = 1;
+            d->chroma = true;
+
+        if (d->vi->format.colorFamily == cfGray)
+            d->chroma = false;
 
         bool truemotion = !!vsapi->mapGetInt(in, "truemotion", 0, &err);
         if (err)
