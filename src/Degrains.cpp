@@ -587,7 +587,6 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("super clip is not compatible with the source clip");
 
-        int64_t nSCD1_old = d->nSCD1;
         vectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
         double thscdScale = vectors[0]->GetThSCDScaleFactor(d->vi->format.bitsPerSample);
 
@@ -596,7 +595,7 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         d->thSAD[2] = d->thSAD[1];
 
         if (d->thSAD[0] >= INT_MAX || d->thSAD[1] >= INT_MAX) {
-            int64_t maximum = INT_MAX * nSCD1_old / d->nSCD1;
+            int64_t maximum = INT_MAX * thscdScale + .5;
 
             bool c = d->thSAD[0] < INT_MAX;
 
