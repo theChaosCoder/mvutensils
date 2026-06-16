@@ -918,7 +918,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
 
 template <int nLogPel, typename PixelType>
 void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-    SearchType st, int stp, int lambda, int lsad, int pnew,
+    SearchType st, int stp, int lambda, int64_t lsad, int pnew,
     int plevel, VECTOR *globalMVec, int fieldShift,
     int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma) noexcept {
 
@@ -1033,7 +1033,7 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
 
 
 void MotionBlockLevel::SearchMVs(const FramePyramidLevel &pSrcFrame, const FramePyramidLevel &pRefFrame,
-    SearchType st, int stp, int lambda, int lsad, int pnew,
+    SearchType st, int stp, int lambda, int64_t lsad, int pnew,
     int plevel, VECTOR *globalMVec, int fieldShift, bool useSatd,
     int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany, bool chroma, int bytesPerSample) {
 
@@ -1523,7 +1523,7 @@ MotionBlockPyramid::~MotionBlockPyramid() {
 
 void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyramid &pRefGOF,
     SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
-    int lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
+    int64_t lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
     int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany,
     SearchType coarseSearchType, bool chroma) {
 
