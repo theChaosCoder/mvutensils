@@ -257,7 +257,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
         int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
         d->lsad = (int64_t)((double)d->lsad * pixelMax / 255.0 + 0.5);
-        d->badSAD = (int)((double)d->badSAD * pixelMax / 255.0 + 0.5);
+        d->badSAD = (int64_t)((double)d->badSAD * pixelMax / 255.0 + 0.5);
         d->nLambda = (int)((double)d->nLambda * pixelMax / 255.0 + 0.5);
 
         d->lsad = (int64_t)d->lsad * (d->nBlkSizeX * d->nBlkSizeY) / 64;
