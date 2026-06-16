@@ -101,7 +101,7 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
                 auto SmallF = vectorsF.MakeSmallVectorMasks();
 
                 auto MaskSmallB = vectorsB.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - d->time256), true);
-                auto MaskSmallF = vectorsF.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, (256 - d->time256), true);
+                auto MaskSmallF = vectorsF.MakeVectorOcclusionMask<uint16_t>(d->ml, 1.0f, d->time256, true);
 
                 auto tmp = MaskResizer::GetTmpBuffer(std::max(d->maskResizerFull.tmpSize, d->maskResizerSubSampled.tmpSize));
 
