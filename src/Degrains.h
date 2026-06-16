@@ -141,7 +141,7 @@ static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
     }
 }
 
-static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit) {
+static inline void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, ptrdiff_t nLimit) {
     __m128i bytes_limit = _mm_set1_epi8(nLimit);
 
     for (int y = 0; y < nHeight; y++) {
