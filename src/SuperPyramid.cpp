@@ -858,9 +858,6 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
 
         nWidth[plane] = nRealWidth[plane];
         nHeight[plane] = nRealHeight[plane];
-
-        nBlkSizePadX[plane] = nWidth[plane] - nRealWidth[plane];
-        nBlkSizePadY[plane] = nHeight[plane] - nRealHeight[plane];
     }
 
     // Calculate padding needed to make the dimensions fit the block size and overlap, if specified
@@ -885,6 +882,11 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
             nHeight[1] = nHeight[0] / yRatioUV;
             nHeight[2] = nHeight[0] / yRatioUV;
         }
+    }
+
+    for (int plane = 0; plane < srcFormat->numPlanes; plane++) {
+        nBlkSizePadX[plane] = nWidth[plane] - nRealWidth[plane];
+        nBlkSizePadY[plane] = nHeight[plane] - nRealHeight[plane];
     }
 
     size_t tempBufferSize = (nWidth[0] * srcFormat->bytesPerSample * 8);
