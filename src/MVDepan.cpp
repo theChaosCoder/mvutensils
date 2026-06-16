@@ -283,13 +283,13 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
         const size_t num_blocks = (size_t)vectors.nBlkX * (size_t)vectors.nBlkY;
 
-        float *blockDx =         (float *)malloc(num_blocks * sizeof(float)); // dx vector
-        float *blockDy =         (float *)malloc(num_blocks * sizeof(float)); // dy
-        int64_t *blockSAD =    (int64_t *)malloc(num_blocks * sizeof(int64_t));
-        int *blockX =              (int *)malloc(num_blocks * sizeof(int)); // block x position
-        int *blockY =              (int *)malloc(num_blocks * sizeof(int));
-        float *blockWeight =     (float *)malloc(num_blocks * sizeof(float));
-        float *blockWeightMask = (float *)malloc(num_blocks * sizeof(float));
+        std::vector<float> blockDx(num_blocks); // dx vector
+        std::vector<float> blockDy(num_blocks); // dy
+        std::vector<int64_t> blockSAD(num_blocks);
+        std::vector<int> blockX(num_blocks); // block x position
+        std::vector<int> blockY(num_blocks);
+        std::vector<float> blockWeight(num_blocks);
+        std::vector<float> blockWeightMask(num_blocks);
 
         transform tr;
 
@@ -326,8 +326,8 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
 
             for (; iter < 5; iter++) {
-                TrasformUpdate(&tr, blockDx, blockDy, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, safety, ifZoom0, ifRot0, &errorcur, d->pixaspect / nFields);
-                RejectBadBlocks(&tr, blockDx, blockDy, blockSAD, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif0, d->thscd1, d->zerow, blockWeightMask, ignoredBorder);
+                TrasformUpdate(&tr, blockDx.data(), blockDy.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, safety, ifZoom0, ifRot0, &errorcur, d->pixaspect / nFields);
+                RejectBadBlocks(&tr, blockDx.data(), blockDy.data(), blockSAD.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif0, d->thscd1, d->zerow, blockWeightMask.data(), ignoredBorder);
             }
 
 
@@ -341,11 +341,11 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
                 else
                     safety = 1.0f;
                 float errorprev = errorcur;
-                TrasformUpdate(&tr, blockDx, blockDy, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, safety, d->zoom, d->rot, &errorcur, d->pixaspect / nFields);
+                TrasformUpdate(&tr, blockDx.data(), blockDy.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, safety, d->zoom, d->rot, &errorcur, d->pixaspect / nFields);
                 if (((errorprev - errorcur) < errordif * 0.5f && iter > 9) || errorcur < errordif)
                     break; // check convergence, accuracy increased in v1.2.5
                 float globalDif = errorcur * 2;
-                RejectBadBlocks(&tr, blockDx, blockDy, blockSAD, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif, d->thscd1, d->zerow, blockWeightMask, ignoredBorder);
+                RejectBadBlocks(&tr, blockDx.data(), blockDy.data(), blockSAD.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif, d->thscd1, d->zerow, blockWeightMask.data(), ignoredBorder);
             }
         }
 
@@ -408,14 +408,6 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
             vsapi->mapSetData(dst_props, prop_DepanAnalyse_info, info, -1, dtUtf8, maReplace);
         }
-
-        free(blockDx);
-        free(blockDy);
-        free(blockSAD);
-        free(blockX);
-        free(blockY);
-        free(blockWeight);
-        free(blockWeightMask);
 
         vsapi->mapSetFloat(dst_props, prop_Depan_dx, motionx, maReplace);
         vsapi->mapSetFloat(dst_props, prop_Depan_dy, motiony, maReplace);
@@ -1194,11 +1186,7 @@ extern std::mutex g_fftw_plans_mutex;
 
 
 static void VS_CC depanEstimateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
     DepanEstimateData *d = (DepanEstimateData *)instanceData;
-
-    vsapi->freeNode(d->clip);
 
     {
         std::lock_guard<std::mutex> guard(g_fftw_plans_mutex);
@@ -1210,11 +1198,11 @@ static void VS_CC depanEstimateFree(void *instanceData, VSCore *core, const VSAP
     if (d->stage == 1)
         fftwf_free(d->unused_array);
 
-    free(d);
+    delete d;
 }
 
 
-static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<DepanEstimateData> d = std::make_unique<DepanEstimateData>(vsapi);
 
     int err;
@@ -2627,7 +2615,7 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
         const VSFrame *src = vsapi->getFrameFilter(nsrc, d->clip, frameCtx);
         VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
 
-        int *work2width4356 = (int *)malloc((2 * d->vi->width + 4356) * sizeof(int));
+        std::vector<int> work2width4356(2 * d->vi->width + 4356);
 
         int border[3] = { 0, 1 << (d->vi->format.bitsPerSample - 1), border[1] };
         int blur[3] = { d->blur, d->blur, d->blur };
@@ -2656,10 +2644,8 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
 
             uint8_t *dstp = vsapi->getWritePtr(dst, plane);
 
-            d->compensate_plane(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356, blur[plane], d->pixel_max);
+            d->compensate_plane(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
         }
-
-        free(work2width4356);
 
         vsapi->freeFrame(src);
 
@@ -2837,10 +2823,10 @@ struct DepanStabiliseData {
 
     int nfields;
 
-    float *motionx;
-    float *motiony;
-    float *motionrot;
-    float *motionzoom;
+    std::vector<float> motionx;
+    std::vector<float> motiony;
+    std::vector<float> motionrot;
+    std::vector<float> motionzoom;
 
 
     transform nonlinfactor;
@@ -2852,10 +2838,10 @@ struct DepanStabiliseData {
     float freqnative; // native frequency
     int radius;       // stabilization radius
 
-    float *wint; // average window
+    std::vector<float> wint; // average window
     int wintsize;
-    float *winrz; // rize zoom window
-    float *winfz; // fall zoom window
+    std::vector<float> winrz; // rize zoom window
+    std::vector<float> winfz; // fall zoom window
     int winrzsize;
     int winfzsize;
 
@@ -3055,7 +3041,7 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
 
 static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, const int nbase, const int ndest, const int nmax, transform *ptrdif) {
     transform trsmoothed;
-    const float * const wint = d->wint;
+    const float * const wint = d->wint.data();
     const float pixaspect = d->pixaspect;
     const int nfields = d->nfields;
     const int addzoom = d->addzoom;
@@ -3067,8 +3053,8 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
     const int height = d->vi->height;
     const int winfzsize = d->winfzsize;
     const int winrzsize = d->winrzsize;
-    const float * const winfz = d->winfz;
-    const float * const winrz = d->winrz;
+    const float * const winfz = d->winfz.data();
+    const float * const winrz = d->winrz.data();
 
 
     int n;
@@ -3562,10 +3548,10 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
 
             size_t elements = ndest - nbase + 1;
 
-            transform *trcumul = (transform *)malloc(elements * sizeof(transform));
-            transform *trsmoothed = (transform *)malloc(elements * sizeof(transform));
-            float *azoom = (float *)malloc(elements * sizeof(float));
-            float *azoomsmoothed = (float *)malloc(elements * sizeof(float));
+            std::vector<transform> trcumul(elements);
+            std::vector<transform> trsmoothed(elements);
+            std::vector<float> azoom(elements);
+            std::vector<float> azoomsmoothed(elements);
 
             // base as null
             trcumul[0].setNull();
@@ -3578,12 +3564,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
                 sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
             }
 
-            Inertial(d, trcumul - nbase, trsmoothed - nbase, azoom - nbase, azoomsmoothed - nbase, nbase, ndest, &trdif);
-
-            free(trcumul);
-            free(trsmoothed);
-            free(azoom);
-            free(azoomsmoothed);
+            Inertial(d, trcumul.data() - nbase, trsmoothed.data() - nbase, azoom.data() - nbase, azoomsmoothed.data() - nbase, nbase, ndest, &trdif);
 
             // summary motion from summary transform
             transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
@@ -3610,27 +3591,25 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         //--------------------------------------------------------------------------
         // Ready to make motion stabilization,
 
-        int *work2width4356 = (int *)malloc((2 * d->vi->width + 4356) * sizeof(int)); // work
+        std::vector<int> work2width4356(2 * d->vi->width + 4356); // work
 
         // --------------------------------------------------------------------
         // use some previous frame to fill borders
         int notfilled = 1; // init as not filled (borders by neighbor frames)
 
         if (d->prev > 0)
-            fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi);
+            fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi);
 
         // use next frame to fill borders
         if (d->next > 0) {
-            if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi)) {
+            if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi)) {
                 vsapi->freeFrame(dst);
                 vsapi->freeFrame(src);
                 return NULL;
             }
         }
 
-        compensateFrame(src, dst, d, notfilled, &trdif, work2width4356, vsapi);
-
-        free(work2width4356);
+        compensateFrame(src, dst, d, notfilled, &trdif, work2width4356.data(), vsapi);
 
         vsapi->freeFrame(src);
 
@@ -3748,8 +3727,8 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
 
         size_t elements = nmax - nbase + 1;
 
-        transform *trcumul = (transform *)malloc(elements * sizeof(transform));
-        float *azoom = (float *)malloc(elements * sizeof(float));
+        std::vector<transform> trcumul(elements);
+        std::vector<float> azoom(elements);
 
         // base as null
         trcumul[0].setNull();
@@ -3765,10 +3744,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
             sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
         }
 
-        Average(d, trcumul - nbase, azoom - nbase, nbase, ndest, nmax, &trdif);
-
-        free(trcumul);
-        free(azoom);
+        Average(d, trcumul.data() - nbase, azoom.data() - nbase, nbase, ndest, nmax, &trdif);
 
         // summary motion from summary transform
         transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
@@ -3784,27 +3760,25 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
         //--------------------------------------------------------------------------
         // Ready to make motion stabilization,
 
-        int *work2width4356 = (int *)malloc((2 * d->vi->width + 4356) * sizeof(int)); // work
+        std::vector<int> work2width4356(2 * d->vi->width + 4356); // work
 
         // --------------------------------------------------------------------
         // use some previous frame to fill borders
         int notfilled = 1; // init as not filled (borders by neighbor frames)
 
         if (d->prev > 0)
-            fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi);
+            fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi);
 
         // use next frame to fill borders
         if (d->next > 0) {
-            if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356, &notfilled, frameCtx, vsapi)) {
+            if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi)) {
                 vsapi->freeFrame(dst);
                 vsapi->freeFrame(src);
                 return NULL;
             }
         }
 
-        compensateFrame(src, dst, d, notfilled, &trdif, work2width4356, vsapi);
-
-        free(work2width4356);
+        compensateFrame(src, dst, d, notfilled, &trdif, work2width4356.data(), vsapi);
 
         vsapi->freeFrame(src);
 
@@ -3967,10 +3941,10 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
         d->nfields = 1;
 
 
-    d->motionx = (float *)malloc(d->vi->numFrames * sizeof(float));
-    d->motiony = (float *)malloc(d->vi->numFrames * sizeof(float));
-    d->motionrot = (float *)malloc(d->vi->numFrames * sizeof(float));
-    d->motionzoom = (float *)malloc(d->vi->numFrames * sizeof(float));
+    d->motionx.resize(d->vi->numFrames);
+    d->motiony.resize(d->vi->numFrames);
+    d->motionrot.resize(d->vi->numFrames);
+    d->motionzoom.resize(d->vi->numFrames);
 
     d->motionx[0] = 0.0f;
     d->motiony[0] = 0.0f;
@@ -4039,15 +4013,15 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 
     d->wintsize = (int)(d->fps / (4 * d->cutoff));
     d->radius = d->wintsize;
-    d->wint = (float *)malloc((d->wintsize + 1) * sizeof(float));
+    d->wint.resize(d->wintsize + 1);
 
     float PI = 3.14159265258f;
     for (int i = 0; i < d->wintsize; i++)
         d->wint[i] = cosf(i * 0.5f * PI / d->wintsize);
     d->wint[d->wintsize] = 0;
 
-    d->winrz = (float *)malloc((d->wintsize + 1) * sizeof(float));
-    d->winfz = (float *)malloc((d->wintsize + 1) * sizeof(float));
+    d->winrz.resize(d->wintsize + 1);
+    d->winfz.resize(d->wintsize + 1);
     d->winrzsize = std::min(d->wintsize, (int)(d->fps * d->tzoom / 4));
     d->winfzsize = std::min(d->wintsize, (int)(d->fps * d->tzoom / 4));
     for (int i = 0; i < d->winrzsize; i++)
