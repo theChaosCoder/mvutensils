@@ -599,16 +599,23 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         int64_t nSCD1_old = d->nSCD1;
         vectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
 
-        d->thSAD[0] = d->thSAD[0] * d->nSCD1 / nSCD1_old;             
-        d->thSAD[1] = d->thSAD[2] = d->thSAD[1] * d->nSCD1 / nSCD1_old;
-
-        if (d->thSAD[0] >= INT_MAX || d->thSAD[1] >= INT_MAX) {
+        // Bound the raw thsad/thsadc before the rescale so the multiplication
+        // below cannot overflow int64. nSCD1_old is in (0, maxSAD] here (ScaleThSCD
+        // throws above maxSAD), so INT_MAX * nSCD1_old is safe. d->nSCD1 may
+        // legitimately scale to 0 (tiny thscd1 with small blocks), in which case the
+        // rescale simply yields 0 and there is nothing to overflow.
+        if (d->nSCD1 > 0) {
             int64_t maximum = INT_MAX * nSCD1_old / d->nSCD1;
 
-            bool c = d->thSAD[0] < INT_MAX;
+            if (d->thSAD[0] >= maximum || d->thSAD[1] >= maximum) {
+                bool c = d->thSAD[0] < maximum;
 
-            throw std::runtime_error("with this block size and video format, thsad" + std::string(c ? "c" : "") + " must not exceed " + std::to_string(maximum) + " or some calculations would overflow");
+                throw std::runtime_error("with this block size and video format, thsad" + std::string(c ? "c" : "") + " must not exceed " + std::to_string(maximum) + " or some calculations would overflow");
+            }
         }
+
+        d->thSAD[0] = d->thSAD[0] * d->nSCD1 / nSCD1_old;
+        d->thSAD[1] = d->thSAD[2] = d->thSAD[1] * d->nSCD1 / nSCD1_old;
 
         int pixelMax = (1 << d->vi->format.bitsPerSample) - 1;
 
