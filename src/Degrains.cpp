@@ -589,9 +589,11 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
         int64_t nSCD1_old = d->nSCD1;
         vectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
+        double thscdScale = vectors[0]->GetThSCDScaleFactor(d->vi->format.bitsPerSample);
 
-        d->thSAD[0] = d->thSAD[0] * d->nSCD1 / nSCD1_old;             
-        d->thSAD[1] = d->thSAD[2] = d->thSAD[1] * d->nSCD1 / nSCD1_old;
+        d->thSAD[0] = d->thSAD[0] * thscdScale + .5;
+        d->thSAD[1] = d->thSAD[1] * thscdScale + .5;
+        d->thSAD[2] = d->thSAD[1];
 
         if (d->thSAD[0] >= INT_MAX || d->thSAD[1] >= INT_MAX) {
             int64_t maximum = INT_MAX * nSCD1_old / d->nSCD1;

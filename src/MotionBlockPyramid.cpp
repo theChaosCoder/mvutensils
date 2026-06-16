@@ -1677,21 +1677,24 @@ BlockData MotionBlockPyramid::GetBlock(int nBlk) const noexcept {
     return { bX * (nBlkSizeX - nOverlapX), bY * (nBlkSizeY - nOverlapY), pyramidLevels[0].vectors[nBlk] };
 }
 
-void MotionBlockPyramid::ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const {
+double MotionBlockPyramid::GetThSCDScaleFactor(int bitsPerSample) const {
+    // thscd1 is defined as SAD per reference 8x8 luma block at 8-bit depth.
+    // Scale to the actual block geometry, chroma contribution, and bit depth.
+    const double lumaScale = (double)(nBlkSizeX * nBlkSizeY) / (8.0 * 8.0);
+    const double chromaFactor = chroma ? (1.0 + 2.0 / (xRatioUV * yRatioUV)) : 1.0;
+    const double depthScale = ((1 << bitsPerSample) - 1) / 255.0;
 
-    int maxSAD = 8 * 8 * 255;
+    return lumaScale * chromaFactor * depthScale;
+}
+
+void MotionBlockPyramid::ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const {
+    constexpr int maxSAD = 8 * 8 * 255;
 
     if (thscd1 > maxSAD)
         throw MotionBlockPyramidError("thscd1 can be at most " + std::to_string(maxSAD));
 
     // SCD thresholds
-    int referenceBlockSize = 8 * 8;
-    thscd1 = thscd1 * (nBlkSizeX * nBlkSizeY) / referenceBlockSize;
-    if (chroma)
-        thscd1 += thscd1 / (xRatioUV * yRatioUV) * 2;
-
-    int pixelMax = (1 << bitsPerSample) - 1;
-    thscd1 = (int64_t)((double)thscd1 * pixelMax / 255.0 + 0.5);
+    thscd1 = (int64_t)(thscd1 * GetThSCDScaleFactor(bitsPerSample) + 0.5);
 
     thscd2 = thscd2 * nBlkX * nBlkY / 256;
 }

@@ -299,6 +299,7 @@ public:
 
     bool IsUsable(int64_t thscd1, int thscd2) const noexcept;
     BlockData GetBlock(int nBlk) const noexcept;
+    double GetThSCDScaleFactor(int bitsPerSample) const;
     void ScaleThSCD(int64_t &thscd1, int &thscd2, int bitsPerSample) const;
     State GetState() const noexcept;
     bool HasMotionVectors() const noexcept;
