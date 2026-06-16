@@ -72,7 +72,7 @@ static const VSFrame *VS_CC superGetFrame(int n, int activationReason, void *ins
             pyramid.ExportFrameData(dst, d->prefix);
 
             return dst;
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->freeFrame(src);
             vsapi->freeFrame(srcPel);
             vsapi->setFilterError(("Super: " + std::string(e.what())).c_str(), frameCtx);
@@ -161,7 +161,7 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void
             }
         }
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("Super: " + std::string(e.what())).c_str());
         return;
     }

@@ -213,7 +213,7 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, [[maybe_unused]
         if (!vectors.IsCompatibleForAnalysis(super))
             throw std::runtime_error("wrong source or super clip frame size");
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("Recalculate: " + std::string(e.what())).c_str());
         return;
     }
