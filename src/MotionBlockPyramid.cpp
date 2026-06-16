@@ -1756,7 +1756,7 @@ bool MotionBlockPyramid::IsCompatibleForRecalc(const FramePyramid &other) const 
 
 template<typename PixelType>
 static PixelType MaskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma, int maxVal) noexcept {
-    double norme = (double)(v.x * v.x + v.y * v.y) / (pel * pel);
+    double norme = ((double)v.x * v.x + (double)v.y * v.y) / ((double)pel * pel);
 
     double l = maxVal * pow(norme * fMaskNormFactor2, fHalfGamma);
 
