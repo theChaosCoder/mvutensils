@@ -83,3 +83,27 @@ static inline void mvu_aligned_free(void *ptr) {
     free(ptr);
 #endif
 }
+
+// Resolve the field order for frame n from its frame properties.
+// Reads _Field from props. If the property is missing, throws std::runtime_error
+// if requireField is true and tff_exists is false.
+// When tff_exists is true, _Field is ignored entirely and tff XOR-flipped by frame
+// parity is used instead.
+inline bool GetTopField(const VSFrame *propsSrc, int n, bool tff_exists, bool tff, bool requireField, const VSAPI *vsapi) {
+    int err;
+    const VSMap *props = vsapi->getFramePropertiesRO(propsSrc);
+    bool top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
+    if (err && requireField && !tff_exists)
+        throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
+    if (tff_exists)
+        top_field = tff ^ (n % 2);
+    return top_field;
+}
+
+// Compute the sub-pixel vertical field shift between src and ref frames.
+// Returns nPel/2 if src is top-field and ref is bottom-field,
+//        -nPel/2 if ref is top-field and src is bottom-field,
+//         0      if both fields have the same parity.
+inline int ComputeFieldShift(bool src_top_field, bool ref_top_field, int nPel) noexcept {
+    return (src_top_field && !ref_top_field) ? nPel / 2 : ((ref_top_field && !src_top_field) ? -(nPel / 2) : 0);
+}

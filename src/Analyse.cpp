@@ -80,16 +80,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
             const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
             FramePyramid srcFramePyramid(src, -1, d->prefix, vsapi);
 
-            const VSMap *srcProps = vsapi->getFramePropertiesRO(src);
-            int err;
-
-            bool src_top_field = !!vsapi->mapGetInt(srcProps, "_Field", 0, &err);
-            if (err && d->fields && !d->tff_exists)
-                throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
-
-            // if tff was passed, it overrides _Field.
-            if (d->tff_exists)
-                src_top_field = d->tff ^ (n % 2);
+            bool src_top_field = GetTopField(src, n, d->tff_exists, d->tff, d->fields, vsapi);
 
             MotionBlockPyramid vectorFields(srcFramePyramid, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame);
 
@@ -97,21 +88,11 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->node, frameCtx);
                 FramePyramid refFramePyramid(ref, -1, d->prefix, vsapi);
 
-                const VSMap *refProps = vsapi->getFramePropertiesRO(ref);
-
-                bool ref_top_field = !!vsapi->mapGetInt(refProps, "_Field", 0, &err);
-                if (err && d->fields && !d->tff_exists)
-                    throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
-
-                // if tff was passed, it overrides _Field.
-                if (d->tff_exists)
-                    ref_top_field = d->tff ^ (nref % 2);
+                bool ref_top_field = GetTopField(ref, nref, d->tff_exists, d->tff, d->fields, vsapi);
 
                 int fieldShift = 0;
-                if (d->fields && srcFramePyramid.nPel > 1 && (d->deltaFrame % 2)) {
-                    fieldShift = (src_top_field && !ref_top_field) ? srcFramePyramid.nPel / 2 : ((ref_top_field && !src_top_field) ? -(srcFramePyramid.nPel / 2) : 0);
-                    // vertical shift of fields for fieldbased video at finest level pel2
-                }
+                if (d->fields && srcFramePyramid.nPel > 1 && (d->deltaFrame % 2))
+                    fieldShift = ComputeFieldShift(src_top_field, ref_top_field, srcFramePyramid.nPel);
 
                 vectorFields.SearchMVs(srcFramePyramid, refFramePyramid, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse, d->chroma);
             }

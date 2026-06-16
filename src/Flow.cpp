@@ -116,31 +116,20 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
                 const VSFrame *ref = vsapi->getFrameFilter(nref, d->super, frameCtx);
                 FramePyramid refGOF(ref, 1, d->prefix, vsapi);
 
-                // FIXME, this field shift and combined tff logic is a even more of a mess than usueal
                 int fieldShift = 0;
                 if (d->fields && vectors.nPel > 1 && ((nref - n) % 2 != 0)) {
                     const VSFrame *src = vsapi->getFrameFilter(n, d->super, frameCtx);
+                    try {
+                        bool src_top_field = GetTopField(src, n, d->tff_exists, d->tff, true, vsapi);
 
-                    int err;
-                    const VSMap *props = vsapi->getFramePropertiesRO(src);
-                    int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                    vsapi->freeFrame(src);
-                    if (err && !d->tff_exists)
-                        throw std::runtime_error("_Field property not found in super frame. Therefore, you must pass tff argument");
+                        bool ref_top_field = GetTopField(ref, nref, d->tff_exists, d->tff, true, vsapi);
+                        fieldShift = ComputeFieldShift(src_top_field, ref_top_field, vectors.nPel);
 
-                    if (d->tff_exists)
-                        src_top_field = d->tff ^ (n % 2);
-
-                    props = vsapi->getFramePropertiesRO(ref);
-                    int ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                    if (err && !d->tff_exists)
-                        throw std::runtime_error("_Field property not found in super frame. Therefore, you must pass tff argument");
-
-                    if (d->tff_exists)
-                        ref_top_field = d->tff ^ (nref % 2);
-
-                    fieldShift = (src_top_field && !ref_top_field) ? vectors.nPel / 2 : ((ref_top_field && !src_top_field) ? -(vectors.nPel / 2) : 0);
-                    // vertical shift of fields for fieldbased video at finest level pel2
+                        vsapi->freeFrame(src);
+                    } catch (const std::exception &) {
+                        vsapi->freeFrame(src);
+                        throw;
+                    }
                 }
 
                 auto smallMasks = vectors.MakeSmallVectorMasks(fieldShift);

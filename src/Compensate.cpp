@@ -147,25 +147,9 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
                 int fieldShift = 0;
                 if (fields && nPel > 1 && ((nref - n) % 2 != 0)) {
-                    int err;
-                    const VSMap *props = vsapi->getFramePropertiesRO(src);
-                    int src_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                    if (err && !d->tff_exists)
-                        throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
-
-                    if (d->tff_exists)
-                        src_top_field = d->tff ^ (n % 2);
-
-                    props = vsapi->getFramePropertiesRO(ref);
-                    bool ref_top_field = !!vsapi->mapGetInt(props, "_Field", 0, &err);
-                    if (err && !d->tff_exists)
-                        throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
-
-                    if (d->tff_exists)
-                        ref_top_field = d->tff ^ (nref % 2);
-
-                    fieldShift = (src_top_field && !ref_top_field) ? nPel / 2 : ((ref_top_field && !src_top_field) ? -(nPel / 2) : 0);
-                    // vertical shift of fields for fieldbased video at finest level pel2
+                    bool src_top_field = GetTopField(src, n, d->tff_exists, d->tff, true, vsapi);
+                    bool ref_top_field = GetTopField(ref, nref, d->tff_exists, d->tff, true, vsapi);
+                    fieldShift = ComputeFieldShift(src_top_field, ref_top_field, nPel);
                 }
 
                 if (nOverlapX[0] == 0 && nOverlapY[0] == 0) {
