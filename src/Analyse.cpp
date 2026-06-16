@@ -165,6 +165,11 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
             searchparam = 2;
 
         d->nPelSearch = vsapi->mapGetIntSaturated(in, "pelsearch", 0, &err);
+        if (err)
+            d->nPelSearch = super.nPel;
+
+        if (d->nPelSearch <= 0)
+            throw std::runtime_error("pelsearch must be positive");
 
         d->chroma = !!vsapi->mapGetInt(in, "chroma", 0, &err);
         if (err)
@@ -260,9 +265,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
         if (d->deltaFrame == 0)
             throw std::runtime_error("delta can't be 0");
-
-        if (d->nPelSearch <= 0)
-            d->nPelSearch = super.nPel;
 
         MotionBlockPyramid DryRun(super, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame);
 
