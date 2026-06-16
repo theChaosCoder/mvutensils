@@ -275,6 +275,12 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
                         // Output the finalized rows (non-overlapping portion)
                         for (int plane = 0; plane < num_planes; plane++) {
+                            // The analysis grid always covers the frame (the super clip is padded
+                            // up to a multiple of the block geometry), so ToPixels below writes
+                            // every output column/row. Assert that invariant instead of silently
+                            // leaving edge pixels undefined should it ever be violated.
+                            assert(nWidth_B[plane] >= vsapi->getFrameWidth(dst, plane) && nHeight_B[plane] >= vsapi->getFrameHeight(dst, plane));
+
                             int planeRowsToOutput = (by == nBlkY - 1) ? nBlkSizeY[plane] : (nBlkSizeY[plane] - nOverlapY[plane]);
                             int outputHeight = std::min(planeRowsToOutput, std::min(vsapi->getFrameHeight(dst, plane), nHeight_B[plane]) - by * (nBlkSizeY[plane] - nOverlapY[plane]));
 
