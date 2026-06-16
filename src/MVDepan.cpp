@@ -1,66 +1,78 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
+#include <memory>
 #include <mutex>
 #include <string>
-#include <cmath>
 
 #include <fftw3.h>
 
 #include <VapourSynth4.h>
 #include <VSHelper4.h>
 
-#include "Fakery.h"
-#include "MVAnalysisData.h"
-#include "CommonMacros.h"
+#include "Common.h"
+#include "SuperPyramid.h"
+#include "MotionBlockPyramid.h"
 
-
-
-#define prop_DepanAnalyse_info "DepanAnalyse_info"
-#define prop_DepanEstimate_info "DepanEstimate_info"
-#define prop_DepanCompensate_info "DepanCompensate_info"
-#define prop_DepanStabilise_info "DepanStabilise_info"
+constexpr char prop_DepanAnalyse_info[] = "DepanAnalyse_info";
+constexpr char prop_DepanEstimate_info[] = "DepanEstimate_info";
+constexpr char prop_DepanCompensate_info[] = "DepanCompensate_info";
+constexpr char prop_DepanStabilise_info[] = "DepanStabilise_info";
 
 // stage 1 to stage 2
-#define prop_DepanEstimateFFT "DepanEstimateFFT"
-#define prop_DepanEstimateFFT2 "DepanEstimateFFT2"
+constexpr char prop_DepanEstimateFFT[] = "DepanEstimateFFT";
+constexpr char prop_DepanEstimateFFT2[] = "DepanEstimateFFT2";
 
 // stage 2 to stage 3
-#define prop_DepanEstimateX "DepanEstimateX"
-#define prop_DepanEstimateY "DepanEstimateY"
-#define prop_DepanEstimateZoom "DepanEstimateZoom"
-#define prop_DepanEstimateTrust "DepanEstimateTrust"
+constexpr char prop_DepanEstimateX[] = "DepanEstimateX";
+constexpr char prop_DepanEstimateY[] = "DepanEstimateY";
+constexpr char prop_DepanEstimateZoom[] = "DepanEstimateZoom";
+constexpr char prop_DepanEstimateTrust[] = "DepanEstimateTrust";
 
-#define prop_Depan_dx "Depan_dx"
-#define prop_Depan_dy "Depan_dy"
-#define prop_Depan_zoom "Depan_zoom"
-#define prop_Depan_rot "Depan_rot"
+constexpr char prop_Depan_dx[] = "Depan_dx";
+constexpr char prop_Depan_dy[] = "Depan_dy";
+constexpr char prop_Depan_zoom[] = "Depan_zoom";
+constexpr char prop_Depan_rot[] = "Depan_rot";
+
+// FIXME, why not NaN or inf as special values?
+constexpr float MOTIONUNKNOWN = 9999.0f;
+constexpr float MOTIONBAD = 0.0f;
+
+struct DepanAnalyseData {
+    VSNode *clip = nullptr;
+    VSNode *vectors = nullptr;
+    VSNode *mask = nullptr;
+    int zoom = 0;
+    int rot = 0;
+    float pixaspect = 0.0f;
+    float error = 0.0f;
+    int info = 0;
+    float wrong = 0.0f;
+    float zerow = 0.0f;
+    int64_t thscd1 = 0;
+    int thscd2 = 0;
+    int fields = 0;
+    bool tff = false;
+    bool tff_exists = false;
+
+    int deltaFrame = 0;
+
+    std::string prefix;
+
+    const VSVideoInfo *vi = nullptr;
+
+    const VSAPI *vsapi = nullptr;
+
+    DepanAnalyseData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~DepanAnalyseData() {
+        vsapi->freeNode(clip);
+        vsapi->freeNode(vectors);
+        vsapi->freeNode(mask);
+    }
+};
 
 
-#define MOTIONUNKNOWN 9999.0f
-#define MOTIONBAD 0.0f
-
-
-typedef struct DepanAnalyseData {
-    VSNode *clip;
-    VSNode *vectors;
-    VSNode *mask;
-    int zoom;
-    int rot;
-    float pixaspect;
-    float error;
-    int info;
-    float wrong;
-    float zerow;
-    int64_t thscd1;
-    int thscd2;
-    int fields;
-    int tff;
-    int tff_exists;
-
-    const VSVideoInfo *vi;
-    MVAnalysisData vectors_data;
-} DepanAnalyseData;
-
-
-typedef struct transform {
+struct transform {
 // structure of global motion transform
 //  which defines source (xsrc, ysrc)  for current destination (x,y)
 //   xsrc = dxc + dxx*x + dxy*y
@@ -72,27 +84,28 @@ typedef struct transform {
     float dyc;
     float dyx;
     float dyy;
-} transform;
 
+    void setNull() {
+        dxc = 0.0f;
+        dxx = 1.0f;
+        dxy = 0.0f;
+        dyc = 0.0f;
+        dyx = 0.0f;
+        dyy = 1.0f;
+    }
 
-static void setNull(transform *tr) {
-    tr->dxc = 0.0f;
-    tr->dxx = 1.0f;
-    tr->dxy = 0.0f;
-    tr->dyc = 0.0f;
-    tr->dyx = 0.0f;
-    tr->dyy = 1.0f;
-}
-
+    transform() {
+        setNull();
+    }
+};
 
 static void transform2motion(const transform *tr, int forward, float xcenter, float ycenter, float pixaspect, float *dx, float *dy, float *rot, float *zoom) {
-    const float PI = 3.1415926535897932384626433832795f;
-    float rotradian, sinus, cosinus;
+    constexpr float PI = static_cast<float>(M_PI);
 
-    rotradian = -atanf(pixaspect * tr->dxy / tr->dxx);
+    float rotradian = -atanf(pixaspect * tr->dxy / tr->dxx);
     *rot = rotradian * 180 / PI;
-    sinus = sinf(rotradian);
-    cosinus = cosf(rotradian);
+    float sinus = sinf(rotradian);
+    float cosinus = cosf(rotradian);
     *zoom = tr->dxx / cosinus;
 
     if (forward) { //  get motion for forward
@@ -235,12 +248,10 @@ static void RejectBadBlocks(const transform *tr, const float *blockDx, const flo
 
 
 static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
-
-    DepanAnalyseData *d = (DepanAnalyseData *)instanceData;
+    DepanAnalyseData *d = reinterpret_cast<DepanAnalyseData *>(instanceData);
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(d->vectors_data.isBackward ? VSMAX(0, n - 1) : n, d->vectors, frameCtx);
+        vsapi->requestFrameFilter((d->deltaFrame > 0) ? std::max(0, n - 1) : n, d->vectors, frameCtx);
         vsapi->requestFrameFilter(n, d->clip, frameCtx);
 
         if (d->mask)
@@ -264,9 +275,13 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
             mask_pitch = vsapi->getStride(mask, 0);
         }
 
-        const int backward = d->vectors_data.isBackward;
+        const bool backward = d->deltaFrame > 0;
+        int nframemv = backward ? std::max(0, n - 1) : n; // set prev frame number as data frame if backward
 
-        const size_t num_blocks = (size_t)d->vectors_data.nBlkX * (size_t)d->vectors_data.nBlkY;
+        const VSFrame *mvn = vsapi->getFrameFilter(nframemv, d->vectors, frameCtx);
+        MotionBlockPyramid vectors(mvn, 1, d->prefix, vsapi);
+
+        const size_t num_blocks = (size_t)vectors.nBlkX * (size_t)vectors.nBlkY;
 
         float *blockDx =         (float *)malloc(num_blocks * sizeof(float)); // dx vector
         float *blockDy =         (float *)malloc(num_blocks * sizeof(float)); // dy
@@ -278,34 +293,22 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
         transform tr;
 
-        // init motion transform as null
-        setNull(&tr);
-
         float errorcur = d->error * 2;
         int iter = 0; // start iteration
 
-        int nframemv = backward ? VSMAX(0, n - 1) : n; // set prev frame number as data frame if backward
-        FakeGroupOfPlanes fgop;
-        fgopInit(&fgop, &d->vectors_data);
 
-        const VSFrame *mvn = vsapi->getFrameFilter(nframemv, d->vectors, frameCtx);
-        const VSMap *mvn_props = vsapi->getFramePropertiesRO(mvn);
+        if (vectors.IsUsable(d->thscd1, d->thscd2)) {
+            const float dPel = 1.0f / vectors.nPel; // subpixel precision value
 
-        fgopUpdate(&fgop, (const uint8_t *)vsapi->mapGetData(mvn_props, prop_MVTools_vectors, 0, NULL));
-        vsapi->freeFrame(mvn);
-
-        if (fgopIsUsable(&fgop, d->thscd1, d->thscd2)) {
-            const float dPel = 1.0f / d->vectors_data.nPel; // subpixel precision value
-
-            for (int j = 0; j < d->vectors_data.nBlkY; j++) {
-                for (int i = 0; i < d->vectors_data.nBlkX; i++) {
-                    int nb = j * d->vectors_data.nBlkX + i;
-                    const FakeBlockData *fbd = fgopGetBlock(&fgop, 0, nb);
-                    blockDx[nb] = fbd->vector.x * dPel;
-                    blockDy[nb] = fbd->vector.y * dPel;
-                    blockSAD[nb] = fbd->vector.sad;
-                    blockX[nb] = fbd->x + d->vectors_data.nBlkSizeX / 2;
-                    blockY[nb] = fbd->y + d->vectors_data.nBlkSizeY / 2;
+            for (int j = 0; j < vectors.nBlkY; j++) {
+                for (int i = 0; i < vectors.nBlkX; i++) {
+                    int nb = j * vectors.nBlkX + i;
+                    const auto fbd = vectors.GetBlock(nb);
+                    blockDx[nb] = fbd.vector.x * dPel;
+                    blockDy[nb] = fbd.vector.y * dPel;
+                    blockSAD[nb] = fbd.vector.sad;
+                    blockX[nb] = fbd.x + vectors.nBlkSizeX / 2;
+                    blockY[nb] = fbd.y + vectors.nBlkSizeY / 2;
                     if (d->mask && blockX[nb] < d->vi->width && blockY[nb] < d->vi->height)
                         blockWeightMask[nb] = maskp[blockX[nb] + blockY[nb] * mask_pitch];
                     else
@@ -323,8 +326,8 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
 
             for (; iter < 5; iter++) {
-                TrasformUpdate(&tr, blockDx, blockDy, blockX, blockY, blockWeight, d->vectors_data.nBlkX, d->vectors_data.nBlkY, safety, ifZoom0, ifRot0, &errorcur, d->pixaspect / nFields);
-                RejectBadBlocks(&tr, blockDx, blockDy, blockSAD, blockX, blockY, blockWeight, d->vectors_data.nBlkX, d->vectors_data.nBlkY, d->wrong, globalDif0, d->thscd1, d->zerow, blockWeightMask, ignoredBorder);
+                TrasformUpdate(&tr, blockDx, blockDy, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, safety, ifZoom0, ifRot0, &errorcur, d->pixaspect / nFields);
+                RejectBadBlocks(&tr, blockDx, blockDy, blockSAD, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif0, d->thscd1, d->zerow, blockWeightMask, ignoredBorder);
             }
 
 
@@ -338,15 +341,13 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
                 else
                     safety = 1.0f;
                 float errorprev = errorcur;
-                TrasformUpdate(&tr, blockDx, blockDy, blockX, blockY, blockWeight, d->vectors_data.nBlkX, d->vectors_data.nBlkY, safety, d->zoom, d->rot, &errorcur, d->pixaspect / nFields);
+                TrasformUpdate(&tr, blockDx, blockDy, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, safety, d->zoom, d->rot, &errorcur, d->pixaspect / nFields);
                 if (((errorprev - errorcur) < errordif * 0.5f && iter > 9) || errorcur < errordif)
                     break; // check convergence, accuracy increased in v1.2.5
                 float globalDif = errorcur * 2;
-                RejectBadBlocks(&tr, blockDx, blockDy, blockSAD, blockX, blockY, blockWeight, d->vectors_data.nBlkX, d->vectors_data.nBlkY, d->wrong, globalDif, d->thscd1, d->zerow, blockWeightMask, ignoredBorder);
+                RejectBadBlocks(&tr, blockDx, blockDy, blockSAD, blockX, blockY, blockWeight, vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif, d->thscd1, d->zerow, blockWeightMask, ignoredBorder);
             }
         }
-
-        fgopDeinit(&fgop);
 
         // we get transform (null if scenechange)
 
@@ -360,7 +361,7 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
         if (errorcur < d->error) { // if not bad result
             // convert transform data to ordinary motion format
-            if (d->vectors_data.isBackward) {
+            if (backward) {
                 transform trinv;
                 inversetransform(&tr, &trinv);
                 transform2motion(&trinv, 0, xcenter, ycenter, d->pixaspect / nFields, &motionx, &motiony, &motionrot, &motionzoom);
@@ -429,20 +430,6 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
     return NULL;
 }
 
-
-static void VS_CC depanAnalyseFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
-    DepanAnalyseData *d = (DepanAnalyseData *)instanceData;
-
-    vsapi->freeNode(d->clip);
-    vsapi->freeNode(d->vectors);
-    vsapi->freeNode(d->mask);
-
-    free(d);
-}
-
-
 static int invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VSAPI *vsapi) {
     VSPlugin *text_plugin = vsapi->getPluginByID("com.vapoursynth.text", core);
 
@@ -470,153 +457,117 @@ static int invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VS
 }
 
 
-static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
+static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+    std::unique_ptr<DepanAnalyseData> d = std::make_unique<DepanAnalyseData>(vsapi);
 
-    DepanAnalyseData d;
-    memset(&d, 0, sizeof(d));
+    try {
+        int err;
 
-    int err;
+        d->zoom = !!vsapi->mapGetInt(in, "zoom", 0, &err);
+        if (err)
+            d->zoom = 1;
 
-    d.zoom = !!vsapi->mapGetInt(in, "zoom", 0, &err);
-    if (err)
-        d.zoom = 1;
+        d->rot = !!vsapi->mapGetInt(in, "rot", 0, &err);
+        if (err)
+            d->rot = 1;
 
-    d.rot = !!vsapi->mapGetInt(in, "rot", 0, &err);
-    if (err)
-        d.rot = 1;
+        d->pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
+        if (err)
+            d->pixaspect = 1.0f;
 
-    d.pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
-    if (err)
-        d.pixaspect = 1.0f;
+        d->error = (float)vsapi->mapGetFloat(in, "error", 0, &err);
+        if (err)
+            d->error = 15.0f;
 
-    d.error = (float)vsapi->mapGetFloat(in, "error", 0, &err);
-    if (err)
-        d.error = 15.0f;
+        d->info = !!vsapi->mapGetInt(in, "info", 0, &err);
 
-    d.info = !!vsapi->mapGetInt(in, "info", 0, &err);
+        d->wrong = (float)vsapi->mapGetFloat(in, "wrong", 0, &err);
+        if (err)
+            d->wrong = 10.0f;
 
-    d.wrong = (float)vsapi->mapGetFloat(in, "wrong", 0, &err);
-    if (err)
-        d.wrong = 10.0f;
+        d->zerow = (float)vsapi->mapGetFloat(in, "zerow", 0, &err);
+        if (err)
+            d->zerow = 0.05f;
 
-    d.zerow = (float)vsapi->mapGetFloat(in, "zerow", 0, &err);
-    if (err)
-        d.zerow = 0.05f;
+        d->thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
+        if (err)
+            d->thscd1 = MV_DEFAULT_SCD1;
 
-    d.thscd1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
-    if (err)
-        d.thscd1 = MV_DEFAULT_SCD1;
+        d->thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
+        if (err)
+            d->thscd2 = MV_DEFAULT_SCD2;
 
-    d.thscd2 = vsapi->mapGetIntSaturated(in, "thscd2", 0, &err);
-    if (err)
-        d.thscd2 = MV_DEFAULT_SCD2;
+        d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 
-    d.fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
+        d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
+        d->tff_exists = !err;
 
-    d.tff = !!vsapi->mapGetInt(in, "tff", 0, &d.tff_exists);
-    d.tff_exists = !d.tff_exists;
+        if (d->pixaspect <= 0.0f)
+            throw std::runtime_error("pixaspect must be positive");
+
+        d->clip = vsapi->mapGetNode(in, "clip", 0, NULL);
+        d->vi = vsapi->getVideoInfo(d->clip);
+
+        if (!vsh::isConstantVideoFormat(d->vi))
+            throw std::runtime_error("clip must have constant format and dimensions");
+
+        d->vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
+
+        MotionBlockPyramid vectors(d->vectors, d->prefix, vsapi);
+
+        // FIXME, check vector clip compatibility
+
+        if (d->vi->numFrames > vsapi->getVideoInfo(d->vectors)->numFrames)
+            throw std::runtime_error("vectors must have at least as many frames as clip");
+
+        d->mask = vsapi->mapGetNode(in, "mask", 0, &err);
+
+        if (d->mask) {
+            const VSVideoInfo *maskvi = vsapi->getVideoInfo(d->mask);
+
+            if (d->vi->numFrames > maskvi->numFrames)
+                throw std::runtime_error("mask must have at least as many frames as clip");
 
 
-    if (d.pixaspect <= 0.0f) {
-        vsapi->mapSetError(out, "DepanAnalyse: pixaspect must be positive.");
-        return;
-    }
-
-
-    d.clip = vsapi->mapGetNode(in, "clip", 0, NULL);
-    d.vi = vsapi->getVideoInfo(d.clip);
-
-    if (!vsh::isConstantVideoFormat(d.vi)) {
-        vsapi->mapSetError(out, "DepanAnalyse: clip must have constant format and dimensions.");
-        vsapi->freeNode(d.clip);
-        return;
-    }
-
-    d.vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
-
-    if (d.vi->numFrames > vsapi->getVideoInfo(d.vectors)->numFrames) {
-        vsapi->mapSetError(out, "DepanAnalyse: vectors must have at least as many frames as clip.");
-        vsapi->freeNode(d.vectors);
-        vsapi->freeNode(d.clip);
-        return;
-    }
-
-    d.mask = vsapi->mapGetNode(in, "mask", 0, &err);
-
-    if (d.mask) {
-        const VSVideoInfo *maskvi = vsapi->getVideoInfo(d.mask);
-
-        if (d.vi->numFrames > maskvi->numFrames) {
-            vsapi->mapSetError(out, "DepanStabilise: mask must have at least as many frames as clip.");
-            vsapi->freeNode(d.mask);
-            vsapi->freeNode(d.vectors);
-            vsapi->freeNode(d.clip);
-            return;
+            if (!vsh::isConstantVideoFormat(maskvi) ||
+                maskvi->width != d->vi->width ||
+                maskvi->height != d->vi->height ||
+                maskvi->format.bitsPerSample > 8) {
+                throw std::runtime_error("mask must have constant format, the same dimensions as clip, and no more than 8 bits per sample");
+            }
         }
 
-        if (!vsh::isConstantVideoFormat(maskvi) ||
-            maskvi->width != d.vi->width ||
-            maskvi->height != d.vi->height ||
-            maskvi->format.bitsPerSample > 8) {
-            vsapi->mapSetError(out, "DepanStabilise: mask must have constant format, the same dimensions as clip, and no more than 8 bits per sample.");
-            vsapi->freeNode(d.mask);
-            vsapi->freeNode(d.vectors);
-            vsapi->freeNode(d.clip);
-            return;
-        }
-    }
+        vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
 
+        if (abs(vectors.nDeltaFrame) != 1)
+            throw std::runtime_error("vectors clip must be created with delta=1 or -1");
 
-#define ERROR_SIZE 512
-    char error[ERROR_SIZE + 1] = { 0 };
-    const char *filter_name = "DepanAnalyse";
-
-    adataFromVectorClip(&d.vectors_data, d.vectors, filter_name, "vectors", vsapi, error, ERROR_SIZE);
-
-    scaleThSCD(&d.thscd1, &d.thscd2, &d.vectors_data, filter_name, error, ERROR_SIZE);
-
-    if (d.vectors_data.nDeltaFrame != 1)
-        snprintf(error, ERROR_SIZE, "DepanAnalyse: vectors clip must be created with delta=1.");
-#undef ERROR_SIZE
-
-    if (error[0]) {
-        vsapi->mapSetError(out, error);
-
-        vsapi->freeNode(d.clip);
-        vsapi->freeNode(d.vectors);
-        vsapi->freeNode(d.mask);
+    } catch (const std::exception &e) {
+        vsapi->mapSetError(out, e.what());
         return;
     }
-
-
-    DepanAnalyseData *data = (DepanAnalyseData *)malloc(sizeof(d));
-    *data = d;
 
     VSFilterDependency deps[3] = { 
-        {data->clip, rpStrictSpatial},
-        {data->vectors, rpGeneral},
-        {data->mask, rpStrictSpatial},
+        {d->clip, rpStrictSpatial},
+        {d->vectors, rpGeneral},
+        {d->mask, rpStrictSpatial},
     };
 
-    vsapi->createVideoFilter(out, "DepanAnalyse", data->vi, depanAnalyseGetFrame, depanAnalyseFree, fmParallel, deps, ARRAY_SIZE(deps), data, core);
+    vsapi->createVideoFilter(out, "DepanAnalyse", d->vi, depanAnalyseGetFrame, filterFree<DepanAnalyseData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
 
-    if (vsapi->mapGetError(out)) {
-        depanAnalyseFree(data, core, vsapi);
+    if (vsapi->mapGetError(out))
         return;
-    }
 
-    if (d.info) {
+    if (d->info) {
         if (!invokeFrameProps(prop_DepanAnalyse_info, out, core, vsapi)) {
-            vsapi->mapSetError(out, std::string("DepanAnalyse: failed to invoke text.FrameProps: ").append(vsapi->mapGetError(out)).c_str());
+            vsapi->mapSetError(out, std::string("failed to invoke text.FrameProps: ").append(vsapi->mapGetError(out)).c_str());
             return;
         }
     }
 }
 
-
-typedef struct DepanEstimateData {
-    VSNode *clip;
+struct DepanEstimateData {
+    VSNode *clip = nullptr;
     float trust_limit;
     int winx;
     int winy;
@@ -644,7 +595,17 @@ typedef struct DepanEstimateData {
     fftwf_complex *unused_array;
 
     fftwf_plan plan, planinv;
-} DepanEstimateData;
+
+    std::string prefix;
+
+    const VSAPI *vsapi;
+
+    DepanEstimateData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~DepanEstimateData() {
+        vsapi->freeNode(clip);
+    }
+};
 
 
 // put source data to real array for FFT
@@ -954,9 +915,7 @@ static void showcorrelation(const float * MVU_RESTRICT correl, int winx, int win
 
 
 static const VSFrame *VS_CC depanEstimateStage1GetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
-
-    DepanEstimateData *d = (DepanEstimateData *)instanceData;
+    DepanEstimateData *d = reinterpret_cast<DepanEstimateData *>(instanceData);
 
     if (activationReason == arInitial) {
         vsapi->requestFrameFilter(n, d->clip, frameCtx);
@@ -997,16 +956,14 @@ static const VSFrame *VS_CC depanEstimateStage1GetFrame(int n, int activationRea
 }
 
 
-static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
-
-    DepanEstimateData *d = (DepanEstimateData *)instanceData;
+static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
+    DepanEstimateData *d = reinterpret_cast<DepanEstimateData *>(instanceData);
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(VSMAX(0, n - 1), d->clip, frameCtx);
+        vsapi->requestFrameFilter(std::max(0, n - 1), d->clip, frameCtx);
         vsapi->requestFrameFilter(n, d->clip, frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame *prev = vsapi->getFrameFilter(VSMAX(0, n - 1), d->clip, frameCtx);
+        const VSFrame *prev = vsapi->getFrameFilter(std::max(0, n - 1), d->clip, frameCtx);
         const VSFrame *cur = vsapi->getFrameFilter(n, d->clip, frameCtx);
 
         const VSMap *prev_props = vsapi->getFramePropertiesRO(prev);
@@ -1017,32 +974,21 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
         if (d->fields) {
             top_field = !!vsapi->mapGetInt(cur_props, "_Field", 0, &err);
 
-            if (err && !d->tff_exists) {
-                vsapi->setFilterError("DepanEstimate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                vsapi->freeFrame(prev);
-                vsapi->freeFrame(cur);
-                return NULL;
-            }
+            if (err && !d->tff_exists)
+                throw std::runtime_error("DepanEstimate: _Field property not found in input frame. Therefore, you must pass tff argument");
 
             if (d->tff_exists)
                 top_field = d->tff ^ (n % 2);
         }
 
         if (d->fftsize != (size_t)vsapi->mapGetDataSize(prev_props, prop_DepanEstimateFFT, 0, &err) ||
-            d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT, 0, &err)) {
-            vsapi->setFilterError("DepanEstimate: temporary property '" prop_DepanEstimateFFT "' has the wrong size. This should never happen.", frameCtx);
-            vsapi->freeFrame(prev);
-            vsapi->freeFrame(cur);
-            return NULL;
-        }
+            d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT, 0, &err))
+            throw std::runtime_error(("DepanEstimate: temporary property '" + std::string(prop_DepanEstimateFFT) + "' has the wrong size. This should never happen").c_str());
+
         if (d->zoommax != 1.0f) {
             if (d->fftsize != (size_t)vsapi->mapGetDataSize(prev_props, prop_DepanEstimateFFT2, 0, &err) ||
-                d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT2, 0, &err)) {
-                vsapi->setFilterError("DepanEstimate: temporary property '" prop_DepanEstimateFFT2 "' has the wrong size. This should never happen.", frameCtx);
-                vsapi->freeFrame(prev);
-                vsapi->freeFrame(cur);
-                return NULL;
-            }
+                d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT2, 0, &err))
+                throw std::runtime_error(("DepanEstimate: temporary property '" + std::string(prop_DepanEstimateFFT2) + "' has the wrong size. This should never happen").c_str());
         }
 
         const fftwf_complex *fftprev = (const fftwf_complex *)vsapi->mapGetData(prev_props, prop_DepanEstimateFFT, 0, &err);
@@ -1176,7 +1122,7 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
             int err;
             trust[i] = (float)vsapi->mapGetFloat(src_props[i], prop_DepanEstimateTrust, 0, &err);
             if (err) {
-                vsapi->setFilterError("DepanEstimate: temporary property '" prop_DepanEstimateTrust "' not found in input frame. This should never happen.", frameCtx);
+                vsapi->setFilterError(("DepanEstimate: temporary property '" + std::string(prop_DepanEstimateTrust) + "' not found in input frame. This should never happen.").c_str(), frameCtx);
                 for (int j = 0; j < 3; j++)
                     vsapi->freeFrame(src[j]);
                 return NULL;
@@ -1269,184 +1215,183 @@ static void VS_CC depanEstimateFree(void *instanceData, VSCore *core, const VSAP
 
 
 static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
-
-    DepanEstimateData d;
-    memset(&d, 0, sizeof(d));
+    std::unique_ptr<DepanEstimateData> d = std::make_unique<DepanEstimateData>(vsapi);
 
     int err;
 
-    d.trust_limit = (float)vsapi->mapGetFloat(in, "trust", 0, &err);
+    d->trust_limit = (float)vsapi->mapGetFloat(in, "trust", 0, &err);
     if (err)
-        d.trust_limit = 4.0f;
+        d->trust_limit = 4.0f;
 
-    d.winx = vsapi->mapGetIntSaturated(in, "winx", 0, &err);
+    d->winx = vsapi->mapGetIntSaturated(in, "winx", 0, &err);
 
-    d.winy = vsapi->mapGetIntSaturated(in, "winy", 0, &err);
+    d->winy = vsapi->mapGetIntSaturated(in, "winy", 0, &err);
 
-    d.wleft = vsapi->mapGetIntSaturated(in, "wleft", 0, &err);
+    d->wleft = vsapi->mapGetIntSaturated(in, "wleft", 0, &err);
     if (err)
-        d.wleft = -1;
+        d->wleft = -1;
 
-    d.wtop = vsapi->mapGetIntSaturated(in, "wtop", 0, &err);
+    d->wtop = vsapi->mapGetIntSaturated(in, "wtop", 0, &err);
     if (err)
-        d.wtop = -1;
+        d->wtop = -1;
 
-    d.dxmax = vsapi->mapGetIntSaturated(in, "dxmax", 0, &err);
+    d->dxmax = vsapi->mapGetIntSaturated(in, "dxmax", 0, &err);
     if (err)
-        d.dxmax = -1;
+        d->dxmax = -1;
 
-    d.dymax = vsapi->mapGetIntSaturated(in, "dymax", 0, &err);
+    d->dymax = vsapi->mapGetIntSaturated(in, "dymax", 0, &err);
     if (err)
-        d.dymax = -1;
+        d->dymax = -1;
 
-    d.zoommax = (float)vsapi->mapGetFloat(in, "zoommax", 0, &err);
+    d->zoommax = (float)vsapi->mapGetFloat(in, "zoommax", 0, &err);
     if (err)
-        d.zoommax = 1.0f;
+        d->zoommax = 1.0f;
 
-    d.stab = (float)vsapi->mapGetFloat(in, "stab", 0, &err);
+    d->stab = (float)vsapi->mapGetFloat(in, "stab", 0, &err);
     if (err)
-        d.stab = 1.0f;
+        d->stab = 1.0f;
 
-    d.pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
+    d->pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
     if (err)
-        d.pixaspect = 1.0f;
+        d->pixaspect = 1.0f;
 
-    d.info = !!vsapi->mapGetInt(in, "info", 0, &err);
+    d->info = !!vsapi->mapGetInt(in, "info", 0, &err);
 
-    d.show = !!vsapi->mapGetInt(in, "show", 0, &err);
+    d->show = !!vsapi->mapGetInt(in, "show", 0, &err);
 
-    d.fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
+    d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 
-    d.tff = !!vsapi->mapGetInt(in, "tff", 0, &d.tff_exists);
-    d.tff_exists = !d.tff_exists;
+    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &d->tff_exists);
+    d->tff_exists = !d->tff_exists;
 
 
-    if (d.trust_limit < 0.0f || d.trust_limit > 100.0f) {
+    if (d->trust_limit < 0.0f || d->trust_limit > 100.0f) {
         vsapi->mapSetError(out, "DepanEstimate: trust must be between 0.0 and 100.0 (inclusive).");
         return;
     }
 
-    if (d.pixaspect <= 0.0f) {
+    if (d->pixaspect <= 0.0f) {
         vsapi->mapSetError(out, "DepanEstimate: pixaspect must be positive.");
         return;
     }
 
 
-    d.clip = vsapi->mapGetNode(in, "clip", 0, NULL);
-    d.vi = vsapi->getVideoInfo(d.clip);
+    d->clip = vsapi->mapGetNode(in, "clip", 0, NULL);
+    d->vi = vsapi->getVideoInfo(d->clip);
 
 
-    if (!vsh::isConstantVideoFormat(d.vi) ||
-        (d.vi->format.colorFamily != cfYUV && d.vi->format.colorFamily != cfGray) ||
-        (d.vi->format.sampleType == stInteger && d.vi->format.bitsPerSample > 16) ||
-        (d.vi->format.sampleType == stFloat && d.vi->format.bitsPerSample != 32)) {
+    if (!vsh::isConstantVideoFormat(d->vi) ||
+        (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray) ||
+        (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) ||
+        (d->vi->format.sampleType == stFloat && d->vi->format.bitsPerSample != 32)) {
         vsapi->mapSetError(out, "DepanEstimate: clip must have constant format and dimensions, it must be YUV or Gray, and it must be 8..16 bit integer or 32 bit float.");
-        vsapi->freeNode(d.clip);
+        vsapi->freeNode(d->clip);
         return;
     }
 
     // used only for luma
-    if (d.vi->format.sampleType == stFloat)
-        d.pixel_max = 1;
+    if (d->vi->format.sampleType == stFloat)
+        d->pixel_max = 1;
     else
-        d.pixel_max = (1 << d.vi->format.bitsPerSample) - 1;
+        d->pixel_max = (1 << d->vi->format.bitsPerSample) - 1;
 
 
-    int wleft0 = d.wleft; // save
-    if (d.wleft < 0)
-        d.wleft = 0; // auto
+    int wleft0 = d->wleft; // save
+    if (d->wleft < 0)
+        d->wleft = 0; // auto
 
     // check and set fft window x size
 
-    if (d.winx > d.vi->width - d.wleft) {
+    if (d->winx > d->vi->width - d->wleft) {
         vsapi->mapSetError(out, "DepanEstimate: winx must not be greater than width-wleft.");
-        vsapi->freeNode(d.clip);
+        vsapi->freeNode(d->clip);
         return;
     }
     int i;
     int wx;
-    if (d.winx == 0) { // auto
-        d.winx = d.vi->width - d.wleft;
+    if (d->winx == 0) { // auto
+        d->winx = d->vi->width - d->wleft;
         // find max fft window size (power of 2)
         wx = 1;
         for (i = 0; i < 13; i++) {
-            if (wx * 2 <= d.winx)
+            if (wx * 2 <= d->winx)
                 wx = wx * 2;
         }
-        d.winx = wx;
+        d->winx = wx;
     }
 
-    if (d.zoommax != 1.0f) {
-        d.winx = d.winx / 2; // devide window x by 2 part (left and right)
+    if (d->zoommax != 1.0f) {
+        d->winx = d->winx / 2; // devide window x by 2 part (left and right)
         if (wleft0 < 0)
-            d.wleft = (d.vi->width - d.winx * 2) / 4;
+            d->wleft = (d->vi->width - d->winx * 2) / 4;
     } else if (wleft0 < 0)
-        d.wleft = (d.vi->width - d.winx) / 2;
+        d->wleft = (d->vi->width - d->winx) / 2;
 
 
-    int wtop0 = d.wtop; // save
-    if (d.wtop < 0)
-        d.wtop = 0; // auto
+    int wtop0 = d->wtop; // save
+    if (d->wtop < 0)
+        d->wtop = 0; // auto
 
     // check and set fft window y size
-    if (d.winy > d.vi->height - d.wtop) {
+    if (d->winy > d->vi->height - d->wtop) {
         vsapi->mapSetError(out, "DepanEstimate: winy must not be greater than height-wtop.");
-        vsapi->freeNode(d.clip);
+        vsapi->freeNode(d->clip);
         return;
     }
     int wy;
-    if (d.winy == 0) {
-        d.winy = d.vi->height - d.wtop; // start value
+    if (d->winy == 0) {
+        d->winy = d->vi->height - d->wtop; // start value
         // find max fft window size (power of 2)
         wy = 1;
         for (i = 0; i < 13; i++) {
-            if (wy * 2 <= d.winy)
+            if (wy * 2 <= d->winy)
                 wy = wy * 2;
         }
-        d.winy = wy;
+        d->winy = wy;
     }
 
     if (wtop0 < 0)
-        d.wtop = (d.vi->height - d.winy) / 2; // auto
+        d->wtop = (d->vi->height - d->winy) / 2; // auto
 
     // max dx shift must be less than winx/2
-    if (d.dxmax < 0)
-        d.dxmax = d.winx / 4; // default
-    if (d.dymax < 0)
-        d.dymax = d.winy / 4; // default
+    if (d->dxmax < 0)
+        d->dxmax = d->winx / 4; // default
+    if (d->dymax < 0)
+        d->dymax = d->winy / 4; // default
 
-    if (d.dxmax >= d.winx / 2) {
+    if (d->dxmax >= d->winx / 2) {
         vsapi->mapSetError(out, "DepanEstimate: dxmax must be less than winx/2.");
-        vsapi->freeNode(d.clip);
+        vsapi->freeNode(d->clip);
         return;
     }
-    if (d.dymax >= d.winy / 2) {
+    if (d->dymax >= d->winy / 2) {
         vsapi->mapSetError(out, "DepanEstimate: dymax must be less than winy/2.");
-        vsapi->freeNode(d.clip);
+        vsapi->freeNode(d->clip);
         return;
     }
 
 
-    int winxpadded = (d.winx / 2 + 1) * 2;
-    d.fftsize = d.winy * winxpadded / 2; //complex
-    d.fftsize *= sizeof(fftwf_complex);
+    int winxpadded = (d->winx / 2 + 1) * 2;
+    d->fftsize = d->winy * winxpadded / 2; //complex
+    d->fftsize *= sizeof(fftwf_complex);
 
 
-    d.unused_array = (fftwf_complex *)fftwf_malloc(d.fftsize);
+    d->unused_array = (fftwf_complex *)fftwf_malloc(d->fftsize);
     {
         std::lock_guard<std::mutex> guard(g_fftw_plans_mutex);
         // in-place transforms
-        d.plan = fftwf_plan_dft_r2c_2d(d.winy, d.winx, (float *)d.unused_array, d.unused_array, FFTW_ESTIMATE);    // direct fft
-        d.planinv = fftwf_plan_dft_c2r_2d(d.winy, d.winx, d.unused_array, (float *)d.unused_array, FFTW_ESTIMATE); // inverse fft
+        d->plan = fftwf_plan_dft_r2c_2d(d->winy, d->winx, (float *)d->unused_array, d->unused_array, FFTW_ESTIMATE);    // direct fft
+        d->planinv = fftwf_plan_dft_c2r_2d(d->winy, d->winx, d->unused_array, (float *)d->unused_array, FFTW_ESTIMATE); // inverse fft
     }
 
 
-    DepanEstimateData *data1 = (DepanEstimateData *)malloc(sizeof(d));
-    DepanEstimateData *data2 = (DepanEstimateData *)malloc(sizeof(d));
-    DepanEstimateData *data3 = (DepanEstimateData *)malloc(sizeof(d));
+    std::unique_ptr<DepanEstimateData> data1 = std::make_unique<DepanEstimateData>(vsapi); 
+    std::unique_ptr<DepanEstimateData> data2 = std::make_unique<DepanEstimateData>(vsapi);
+    std::unique_ptr<DepanEstimateData> data3 = std::make_unique<DepanEstimateData>(vsapi);
 
-    *data1 = *data2 = *data3 = d;
+    *data1 = *d;
+    *data2 = *d;
+    *data3 = *d;
 
     data1->stage = 1;
     data2->stage = 2;
@@ -1456,45 +1401,39 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
         {data1->clip, rpStrictSpatial},
     };
 
-    vsapi->createVideoFilter(out, "DepanEstimateStage1", data1->vi, depanEstimateStage1GetFrame, depanEstimateFree, fmParallel, deps1, ARRAY_SIZE(deps1), data1, core);
+    vsapi->createVideoFilter(out, "DepanEstimateStage1", data1->vi, depanEstimateStage1GetFrame, filterFree<DepanEstimateData>, fmParallel, deps1, ARRAY_SIZE(deps1), data1.get(), core);
+    data1.release();
 
-    if (vsapi->mapGetError(out)) {
-        depanEstimateFree(data1, core, vsapi);
-        depanEstimateFree(data2, core, vsapi);
-        depanEstimateFree(data3, core, vsapi);
+    if (vsapi->mapGetError(out))
         return;
-    }
 
-    data2->clip = vsapi->mapGetNode(out, "clip", 0, NULL);
+    data2->clip = vsapi->mapGetNode(out, "clip", 0, nullptr);
     vsapi->clearMap(out);
 
     VSFilterDependency deps2[1] = { 
         {data2->clip, rpGeneral},
     };
 
-    vsapi->createVideoFilter(out, "DepanEstimateStage2", data2->vi, depanEstimateStage2GetFrame, depanEstimateFree, fmParallel, deps2, ARRAY_SIZE(deps2), data2, core);
+    vsapi->createVideoFilter(out, "DepanEstimateStage2", data2->vi, depanEstimateStage2GetFrame, filterFree<DepanEstimateData>, fmParallel, deps2, ARRAY_SIZE(deps2), data2.get(), core);
+    data2.release();
 
-    if (vsapi->mapGetError(out)) {
-        depanEstimateFree(data2, core, vsapi);
-        depanEstimateFree(data3, core, vsapi);
+    if (vsapi->mapGetError(out))
         return;
-    }
 
-    data3->clip = vsapi->mapGetNode(out, "clip", 0, NULL);
+    data3->clip = vsapi->mapGetNode(out, "clip", 0, nullptr);
     vsapi->clearMap(out);
 
     VSFilterDependency deps3[1] = { 
         {data3->clip, rpGeneral},
     };
 
-    vsapi->createVideoFilter(out, "DepanEstimateStage3", data3->vi, depanEstimateStage3GetFrame, depanEstimateFree, fmParallel, deps3, ARRAY_SIZE(deps3), data3, core);
+    vsapi->createVideoFilter(out, "DepanEstimateStage3", data3->vi, depanEstimateStage3GetFrame, filterFree<DepanEstimateData>, fmParallel, deps3, ARRAY_SIZE(deps3), data3.get(), core);
+    data3.release();
 
-    if (vsapi->mapGetError(out)) {
-        depanEstimateFree(data3, core, vsapi);
+    if (vsapi->mapGetError(out))
         return;
-    }
 
-    if (d.info) {
+    if (d->info) {
         if (!invokeFrameProps(prop_DepanEstimate_info, out, core, vsapi)) {
             vsapi->mapSetError(out, std::string("DepanEstimate: failed to invoke text.FrameProps: ").append(vsapi->mapGetError(out)).c_str());
             return;
@@ -1506,13 +1445,13 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
 typedef void (*CompensateFunction)(uint8_t *dstp, const uint8_t *srcp, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work1row_size, int blurmax, int pixel_max);
 
 
-typedef struct DepanCompensateData {
-    VSNode *clip;
-    VSNode *data;
+struct DepanCompensateData {
+    VSNode *clip = nullptr;
+    VSNode *data = nullptr;
     float offset;
     int subpixel;
     float pixaspect;
-    int matchfields;
+    bool matchfields;
     int mirror;
     int blur;
     int info;
@@ -1528,7 +1467,18 @@ typedef struct DepanCompensateData {
     int pixel_max;
 
     CompensateFunction compensate_plane;
-} DepanCompensateData;
+
+    std::string prefix;
+
+    const VSAPI *vsapi;
+
+    DepanCompensateData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~DepanCompensateData() {
+        vsapi->freeNode(clip);
+        vsapi->freeNode(data);
+    }
+};
 
 
 
@@ -2625,7 +2575,6 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
         int nfields = d->fields ? 2 : 1;
 
         transform trsum;
-        setNull(&trsum);
 
         for (int n = start + 1; n <= end; n++) {
             const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
@@ -2645,7 +2594,7 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
             }
 
             if (motionx == MOTIONBAD) {
-                setNull(&trsum);
+                trsum.setNull();
                 break;
             }
 
@@ -2734,113 +2683,97 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
     return NULL;
 }
 
-
-static void VS_CC depanCompensateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
-    DepanCompensateData *d = (DepanCompensateData *)instanceData;
-
-    vsapi->freeNode(d->clip);
-    vsapi->freeNode(d->data);
-
-    free(d);
-}
-
-
-static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
-
-    DepanCompensateData d;
-    memset(&d, 0, sizeof(d));
+static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+    std::unique_ptr<DepanCompensateData> d = std::make_unique<DepanCompensateData>(vsapi);
 
     int err;
 
-    d.offset = (float)vsapi->mapGetFloat(in, "offset", 0, &err);
+    d->offset = (float)vsapi->mapGetFloat(in, "offset", 0, &err);
 
-    d.subpixel = vsapi->mapGetIntSaturated(in, "subpixel", 0, &err);
+    d->subpixel = vsapi->mapGetIntSaturated(in, "subpixel", 0, &err);
     if (err)
-        d.subpixel = 2;
+        d->subpixel = 2;
 
-    d.pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
+    d->pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
     if (err)
-        d.pixaspect = 1.0f;
+        d->pixaspect = 1.0f;
 
-    d.matchfields = !!vsapi->mapGetInt(in, "matchfields", 0, &err);
+    d->matchfields = !!vsapi->mapGetInt(in, "matchfields", 0, &err);
     if (err)
-        d.matchfields = 1;
+        d->matchfields = true;
 
-    d.mirror = vsapi->mapGetIntSaturated(in, "mirror", 0, &err);
+    d->mirror = vsapi->mapGetIntSaturated(in, "mirror", 0, &err);
 
-    d.blur = vsapi->mapGetIntSaturated(in, "blur", 0, &err);
+    d->blur = vsapi->mapGetIntSaturated(in, "blur", 0, &err);
 
-    d.info = !!vsapi->mapGetInt(in, "info", 0, &err);
+    d->info = !!vsapi->mapGetInt(in, "info", 0, &err);
 
-    d.fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
+    d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 
-    d.tff = !!vsapi->mapGetInt(in, "tff", 0, &d.tff_exists);
-    d.tff_exists = !d.tff_exists;
+    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &d->tff_exists);
+    d->tff_exists = !d->tff_exists;
 
 
-    if (d.offset < -10.0f || d.offset > 10.0f) {
+    if (d->offset < -10.0f || d->offset > 10.0f) {
         vsapi->mapSetError(out, "DepanCompensate: offset must be between -10.0 and 10.0 (inclusive).");
         return;
     }
 
-    if (d.subpixel < 0 || d.subpixel > 2) {
+    if (d->subpixel < 0 || d->subpixel > 2) {
         vsapi->mapSetError(out, "DepanCompensate: subpixel must be between 0 and 2 (inclusive).");
         return;
     }
 
-    if (d.pixaspect <= 0.0f) {
+    if (d->pixaspect <= 0.0f) {
         vsapi->mapSetError(out, "DepanCompensate: pixaspect must be greater than 0.");
         return;
     }
 
-    if (d.mirror < 0 || d.mirror > 15) {
+    if (d->mirror < 0 || d->mirror > 15) {
         vsapi->mapSetError(out, "DepanCompensate: mirror must be between 0 and 15 (inclusive).");
         return;
     }
 
-    if (d.blur < 0) {
+    if (d->blur < 0) {
         vsapi->mapSetError(out, "DepanCompensate: blur must not be negative.");
         return;
     }
 
 
-    d.clip = vsapi->mapGetNode(in, "clip", 0, NULL);
-    d.vi = vsapi->getVideoInfo(d.clip);
+    d->clip = vsapi->mapGetNode(in, "clip", 0, NULL);
+    d->vi = vsapi->getVideoInfo(d->clip);
 
-    if (!vsh::isConstantVideoFormat(d.vi) ||
-        (d.vi->format.colorFamily != cfYUV && d.vi->format.colorFamily != cfGray) ||
-        d.vi->format.sampleType != stInteger ||
-        d.vi->format.bitsPerSample > 16 ||
-        d.vi->format.subSamplingW > 1 ||
-        d.vi->format.subSamplingH > 1 ||
-        (d.vi->format.subSamplingW == 0 && d.vi->format.subSamplingH == 1)) {
+    if (!vsh::isConstantVideoFormat(d->vi) ||
+        (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray) ||
+        d->vi->format.sampleType != stInteger ||
+        d->vi->format.bitsPerSample > 16 ||
+        d->vi->format.subSamplingW > 1 ||
+        d->vi->format.subSamplingH > 1 ||
+        (d->vi->format.subSamplingW == 0 && d->vi->format.subSamplingH == 1)) {
         vsapi->mapSetError(out, "DepanCompensate: clip must have constant format and dimensions, integer sample type, bit depth up to 16, and it must be Gray, 420, 422, or 444, and not RGB.");
-        vsapi->freeNode(d.clip);
+        vsapi->freeNode(d->clip);
         return;
     }
 
-    d.data = vsapi->mapGetNode(in, "data", 0, NULL);
+    d->data = vsapi->mapGetNode(in, "data", 0, NULL);
 
-    if (d.vi->numFrames > vsapi->getVideoInfo(d.data)->numFrames) {
+    if (d->vi->numFrames > vsapi->getVideoInfo(d->data)->numFrames) {
         vsapi->mapSetError(out, "DepanCompensate: data must have at least as many frames as clip.");
-        vsapi->freeNode(d.data);
-        vsapi->freeNode(d.clip);
+        vsapi->freeNode(d->data);
+        vsapi->freeNode(d->clip);
         return;
     }
 
 
-    if (d.offset > 0.0f)
-        d.intoffset = (int)ceilf(d.offset);
+    if (d->offset > 0.0f)
+        d->intoffset = (int)ceilf(d->offset);
     else
-        d.intoffset = (int)floorf(d.offset);
+        d->intoffset = (int)floorf(d->offset);
 
-    d.xcenter = d.vi->width / 2.0f; // center of frame
-    d.ycenter = d.vi->height / 2.0f;
+    d->xcenter = d->vi->width / 2.0f; // center of frame
+    d->ycenter = d->vi->height / 2.0f;
 
-    d.pixel_max = (1 << d.vi->format.bitsPerSample) - 1;
+    d->pixel_max = (1 << d->vi->format.bitsPerSample) - 1;
 
     CompensateFunction compensate_functions[6] = {
         compensate_plane_nearest<uint8_t>,
@@ -2851,28 +2784,22 @@ static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userD
         compensate_plane_bilinear<uint16_t>,
         compensate_plane_bicubic<uint16_t>
     };
-    if (d.vi->format.bitsPerSample == 8)
-        d.compensate_plane = compensate_functions[d.subpixel];
+    if (d->vi->format.bitsPerSample == 8)
+        d->compensate_plane = compensate_functions[d->subpixel];
     else
-        d.compensate_plane = compensate_functions[d.subpixel + 3];
-
-
-    DepanCompensateData *data = (DepanCompensateData *)malloc(sizeof(d));
-    *data = d;
+        d->compensate_plane = compensate_functions[d->subpixel + 3];
 
     VSFilterDependency deps[2] = { 
-        {data->clip, rpGeneral},
-        {data->data, rpGeneral},
+        {d->clip, rpGeneral},
+        {d->data, rpGeneral},
     };
 
-    vsapi->createVideoFilter(out, "DepanCompensate", data->vi, depanCompensateGetFrame, depanCompensateFree, fmParallel, deps, ARRAY_SIZE(deps), data, core);
+    vsapi->createVideoFilter(out, "DepanCompensate", d->vi, depanCompensateGetFrame, filterFree<DepanCompensateData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
 
-    if (vsapi->mapGetError(out)) {
-        depanCompensateFree(data, core, vsapi);
+    if (vsapi->mapGetError(out))
         return;
-    }
 
-    if (d.info) {
+    if (d->info) {
         if (!invokeFrameProps(prop_DepanCompensate_info, out, core, vsapi)) {
             vsapi->mapSetError(out, std::string("DepanCompensate: failed to invoke text.FrameProps: ").append(vsapi->mapGetError(out)).c_str());
             return;
@@ -2881,9 +2808,9 @@ static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userD
 }
 
 
-typedef struct DepanStabiliseData {
-    VSNode *clip;
-    VSNode *data;
+struct DepanStabiliseData {
+    VSNode *clip = nullptr;
+    VSNode *data = nullptr;
     float cutoff;
     float damping;
     float initzoom;
@@ -2939,7 +2866,18 @@ typedef struct DepanStabiliseData {
     CompensateFunction compensate_plane_nearest;
 
     std::mutex motion_mutex;
-} DepanStabiliseData;
+
+    std::string prefix;
+
+    const VSAPI *vsapi;
+
+    DepanStabiliseData(const VSAPI *vsapi) : vsapi(vsapi) {};
+
+    ~DepanStabiliseData() {
+        vsapi->freeNode(clip);
+        vsapi->freeNode(data);
+    }
+};
 
 
 static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmoothed, float *azoom, float *azoomsmoothed, const int nbase, const int ndest, transform *ptrdif) {
@@ -2963,8 +2901,8 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
 
     // set null as smoothed for base - v1.12
     // set null as smoothed for base+1 - v1.12
-    setNull(&trsmoothed[nbase]);
-    setNull(&trsmoothed[nbase + 1]);
+    trsmoothed[nbase].setNull();
+    trsmoothed[nbase + 1].setNull();
 
     float cdamp = 12.56f * damping / fps;
     float cquad = 39.44f / (fps * fps);
@@ -3630,7 +3568,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
             float *azoomsmoothed = (float *)malloc(elements * sizeof(float));
 
             // base as null
-            setNull(&trcumul[0]);
+            trcumul[0].setNull();
 
             // get cumulative transforms from base to ndest
             for (int n = nbase + 1; n <= ndest; n++) {
@@ -3710,15 +3648,13 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
 
 
 static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    (void)frameData;
+    DepanStabiliseData *d = reinterpret_cast<DepanStabiliseData *>(instanceData);
 
-    DepanStabiliseData *d = (DepanStabiliseData *)instanceData;
-
-    int nbase = VSMAX(0, ndest - d->radius);
-    int nmax = VSMIN(ndest + d->radius, d->vi->numFrames - 1);
+    int nbase = std::max(0, ndest - d->radius);
+    int nmax = std::min(ndest + d->radius, d->vi->numFrames - 1);
 
     if (activationReason == arInitial) {
-        int nprev = VSMAX(nbase, ndest - d->prev);
+        int nprev = std::max(nbase, ndest - d->prev);
 
         std::lock_guard<std::mutex> guard(d->motion_mutex);
 
@@ -3731,7 +3667,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
 
         vsapi->requestFrameFilter(ndest, d->clip, frameCtx);
 
-        int nnext = VSMIN(ndest + d->next, d->vi->numFrames - 1);
+        int nnext = std::min(ndest + d->next, d->vi->numFrames - 1);
 
         if (nnext < nmax) {
             for (int i = ndest + 1; i <= nnext; i++) {
@@ -3796,14 +3732,14 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
 
                 if (d->motionx[n] == MOTIONBAD) {
                     if (n < nmax)
-                        nmax = VSMAX(n - 1, ndest);
+                        nmax = std::max(n - 1, ndest);
                     break; // if strictly =0,  than no good
                 }
             }
         }
 
 
-        int smaller_distance = VSMIN(nmax - ndest, ndest - nbase);
+        int smaller_distance = std::min(nmax - ndest, ndest - nbase);
         nmax = ndest + smaller_distance;
         nbase = ndest - smaller_distance;
 
@@ -3816,7 +3752,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
         float *azoom = (float *)malloc(elements * sizeof(float));
 
         // base as null
-        setNull(&trcumul[0]);
+        trcumul[0].setNull();
 
         float dxdif, dydif, zoomdif, rotdif;
         transform trdif;
@@ -3884,32 +3820,8 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
     return NULL;
 }
 
-
-static void VS_CC depanStabiliseFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    (void)core;
-
-    DepanStabiliseData *d = (DepanStabiliseData *)instanceData;
-
-    vsapi->freeNode(d->clip);
-    vsapi->freeNode(d->data);
-
-    free(d->motionx);
-    free(d->motiony);
-    free(d->motionzoom);
-    free(d->motionrot);
-
-    free(d->wint);
-    free(d->winrz);
-    free(d->winfz);
-
-    delete d;
-}
-
-
-static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    (void)userData;
-
-    DepanStabiliseData *d = new DepanStabiliseData;
+static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
+    std::unique_ptr<DepanStabiliseData> d = std::make_unique<DepanStabiliseData>(vsapi);
 
     int err;
 
@@ -3980,43 +3892,36 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 
     if (d->prev < 0) {
         vsapi->mapSetError(out, "DepanStabilise: prev must not be negative.");
-        delete d;
         return;
     }
 
     if (d->next < 0) {
         vsapi->mapSetError(out, "DepanStabilise: next must not be negative.");
-        delete d;
         return;
     }
 
     if (d->subpixel < 0 || d->subpixel > 2) {
         vsapi->mapSetError(out, "DepanStabilise: subpixel must be between 0 and 2 (inclusive).");
-        delete d;
         return;
     }
 
     if (d->pixaspect <= 0.0f) {
         vsapi->mapSetError(out, "DepanStabilise: pixaspect must be greater than 0.");
-        delete d;
         return;
     }
 
     if (d->mirror < 0 || d->mirror > 15) {
         vsapi->mapSetError(out, "DepanStabilise: mirror must be between 0 and 15 (inclusive).");
-        delete d;
         return;
     }
 
     if (d->blur < 0) {
         vsapi->mapSetError(out, "DepanStabilise: blur must not be negative.");
-        delete d;
         return;
     }
 
     if (d->method < 0 || d->method > 1) {
         vsapi->mapSetError(out, "DepanStabilise: method must be between 0 and 1 (inclusive).");
-        delete d;
         return;
     }
 
@@ -4033,14 +3938,12 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
         (d->vi->format.subSamplingW == 0 && d->vi->format.subSamplingH == 1)) {
         vsapi->mapSetError(out, "DepanStabilise: clip must have constant format and dimensions, integer sample type, bit depth up to 16, and it must be Gray, 420, 422, or 444, and not RGB.");
         vsapi->freeNode(d->clip);
-        delete d;
         return;
     }
 
     if (d->vi->fpsNum == 0 || d->vi->fpsDen == 0) {
         vsapi->mapSetError(out, "DepanStabilise: clip must have known frame rate.");
         vsapi->freeNode(d->clip);
-        delete d;
         return;
     }
 
@@ -4050,11 +3953,8 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
         vsapi->mapSetError(out, "DepanStabilise: data must have at least as many frames as clip.");
         vsapi->freeNode(d->data);
         vsapi->freeNode(d->clip);
-        delete d;
         return;
     }
-
-
 
     float lambda;
 
@@ -4148,8 +4048,8 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 
     d->winrz = (float *)malloc((d->wintsize + 1) * sizeof(float));
     d->winfz = (float *)malloc((d->wintsize + 1) * sizeof(float));
-    d->winrzsize = VSMIN(d->wintsize, (int)(d->fps * d->tzoom / 4));
-    d->winfzsize = VSMIN(d->wintsize, (int)(d->fps * d->tzoom / 4));
+    d->winrzsize = std::min(d->wintsize, (int)(d->fps * d->tzoom / 4));
+    d->winfzsize = std::min(d->wintsize, (int)(d->fps * d->tzoom / 4));
     for (int i = 0; i < d->winrzsize; i++)
         d->winrz[i] = cosf(i * 0.5f * PI / d->winrzsize);
     for (int i = d->winrzsize; i <= d->wintsize; i++)
@@ -4192,12 +4092,11 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
         {d->data, rpGeneral},
     };
 
-    vsapi->createVideoFilter(out, "DepanStabilise", d->vi, getframe_functions[d->method], depanStabiliseFree, fmParallel, deps, ARRAY_SIZE(deps), d, core);
+    vsapi->createVideoFilter(out, "DepanStabilise", d->vi, getframe_functions[d->method], filterFree<DepanStabiliseData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    d.release();
 
-    if (vsapi->mapGetError(out)) {
-        depanStabiliseFree(d, core, vsapi);
+    if (vsapi->mapGetError(out))
         return;
-    }
 
     if (d->info) {
         if (!invokeFrameProps(prop_DepanStabilise_info, out, core, vsapi)) {
@@ -4208,7 +4107,7 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 }
 
 
-void mvdepanRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void mvdepanRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("DepanAnalyse",
                  "clip:vnode;"
                  "vectors:vnode;"
@@ -4225,7 +4124,7 @@ void mvdepanRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "fields:int:opt;"
                  "tff:int:opt;",
                  "clip:vnode;",
-                 depanAnalyseCreate, 0, plugin);
+                 depanAnalyseCreate, nullptr, plugin);
 
     vspapi->registerFunction("DepanEstimate",
                  "clip:vnode;"
@@ -4244,7 +4143,7 @@ void mvdepanRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "fields:int:opt;"
                  "tff:int:opt;",
                  "clip:vnode;",
-                 depanEstimateCreate, 0, plugin);
+                 depanEstimateCreate, nullptr, plugin);
 
     vspapi->registerFunction("DepanCompensate",
                  "clip:vnode;"
@@ -4259,7 +4158,7 @@ void mvdepanRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "fields:int:opt;"
                  "tff:int:opt;",
                  "clip:vnode;",
-                 depanCompensateCreate, 0, plugin);
+                 depanCompensateCreate, nullptr, plugin);
 
     vspapi->registerFunction("DepanStabilise",
                  "clip:vnode;"
@@ -4283,6 +4182,6 @@ void mvdepanRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
                  "info:int:opt;"
                  "method:int:opt;"
                  "fields:int:opt;",
-                "clip:vnode;",
-                 depanStabiliseCreate, 0, plugin);
+                 "clip:vnode;",
+                 depanStabiliseCreate, nullptr, plugin);
 }
