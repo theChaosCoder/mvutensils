@@ -13,6 +13,7 @@ class SuperPyramidError : public std::runtime_error {
 };
 
 void GetHVPairArgument(int &h, int &v, const char *name, int defaultH, int defaultV, const VSMap *in, const VSAPI *vsapi);
+void GetHVPairArgument(int64_t &h, int64_t &v, const char *name, int64_t defaultH, int64_t defaultV, const VSMap *in, const VSAPI *vsapi);
 void CheckBlkSize(int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int subSamplingW, int subSamplingH, bool useSatd = false);
 
 enum class SharpParam {

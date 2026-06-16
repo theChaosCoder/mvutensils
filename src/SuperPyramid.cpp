@@ -24,6 +24,25 @@ void GetHVPairArgument(int &h, int &v, const char *name, int defaultH, int defau
     }
 }
 
+void GetHVPairArgument(int64_t &h, int64_t &v, const char *name, int64_t defaultH, int64_t defaultV, const VSMap *in, const VSAPI *vsapi) {
+    int err;
+    int numElems = vsapi->mapNumElements(in, name);
+    if (numElems > 2)
+        throw std::runtime_error(std::string("Too many values passed to ") + name);
+
+    h = vsapi->mapGetInt(in, name, 0, &err);
+    if (err)
+        h = defaultH;
+
+    v = vsapi->mapGetInt(in, name, 1, &err);
+    if (err) {
+        if (numElems == 1)
+            v = h;
+        else
+            v = defaultV;
+    }
+}
+
 void CheckBlkSize(int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int subSamplingW, int subSamplingH, bool useSatd) {
     if (useSatd && nBlkSizeX == 16 && nBlkSizeY == 2)
         throw std::runtime_error("satd cannot work with 16x2 blocks");

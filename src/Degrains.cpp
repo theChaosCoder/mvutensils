@@ -520,7 +520,6 @@ static inline void getProcessPlanesArg(const VSMap *in, bool process[3], const V
     }
 }
 
-
 template <int radius>
 static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
     std::unique_ptr<DegrainData<radius>> d(new DegrainData<radius>(vsapi));
@@ -529,13 +528,8 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
     int err;
 
-    d->thSAD[0] = vsapi->mapGetInt(in, "thsad", 0, &err);
-    if (err)
-        d->thSAD[0] = 400;
-
-    d->thSAD[1] = d->thSAD[2] = vsapi->mapGetInt(in, "thsadc", 0, &err);
-    if (err)
-        d->thSAD[1] = d->thSAD[2] = d->thSAD[0];
+    GetHVPairArgument(d->thSAD[0], d->thSAD[1], "thsad", 400, 400, in, vsapi);
+    d->thSAD[2] = d->thSAD[1];
 
     d->nSCD1 = vsapi->mapGetInt(in, "thscd1", 0, &err);
     if (err)
@@ -704,8 +698,7 @@ constexpr const char *degrain_args =
     "clip:vnode;"
     "super:vnode;"
     "vectors:vnode[];"
-    "thsad:int:opt;"
-    "thsadc:int:opt;"
+    "thsad:int[]:opt;"
     "planes:int[]:opt;"
     "limit:int[]:opt;"
     "thscd1:int:opt;"

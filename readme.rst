@@ -63,7 +63,9 @@ Changes
 * DegrainN:
     * All the cryptically named forward and backward vector clip arguments is now passed as an array in vectors
     
-    * The limit and limitc arguments were combined into a single limit=[luma_limit, chroma_limit] argument where chroma_limit defaults to luma_limit if not specified much like blksize
+    * The limit and limitc arguments were combined into a single limit=[luma_limit, chroma_limit] argument where chroma_limit defaults to luma_limit if not specified
+
+    * The thsad and thsadc was combined into a single argument thsad=[luma, chroma] where chroma defaults to luma if not specified
 
     * Greatly reduced memory usage
 
