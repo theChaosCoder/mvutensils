@@ -95,7 +95,7 @@ private:
     // static parameters during the whole search process
     SearchType searchType; /* search type used */
     int nSearchParam;      /* additionnal parameter for this search */
-    int64_t LSAD;          // SAD limit for lambda using - Fizick
+    int64_t LSAD;          // SAD limit for lambda usage
     int penaltyNew;        // cost penalty factor for new candidates
     int penaltyZero;       // cost penalty factor for zero vector
     int pglobal;           // cost penalty factor for global predictor

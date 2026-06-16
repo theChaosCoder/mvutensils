@@ -341,7 +341,7 @@ static void DiagonalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RES
 }
 
 // so called Wiener interpolation. (sharp, similar to Lanczos ?)
-// invarint simplified, 6 taps. Weights: (1, -5, 20, 20, -5, 1)/32 - added by Fizick
+// invarint simplified, 6 taps. Weights: (1, -5, 20, 20, -5, 1)/32
 template <typename PixelType>
 static void VerticalWiener(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
     intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {

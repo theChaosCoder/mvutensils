@@ -447,7 +447,7 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
             predictors[3] = ClipMV(zeroMVfieldShifted);
 
     // Median predictor
-    if (blky > 0) { // replaced 1 by 0 - Fizick
+    if (blky > 0) {
         predictors[0].x = Median(predictors[1].x, predictors[2].x, predictors[3].x);
         predictors[0].y = Median(predictors[1].y, predictors[2].y, predictors[3].y);
         //      predictors[0].sad = Median(predictors[1].sad, predictors[2].sad, predictors[3].sad);
@@ -808,7 +808,7 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         nMinCostMany[0] = nMinCost;
     }
 
-    // Global MV predictor  - added by Fizick
+    // Global MV predictor
     globalMVPredictor = ClipMV(globalMVPredictor);
     sad = SAD(pSrc_temp[0], nSrcPitch_temp[0], GetRefBlock<nLogPel, PixelType>(globalMVPredictor.x, globalMVPredictor.y), nRefPitch[0]);
     if (chroma) {
