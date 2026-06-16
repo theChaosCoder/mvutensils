@@ -26,7 +26,7 @@ static void VS_CC filterFree(void *instanceData, [[maybe_unused]] VSCore *core, 
     delete reinterpret_cast<T *>(instanceData);
 }
 
-constexpr int roundUpTo64(int value) {
+constexpr int RoundUpTo64(int value) {
     return ((value + 63) / 64) * 64;
 }
 

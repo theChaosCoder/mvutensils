@@ -10,8 +10,6 @@
 #define ZIMGXX_NAMESPACE mvuzimgxx
 #include <zimg++.hpp>
 
-void BilinearUpsizeBlockMask(uint8_t *dst, ptrdiff_t dststride, int dstwidth, int dstheight, const void *src, ptrdiff_t srcstride, int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int bitsPerSample);
-
 class MaskResizer {
 public:
     struct BufferPair {
@@ -45,7 +43,7 @@ public:
     }
 
     static constexpr ptrdiff_t GetTileBufferStride() {
-        return roundUpTo64(TileSize * sizeof(uint16_t));
+        return RoundUpTo64(TileSize * sizeof(uint16_t));
     }
 
     template <size_t N>
@@ -82,4 +80,13 @@ private:
         buf.plane[0].mask = ZIMG_BUFFER_MAX;
         return buf;
     }
+};
+
+class PlaneResizer {
+public:
+    void Init(int dstwidth, int dstheight, int nBlkX, int nBlkY, int nBlkSizeX, int nBlkSizeY, int nOverlapX, int nOverlapY, int bitsPerSample);
+    void Process(uint8_t *dst, ptrdiff_t dststride, const void *src, ptrdiff_t srcstride);
+private:
+    mvuzimgxx::FilterGraph graph;
+    std::unique_ptr<void, decltype(&mvu_aligned_free)> tmp = std::unique_ptr<void, decltype(&mvu_aligned_free)>(nullptr, mvu_aligned_free);
 };

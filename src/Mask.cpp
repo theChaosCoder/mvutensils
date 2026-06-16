@@ -42,6 +42,8 @@ struct MaskData {
 
     float fMaskNormFactor;
 
+    PlaneResizer maskResizerFull;
+
     std::string prefix;
 
     std::string filterName;
@@ -78,8 +80,7 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
                     Mask = vectors.MakeVectorOcclusionMask<PixelType>(d->fMaskNormFactor, d->fGamma, d->time256, false);
                 }
 
-                BilinearUpsizeBlockMask(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), vsapi->getFrameWidth(dst, 0), vsapi->getFrameHeight(dst, 0),
-                    Mask->mask, Mask->stride, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY, d->vi.format.bitsPerSample);
+                d->maskResizerFull.Process(vsapi->getWritePtr(dst, 0), vsapi->getStride(dst, 0), Mask->mask, Mask->stride);
             } else {
                 PixelType *dstPtr = reinterpret_cast<PixelType *>(vsapi->getWritePtr(dst, 0));
                 std::fill(dstPtr, dstPtr + (vsapi->getStride(dst, 0) / sizeof(PixelType)) * vsapi->getFrameHeight(dst, 0), d->nSceneChangeValue);
@@ -165,6 +166,9 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         d->fMaskNormFactor = 1.0f / ml;
 
         d->time256 = (int)(time * 256 / 100);
+
+        d->maskResizerFull.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY, vectors.nOverlapX, vectors.nOverlapY,
+            d->vi.width, d->vi.height, vectors.bitsPerSample);
 
     } catch (std::runtime_error &e) {
         vsapi->mapSetError(out, (d->filterName + ": " + e.what()).c_str());

@@ -1936,7 +1936,7 @@ void SmallVectorMasks::AdjustSmallVectorMaskSubSampling(int nBlkX, int nBlkY, in
 }
 
 SmallVectorMasks::SmallVectorMasks(int nBlkX, int nBlkY) {
-    pitchVSmallY = roundUpTo64(nBlkX * sizeof(uint16_t));
+    pitchVSmallY = RoundUpTo64(nBlkX * sizeof(uint16_t));
     VXSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
     VYSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
 }
