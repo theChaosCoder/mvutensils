@@ -133,6 +133,12 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, [[maybe_unused]
         GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", super.nBlkSizeX, super.nBlkSizeY, in, vsapi);
         GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", super.nOverlapX, super.nOverlapY, in, vsapi);
 
+        d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
+
+        // Validate the block geometry before it is used in any arithmetic
+        // (e.g. the mvlambda default below), so a hostile blksize can't overflow.
+        CheckBlkSize(d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->vi->format.subSamplingW, d->vi->format.subSamplingH, d->useSatd);
+
         d->thSAD = vsapi->mapGetInt(in, "thsad", 0, &err);
         if (err)
             d->thSAD = 200;
@@ -168,8 +174,6 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, [[maybe_unused]
         if (err)
             d->pnew = truemotion ? 50 : 0; // relative to 256
 
-        d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
-
         d->meander = !!vsapi->mapGetInt(in, "meander", 0, &err);
         if (err)
             d->meander = true;
@@ -181,8 +185,6 @@ static void VS_CC recalculateCreate(const VSMap *in, VSMap *out, [[maybe_unused]
 
         if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
             throw std::runtime_error("search must be between 0 and 5");
-
-        CheckBlkSize(d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->vi->format.subSamplingW, d->vi->format.subSamplingH, d->useSatd);
 
         if (d->pnew < 0 || d->pnew > 256)
             throw std::runtime_error("pnew must be between 0 and 256");
