@@ -842,7 +842,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
 
     // Calculate padding needed to make the dimensions fit the block size and overlap, if specified
 
-    if (nBlkSizeX > 0 && nOverlapX >= 0) {
+    if (nBlkSizeX > 0 && nOverlapX >= 0 && nBlkSizeX - nOverlapX > 0) {
         int nBlkX = (nRealWidth[0] - nOverlapX) / (nBlkSizeX - nOverlapX);
         int nWidth_B = (nBlkSizeX - nOverlapX) * nBlkX + nOverlapX;
         if (nWidth_B < nRealWidth[0]) {
@@ -853,7 +853,7 @@ FramePyramid::FramePyramid(const VSFrame *srcFrame, int levels, int nBlkSizeX, i
         }
     }
 
-    if (nBlkSizeY > 0 && nOverlapY >= 0) {
+    if (nBlkSizeY > 0 && nOverlapY >= 0 && nBlkSizeY - nOverlapY > 0) {
         int nBlkY = (nRealHeight[0] - nOverlapY) / (nBlkSizeY - nOverlapY);
         int nHeight_B = (nBlkSizeY - nOverlapY) * nBlkY + nOverlapY;
         if (nHeight_B < nRealHeight[0]) {
