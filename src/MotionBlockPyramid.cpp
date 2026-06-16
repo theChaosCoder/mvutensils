@@ -277,14 +277,15 @@ const uint8_t *MotionBlockLevel::GetRefBlockV(int nVx, int nVy) const noexcept {
 
 
 /* computes square distance between two vectors */
-static unsigned int SquareDifferenceNorm(const VECTOR &v1, const int v2x, const int v2y) noexcept {
-    return (v1.x - v2x) * (v1.x - v2x) + (v1.y - v2y) * (v1.y - v2y);
+static int64_t SquareDifferenceNorm(const VECTOR &v1, const int v2x, const int v2y) noexcept {
+    int64_t dx = v1.x - v2x;
+    int64_t dy = v1.y - v2y;
+    return dx * dx + dy * dy;
 }
-
 
 /* computes the cost of a vector (vx, vy) */
 int64_t MotionBlockLevel::MotionDistorsion(int vx, int vy) const noexcept {
-    int dist = SquareDifferenceNorm(predictor, vx, vy);
+    int64_t dist = SquareDifferenceNorm(predictor, vx, vy);
     return (int64_t)((nLambda * dist) >> 8);
 }
 
@@ -1752,14 +1753,14 @@ bool MotionBlockPyramid::IsCompatibleForRecalc(const FramePyramid &other) const 
 }
 
 //////////////////////////
-// Mask relatted functions
+// Mask related functions
 
 template<typename PixelType>
 static PixelType MaskLength(VECTOR v, uint8_t pel, float fMaskNormFactor2, float fHalfGamma, int maxVal) noexcept {
-    double norme = (double)(v.x * v.x + v.y * v.y) / (pel * pel);
-
-    double l = maxVal * pow(norme * fMaskNormFactor2, fHalfGamma);
-
+    const double dx = (double)v.x / pel;
+    const double dy = (double)v.y / pel;
+    const double norme = dx * dx + dy * dy;
+    const double l = maxVal * pow(norme * fMaskNormFactor2, (double)fHalfGamma);
     return static_cast<PixelType>((l > maxVal) ? maxVal : l);
 }
 
