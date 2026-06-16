@@ -90,6 +90,9 @@ static void VS_CC superCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void
     try {
         GetHVPairArgument(d->nHPad, d->nVPad, "pad", 16, 16, in, vsapi);
 
+        if (d->nHPad <= 0 || d->nVPad <= 0)
+            throw std::runtime_error("pad must be positive");
+
         d->nPel = vsapi->mapGetIntSaturated(in, "pel", 0, &err);
         if (err)
             d->nPel = 2;
