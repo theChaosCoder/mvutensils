@@ -7,7 +7,7 @@
 
 // time-weihted blend src with ref frames (used for interpolation for poor motion estimation)
 template <typename PixelType>
-static void Blend(uint8_t *MVU_RESTRICT pdst, const uint8_t *MVU_RESTRICT psrc, const uint8_t *MVU_RESTRICT pref, int height, int width, ptrdiff_t stride, int time256) {
+static void Blend(uint8_t *MVU_RESTRICT pdst, const uint8_t *MVU_RESTRICT psrc, const uint8_t *MVU_RESTRICT pref, int height, int width, ptrdiff_t stride, int time256) noexcept {
     for (int h = 0; h < height; h++) {
         for (int w = 0; w < width; w++) {
             const PixelType *psrc_ = (const PixelType *)psrc;
@@ -31,7 +31,7 @@ static void FlowInter(
         const uint16_t *MaskB, const uint16_t *MaskF, ptrdiff_t tilePitch,
         int dstX, int dstY,
         int width, int height,
-        int time256) {
+        int time256) noexcept {
 
     PixelType *pdst = (PixelType *)pdst8;
 
@@ -75,7 +75,7 @@ static void FlowInterExtra(
         int width, int height,
         int time256,
         const uint16_t *VXFullBB, const uint16_t *VXFullFF,
-        const uint16_t *VYFullBB, const uint16_t *VYFullFF) {
+        const uint16_t *VYFullBB, const uint16_t *VYFullFF) noexcept {
 
     PixelType *pdst = (PixelType *)pdst8;
 

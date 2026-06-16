@@ -340,7 +340,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
             return dst;
 
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->freeFrame(dst);
             vsapi->setFilterError((d->filterName + ": " + e.what()).c_str(), frameCtx);
             return nullptr;
@@ -521,7 +521,7 @@ static inline void getProcessPlanesArg(const VSMap *in, bool process[3], const V
 }
 
 template <int radius>
-static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<DegrainData<radius>> d(new DegrainData<radius>(vsapi));
 
     d->filterName = "Degrain" + std::to_string(radius);
@@ -665,12 +665,12 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         vsapi->createVideoFilter(out, d->filterName.c_str(), d->vi, (d->vi->format.bytesPerSample == 1) ? degrainGetFrame<radius, uint8_t> : degrainGetFrame<radius, uint16_t>, filterFree<DegrainData<radius>>, fmParallel, deps.data(), numDeps, d.get(), core);
         d.release();
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, (d->filterName + ": " + e.what()).c_str());
     }
 }
 
-static void VS_CC degrainNCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC degrainNCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     int numElems = vsapi->mapNumElements(in, "vectors");
     if (numElems % 2 != 0) {
         vsapi->mapSetError(out, "Degrain: number of vectors must be even");

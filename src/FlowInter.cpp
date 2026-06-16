@@ -60,7 +60,7 @@ struct FlowInterData {
 };
 
 template<typename PixelType>
-static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     FlowInterData *d = reinterpret_cast<FlowInterData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -244,7 +244,7 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
                     return vsapi->getFrameFilter(n, d->node, frameCtx);
                 }
             }
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->setFilterError((std::string("FlowInter: ") + e.what()).c_str(), frameCtx);
             vsapi->freeFrame(dst);
             return nullptr;
@@ -254,7 +254,7 @@ static const VSFrame *VS_CC flowinterGetFrame(int n, int activationReason, void 
     return nullptr;
 }
 
-static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<FlowInterData> d(new FlowInterData(vsapi));
     int err;
 
@@ -330,7 +330,7 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, [[maybe_unused]] 
             d->maskResizerSubSampled.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX >> d->vi->format.subSamplingW, vectorsFw.nBlkSizeY >> d->vi->format.subSamplingH, vectorsFw.nOverlapX >> d->vi->format.subSamplingW, vectorsFw.nOverlapY >> d->vi->format.subSamplingH,
                 d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("FlowInter: " + std::string(e.what())).c_str());
         return;
     }
@@ -346,7 +346,7 @@ static void VS_CC flowinterCreate(const VSMap *in, VSMap *out, [[maybe_unused]] 
     d.release();
 }
 
-void flowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void flowinterRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("FlowInter",
                  "clip:vnode;"
                  "super:vnode;"

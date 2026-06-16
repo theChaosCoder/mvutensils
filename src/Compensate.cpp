@@ -301,7 +301,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
                 return vsapi->getFrameFilter(n, d->node, frameCtx);
             }
 
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->setFilterError((std::string("Compensate: ") + e.what()).c_str(), frameCtx);
             vsapi->freeFrame(dst);
             return nullptr;
@@ -314,7 +314,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 }
 
 
-static void VS_CC compensateCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC compensateCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<CompensateData> d(new CompensateData(vsapi));
     int err;
 
@@ -405,7 +405,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, [[maybe_unused]]
 
         d->time256 = (int)(time * 256 / 100);
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("Compensate: " + std::string(e.what())).c_str());
         return;
     }
@@ -421,7 +421,7 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, [[maybe_unused]]
 }
 
 
-void compensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void compensateRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("Compensate",
                  "clip:vnode;"
                  "super:vnode;"

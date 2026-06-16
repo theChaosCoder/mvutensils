@@ -64,7 +64,7 @@ static const VSFrame *VS_CC scdetectionGetFrame(int n, int activationReason, voi
             constexpr const char *propNames[2] = { "_SceneChangePrev", "_SceneChangeNext" };
             VSMap *props = vsapi->getFramePropertiesRW(dst);
             vsapi->mapSetInt(props, propNames[vectors.nDeltaFrame > 0], !vectors.IsUsable(d->thscd1, d->thscd2), maReplace);
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->setFilterError(("SCDetection: " + std::string(e.what())).c_str(), frameCtx);
             vsapi->freeFrame(dst);
             return nullptr;
@@ -95,7 +95,6 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, [[maybe_unused]
     else
         d->prefix = DEFAULT_MVUTENSILS_PREFIX;
 
-
     d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
     d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
@@ -105,7 +104,7 @@ static void VS_CC scdetectionCreate(const VSMap *in, VSMap *out, [[maybe_unused]
         MotionBlockPyramid vectors(d->vectors, d->prefix, vsapi);
 
         vectors.ScaleThSCD(d->thscd1, d->thscd2, d->vi->format.bitsPerSample);
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("SCDetection: " + std::string(e.what())).c_str());
         return;
     }

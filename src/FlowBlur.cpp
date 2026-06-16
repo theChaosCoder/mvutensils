@@ -63,7 +63,7 @@ struct FlowBlurData {
 template<typename PixelType>
 static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref,
                          const uint16_t * MVU_RESTRICT VXFullB, const uint16_t *MVU_RESTRICT VXFullF, const uint16_t *MVU_RESTRICT VYFullB, const uint16_t *MVU_RESTRICT VYFullF,
-                         ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int blur256, int prec) {
+                         ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int blur256, int prec) noexcept {
     PixelType *pdst = (PixelType *)pdst8;
 
     dst_pitch /= sizeof(PixelType);
@@ -116,7 +116,7 @@ static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
 }
 
 template<typename PixelType>
-static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     FlowBlurData *d = reinterpret_cast<FlowBlurData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -195,7 +195,7 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
             } else {
                 return vsapi->getFrameFilter(n, d->node, frameCtx);
             }
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->freeFrame(dst);
             vsapi->setFilterError(("FlowBlur: " + std::string(e.what())).c_str(), frameCtx);
             return nullptr;
@@ -205,7 +205,7 @@ static const VSFrame *VS_CC flowblurGetFrame(int n, int activationReason, void *
     return nullptr;
 }
 
-static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<FlowBlurData> d(new FlowBlurData(vsapi));
     int err;
 
@@ -277,7 +277,7 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, [[maybe_unused]] v
             d->maskResizerSubSampled.Init(vectorsFw.nBlkX, vectorsFw.nBlkY, vectorsFw.nBlkSizeX >> d->vi->format.subSamplingW, vectorsFw.nBlkSizeY >> d->vi->format.subSamplingH, vectorsFw.nOverlapX >> d->vi->format.subSamplingW, vectorsFw.nOverlapY >> d->vi->format.subSamplingH,
                 d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("FlowBlur: " + std::string(e.what())).c_str());
         return;
     }
@@ -293,7 +293,7 @@ static void VS_CC flowblurCreate(const VSMap *in, VSMap *out, [[maybe_unused]] v
     d.release();
 }
 
-void flowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void flowblurRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("FlowBlur",
                  "clip:vnode;"
                  "super:vnode;"

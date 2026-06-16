@@ -121,7 +121,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
 
             return dst;
 
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             // Note that exceptions can only happen before SearchMVs MMX code
             vsapi->setFilterError(("Analyse: " + std::string(e.what())).c_str(), frameCtx);
             return nullptr;
@@ -268,7 +268,7 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
         MotionBlockPyramid DryRun(super, d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->levels, d->chroma, d->deltaFrame);
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("Analyse: " + std::string(e.what())).c_str());
         return;
     }

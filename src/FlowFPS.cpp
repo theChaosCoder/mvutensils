@@ -64,7 +64,7 @@ struct FlowFPSData {
 };
 
 template<typename PixelType>
-static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     const FlowFPSData *d = reinterpret_cast<FlowFPSData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -272,7 +272,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
                     return vsapi->getFrameFilter(std::min(nleft, d->oldvi->numFrames - 1), d->node, frameCtx);
                 }
             }
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->freeFrame(dst);
             vsapi->setFilterError((std::string("FlowFPS: ") + e.what()).c_str(), frameCtx);
             return nullptr;
@@ -282,7 +282,7 @@ static const VSFrame *VS_CC flowfpsGetFrame(int n, int activationReason, void *i
     return nullptr;
 }
 
-static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<FlowFPSData> d(new FlowFPSData(vsapi));
     int err;
 
@@ -377,7 +377,7 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         vsh::muldivRational(&d->fa, &d->fb, d->vi.fpsDen, d->vi.fpsNum);
 
         d->vi.numFrames = (int)(d->vi.numFrames * d->fb / d->fa);
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("FlowFPS: " + std::string(e.what())).c_str());
         return;
     }
@@ -392,7 +392,7 @@ static void VS_CC flowfpsCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
     d.release();
 }
 
-void flowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void flowfpsRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("FlowFPS",
                  "clip:vnode;"
                  "super:vnode;"

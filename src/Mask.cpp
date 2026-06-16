@@ -59,7 +59,7 @@ struct MaskData {
 
 
 template<typename PixelType>
-static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     MaskData *d =  reinterpret_cast<MaskData *>(instanceData);
 
     if (activationReason == arInitial) {
@@ -90,7 +90,7 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
 
             return dst;
 
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->freeFrame(dst);
             vsapi->setFilterError((d->filterName + ": " + e.what()).c_str(), frameCtx);
         }
@@ -99,7 +99,7 @@ static const VSFrame *VS_CC maskGetFrame(int n, int activationReason, void *inst
     return nullptr;
 }
 
-static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<MaskData> d(new MaskData(vsapi));
 
     int err;
@@ -170,7 +170,7 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
         d->maskResizerFull.Init(d->vi.width, d->vi.height, vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX, vectors.nBlkSizeY,
             vectors.nOverlapX, vectors.nOverlapY, vectors.bitsPerSample);
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, (d->filterName + ": " + e.what()).c_str());
         return;
     }
@@ -193,7 +193,7 @@ static constexpr char filterArgs[] =
     "thscd2:int:opt;"
     "prefix:data:opt;";
 
-void maskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void maskRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("VectorLengthMask",
         filterArgs,
         "clip:vnode;",

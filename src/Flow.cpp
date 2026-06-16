@@ -61,7 +61,7 @@ struct FlowData {
 
 
 template <typename PixelType>
-static void flowFetch(uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const uint16_t *MVU_RESTRICT VXFull, const uint16_t *MVU_RESTRICT VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) {
+static void flowFetch(uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const PyramidPlane &pref, const uint16_t *MVU_RESTRICT VXFull, const uint16_t *MVU_RESTRICT VYFull, ptrdiff_t tilePitch, int dstX, int dstY, int width, int height, int time256) noexcept {
     PixelType *pdst = (PixelType *)pdst8;
 
     dst_pitch /= sizeof(PixelType);
@@ -84,7 +84,7 @@ static void flowFetch(uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
 }
 
 template<typename PixelType>
-static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *instanceData, [[maybe_unused]] void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) noexcept {
     FlowData *d =  reinterpret_cast<FlowData *>(instanceData);
 
     int nref = n + d->deltaFrame;
@@ -189,7 +189,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
             } else {
                 return vsapi->getFrameFilter(n, d->clip, frameCtx);
             }
-        } catch (std::runtime_error &e) {
+        } catch (const std::exception &e) {
             vsapi->setFilterError(("Flow: " + std::string(e.what())).c_str(), frameCtx);
             vsapi->freeFrame(dst);
             return nullptr;
@@ -199,7 +199,7 @@ static const VSFrame *VS_CC flowGetFrame(int n, int activationReason, void *inst
     return nullptr;
 }
 
-static void VS_CC flowCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC flowCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
     std::unique_ptr<FlowData> d(new FlowData(vsapi));
 
     int err;
@@ -262,7 +262,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void 
             d->maskResizerSubSampled.Init(vectors.nBlkX, vectors.nBlkY, vectors.nBlkSizeX >> d->vi->format.subSamplingW, vectors.nBlkSizeY >> d->vi->format.subSamplingH, vectors.nOverlapX >> d->vi->format.subSamplingW, vectors.nOverlapY >> d->vi->format.subSamplingH,
                 d->vi->width >> d->vi->format.subSamplingW, d->vi->height >> d->vi->format.subSamplingH);
 
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("Flow: " + std::string(e.what())).c_str());
         return;
     }
@@ -277,7 +277,7 @@ static void VS_CC flowCreate(const VSMap *in, VSMap *out, [[maybe_unused]] void 
     d.release();
 }
 
-void flowRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+void flowRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
     vspapi->registerFunction("Flow",
                  "clip:vnode;"
                  "super:vnode;"
