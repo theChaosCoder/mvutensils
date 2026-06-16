@@ -593,6 +593,9 @@ static void VS_CC degrainCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         if (!super.IsCompatibleWithSource(d->vi))
             throw std::runtime_error("super clip is not compatible with the source clip");
 
+        if (d->nSCD1 <= 0)
+            throw std::runtime_error("thscd1 must be greater than 0");
+
         int64_t nSCD1_old = d->nSCD1;
         vectors[0]->ScaleThSCD(d->nSCD1, d->nSCD2, d->vi->format.bitsPerSample);
 
