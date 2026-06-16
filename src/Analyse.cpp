@@ -150,6 +150,10 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         GetHVPairArgument(d->nBlkSizeX, d->nBlkSizeY, "blksize", super.nBlkSizeX, super.nBlkSizeY, in, vsapi);
         GetHVPairArgument(d->nOverlapX, d->nOverlapY, "overlap", super.nOverlapX, super.nOverlapY, in, vsapi);
 
+        d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
+
+        CheckBlkSize(d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->vi->format.subSamplingW, d->vi->format.subSamplingH, d->useSatd);
+
         d->levels = vsapi->mapGetIntSaturated(in, "levels", 0, &err);
 
         d->searchType = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search", 0, &err));
@@ -209,8 +213,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
         d->pglobal = vsapi->mapGetIntSaturated(in, "pglobal", 0, &err);
 
-        d->useSatd = !!vsapi->mapGetInt(in, "satd", 0, &err);
-
         d->badSAD = vsapi->mapGetIntSaturated(in, "badsad", 0, &err);
         if (err)
             d->badSAD = 10000;
@@ -235,8 +237,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
         if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical)
             throw std::runtime_error("search_coarse must be between 0 and 5");
-
-        CheckBlkSize(d->nBlkSizeX, d->nBlkSizeY, d->nOverlapX, d->nOverlapY, d->vi->format.subSamplingW, d->vi->format.subSamplingH, d->useSatd);
 
         if (d->plevel < 0 || d->plevel > 2)
             throw std::runtime_error("plevel must be between 0 and 2");
