@@ -330,7 +330,6 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "trymany:int:opt;"
                  "fields:int:opt;"
                  "tff:int:opt;"
-                 "search_coarse:int:opt;"
                  "satd:int:opt;"
                  "prefix:data:opt;",
                  "clip:vnode;",
