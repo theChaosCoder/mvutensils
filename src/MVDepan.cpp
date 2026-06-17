@@ -457,6 +457,12 @@ static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData
     try {
         int err;
 
+        const char *prefix = vsapi->mapGetData(in, "prefix", 0, &err);
+        if (prefix)
+            d->prefix = prefix;
+        else
+            d->prefix = DEFAULT_MVUTENSILS_PREFIX;
+
         d->zoom = !!vsapi->mapGetInt(in, "zoom", 0, &err);
         if (err)
             d->zoom = 1;
