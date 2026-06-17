@@ -24,12 +24,12 @@ struct DepanAnalyseData {
     int rot = 0;
     float pixaspect = 0.0f;
     float error = 0.0f;
-    int info = 0;
+    bool info = false;
     float wrong = 0.0f;
     float zerow = 0.0f;
     int64_t thscd1 = 0;
     int thscd2 = 0;
-    int fields = 0;
+    bool fields = false;
     bool tff = false;
     bool tff_exists = false;
 

@@ -23,10 +23,10 @@ struct DepanCompensateData {
     bool matchfields;
     int mirror;
     int blur;
-    int info;
-    int fields;
-    int tff;
-    int tff_exists;
+    bool info;
+    bool fields;
+    bool tff;
+    bool tff_exists;
 
     const VSVideoInfo *vi;
     int intoffset;
@@ -226,8 +226,8 @@ static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userD
 
     d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 
-    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &d->tff_exists);
-    d->tff_exists = !d->tff_exists;
+    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
+    d->tff_exists = !err;
 
 
     try {

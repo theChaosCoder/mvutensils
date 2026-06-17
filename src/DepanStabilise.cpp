@@ -35,9 +35,9 @@ struct DepanStabiliseData {
     float pixaspect;
     int fitlast;
     float tzoom;
-    int info;
+    bool info;
     int method;
-    int fields;
+    bool fields;
 
     const VSVideoInfo *vi;
 

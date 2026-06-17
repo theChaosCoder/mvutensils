@@ -40,11 +40,11 @@ struct DepanEstimateData {
     float zoommax;
     float stab;
     float pixaspect;
-    int info;
-    int show;
-    int fields;
-    int tff;
-    int tff_exists;
+    bool info;
+    bool show;
+    bool fields;
+    bool tff;
+    bool tff_exists;
 
     const VSVideoInfo *vi;
 
@@ -684,8 +684,8 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
 
     d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 
-    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &d->tff_exists);
-    d->tff_exists = !d->tff_exists;
+    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
+    d->tff_exists = !err;
 
 
     try {
