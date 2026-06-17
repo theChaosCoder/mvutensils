@@ -1518,7 +1518,7 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
     int64_t lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
     int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany,
-    SearchType coarseSearchType, bool chroma) {
+    bool chroma) {
 
     if (state != State::ReadyForSearch)
         throw MotionBlockPyramidError("MotionBlockPyramid isn't in an appropriate state for searching motion vectors");
@@ -1539,7 +1539,7 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     int bytesPerSample = (pSrcGOF.bitsPerSample == 8) ? 1 : 2;
 
     // Search the motion vectors, for the low details interpolations first
-    SearchType searchTypeSmallest = (nLevelCount == 1 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for smallest coarse plane
+    SearchType searchTypeSmallest = (nLevelCount == 1 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : SearchType::Exhaustive; // full search for smallest coarse plane
     int nSearchParamSmallest = (nLevelCount == 1) ? nPelSearch : nSearchParam;
     bool tryManyLevel = tryMany && nLevelCount > 1;
     pyramidLevels[nLevelCount - 1].SearchMVs(
@@ -1551,8 +1551,8 @@ void MotionBlockPyramid::SearchMVs(const FramePyramid &pSrcGOF, const FramePyram
     // Refining the search until we reach the highest detail interpolation.
 
     for (int i = nLevelCount - 2; i >= 0; i--) {
-        SearchType searchTypeLevel = (i == 0 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : coarseSearchType; // full search for coarse planes
-        int nSearchParamLevel = (i == 0) ? nPelSearch : nSearchParam;                                                            // special case for finest level
+        SearchType searchTypeLevel = (i == 0 || searchType == SearchType::Horizontal || searchType == SearchType::Vertical) ? searchType : SearchType::Exhaustive; // full search for coarse planes
+        int nSearchParamLevel = (i == 0) ? nPelSearch : nSearchParam;
         if (global) {
             pyramidLevels[i + 1].EstimateGlobalMVDoubled(globalMV); // get updated global MV (doubled)
         }

@@ -50,6 +50,8 @@ Changes
     
     * The search and pelsearch argument had mode 0 and 1 removed, as a result all remaining mode have been adjusted by -2
     
+    * Removed search_coarse argument since nobody actually used it ever and it was left at the exhaustive default
+    
     * Removed the divide argument since no good use case seems to exist, in recalculate Recalculate you can already get an effect similar to divide=1/2 depending on smooth=False/True
     
     * The isb argument was removed, instead delta accepts both positive and negative numbers to indicate direction. NOTE THAT NEGATIVE DELTA MEANS FORWARD, POSITIVE DELTA MEANS BACKWARD. If you previously used isb=False+delta=1 in mvtools you must now specify delta=-1

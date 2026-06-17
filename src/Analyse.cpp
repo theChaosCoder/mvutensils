@@ -27,7 +27,6 @@ struct AnalyseData {
     int nLambda;
 
     SearchType searchType;
-    SearchType searchTypeCoarse;
 
     int nSearchParam; 
     int nPelSearch; 
@@ -94,7 +93,7 @@ static const VSFrame *VS_CC analyseGetFrame(int n, int activationReason, void *i
                 if (d->fields && srcFramePyramid.nPel > 1 && (d->deltaFrame % 2))
                     fieldShift = ComputeFieldShift(src_top_field, ref_top_field, srcFramePyramid.nPel);
 
-                vectorFields.SearchMVs(srcFramePyramid, refFramePyramid, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->searchTypeCoarse, d->chroma);
+                vectorFields.SearchMVs(srcFramePyramid, refFramePyramid, d->searchType, d->nSearchParam, d->nPelSearch, d->nLambda, d->lsad, d->pnew, d->plevel, d->global, fieldShift, d->useSatd, d->pzero, d->pglobal, d->badSAD, d->badrange, d->meander, d->tryMany, d->chroma);
             }
 
             VSFrame *dst = vsapi->copyFrame(src, core);
@@ -367,7 +366,6 @@ void analyseRegister(VSPlugin *plugin, const VSPLUGINAPI *vspapi) noexcept {
                  "trymany:int:opt;"
                  "fields:int:opt;"
                  "tff:int:opt;"
-                 "search_coarse:int:opt;"
                  "satd:int:opt;"
                  "radius:int:opt;"
                  "prefix:data:opt;",
