@@ -288,7 +288,7 @@ public:
         SearchType searchType, int nSearchParam, int nPelSearch, int nLambda,
         int64_t lsad, int pnew, int plevel, bool global, int fieldShift, bool useSatd,
         int pzero, int pglobal, int64_t badSAD, int badrange, bool meander, bool tryMany,
-        SearchType coarseSearchType, bool chroma);
+        bool chroma);
 
     // FIXME, currently you can't SearchMVs and then RecalculateMVs on the same object and instead it needs to be exported and imported into a new one
     // this should probably be improved

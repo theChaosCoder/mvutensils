@@ -140,10 +140,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
         if (err)
             d->searchType = SearchType::Hex2;
 
-        d->searchTypeCoarse = static_cast<SearchType>(vsapi->mapGetIntSaturated(in, "search_coarse", 0, &err));
-        if (err)
-            d->searchTypeCoarse = SearchType::Exhaustive;
-
         int searchparam = vsapi->mapGetIntSaturated(in, "searchparam", 0, &err);
         if (err)
             searchparam = 2;
@@ -214,9 +210,6 @@ static void VS_CC analyseCreate(const VSMap *in, VSMap *out, [[maybe_unused]] vo
 
         if (d->searchType != SearchType::Logarithmic && d->searchType != SearchType::Exhaustive && d->searchType != SearchType::Hex2 && d->searchType != SearchType::UnevenMultiHexagon && d->searchType != SearchType::Horizontal && d->searchType != SearchType::Vertical)
             throw std::runtime_error("search must be between 0 and 5");
-
-        if (d->searchTypeCoarse != SearchType::Logarithmic && d->searchTypeCoarse != SearchType::Exhaustive && d->searchTypeCoarse != SearchType::Hex2 && d->searchTypeCoarse != SearchType::UnevenMultiHexagon && d->searchTypeCoarse != SearchType::Horizontal && d->searchTypeCoarse != SearchType::Vertical)
-            throw std::runtime_error("search_coarse must be between 0 and 5");
 
         if (d->plevel < 0 || d->plevel > 2)
             throw std::runtime_error("plevel must be between 0 and 2");
