@@ -141,12 +141,7 @@ static void transform2motion(const transform *tr, int forward, float xcenter, fl
 //  get  coefficients for inverse coordinates transformation,
 //  fransform_inv ( transform_A ) = null transform
 static void inversetransform(const transform *ta, transform *tinv) noexcept {
-    float pixaspect;
-
-    if (ta->dxy != 0.0f)
-        pixaspect = sqrtf(-ta->dyx / ta->dxy);
-    else
-        pixaspect = 1.0f;
+    float pixaspect = (ta->dxy != 0.0f) ? sqrtf(-ta->dyx / ta->dxy) : 1.0f;
 
     tinv->dxx = ta->dxx / ((ta->dxx) * ta->dxx + ta->dxy * ta->dxy * pixaspect * pixaspect);
     tinv->dyy = tinv->dxx;
@@ -619,24 +614,23 @@ struct DepanEstimateData {
 
 // put source data to real array for FFT
 static void frame_data2d(const uint8_t *srcp, ptrdiff_t pitch, float * MVU_RESTRICT realdata, int winx, int winy, int winleft, int h0, int bytes_per_sample) {
-    int i, j;
     int winxpadded = (winx / 2 + 1) * 2;
 
     srcp += pitch * h0 + winleft * bytes_per_sample; // offset of window data
-    for (j = 0; j < winy; j++) {
+    for (int j = 0; j < winy; j++) {
         if (bytes_per_sample == 8) {
-            for (i = 0; i < winx; i += 2) {
+            for (int i = 0; i < winx; i += 2) {
                 realdata[i] = srcp[i];         // real part
                 realdata[i + 1] = srcp[i + 1]; // real part
             }
         } else if (bytes_per_sample == 32) {
-            for (i = 0; i < winx; i += 2) {
+            for (int i = 0; i < winx; i += 2) {
                 const float *srcpf = (const float *)srcp;
                 realdata[i] = srcpf[i];         // real part
                 realdata[i + 1] = srcpf[i + 1]; // real part
             }
         } else {
-            for (i = 0; i < winx; i += 2) {
+            for (int i = 0; i < winx; i += 2) {
                 const uint16_t *srcp16 = (const uint16_t *)srcp;
                 realdata[i] = srcp16[i];         // real part
                 realdata[i + 1] = srcp16[i + 1]; // real part
@@ -668,29 +662,18 @@ static void mult_conj_data2d(const fftwf_complex * MVU_RESTRICT fftnext, const f
 
 
 static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int winy, float trust_limit, int dxmax, int dymax, float stab, int fieldbased, int top_field, float pixaspect, float *fdx, float *fdy, float *trust) {
-    float correlmax, cur, correlmean;
-    float f1, f2;
-    float xadd = 0.0f;
-    float yadd = 0.0f;
-    int i, j;
-    int dx, dy;
-    int imax = 0, jmax = 0;
-    int imaxm1, imaxp1, jmaxm1, jmaxp1;
-    int count;
-
     int winxpadded = (winx / 2 + 1) * 2;
-    const float *correlp;
-
 
     // find global max on real part of correlation surface
     // new version: search only at 4 corners with ranges dxmax, dymax
-    correlmax = correl[0];
-    correlmean = 0.0f;
-    count = 0;
-    correlp = correl;
-    for (j = 0; j <= dymax; j++) { // top
-        for (i = 0; i <= dxmax; i++) { //left
-            cur = correlp[i]; // real part
+    float correlmax = correl[0];
+    float correlmean = 0.0f;
+    int count = 0;
+    int imax = 0, jmax = 0;
+    const float *correlp = correl;
+    for (int j = 0; j <= dymax; j++) { // top
+        for (int i = 0; i <= dxmax; i++) { //left
+            float cur = correlp[i]; // real part
             correlmean += cur;
             count += 1;
             if (correlmax < cur) {
@@ -699,8 +682,8 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
                 jmax = j;
             }
         }
-        for (i = winx - dxmax; i < winx; i++) { //right
-            cur = correlp[i]; // real part
+        for (int i = winx - dxmax; i < winx; i++) { //right
+            float cur = correlp[i]; // real part
             correlmean += cur;
             count += 1;
             if (correlmax < cur) {
@@ -712,9 +695,9 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
         correlp += winxpadded;
     }
     correlp = correl + (winy - dymax) * winxpadded;
-    for (j = winy - dymax; j < winy; j++) { // bottom
-        for (i = 0; i <= dxmax; i++) { //left
-            cur = correlp[i]; // real part
+    for (int j = winy - dymax; j < winy; j++) { // bottom
+        for (int i = 0; i <= dxmax; i++) { //left
+            float cur = correlp[i]; // real part
             correlmean += cur;
             count += 1;
             if (correlmax < cur) {
@@ -723,8 +706,8 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
                 jmax = j;
             }
         }
-        for (i = winx - dxmax; i < winx; i++) { //right
-            cur = correlp[i]; // real part
+        for (int i = winx - dxmax; i < winx; i++) { //right
+            float cur = correlp[i]; // real part
             correlmean += cur;
             count += 1;
             if (correlmax < cur) {
@@ -744,17 +727,9 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
     *trust = (correlmax - correlmean) * 100.0f / (correlmax + 0.1f); // +0.1 for safe divide
 
 
-    if (imax * 2 < winx) {
-        dx = imax;
-    } else { // get correct shift values on periodic surface (adjusted borders)
-        dx = (imax - winx);
-    }
-
-    if (jmax * 2 < winy) {
-        dy = jmax;
-    } else { // get correct shift values on periodic surface (adjusted borders)
-        dy = (jmax - winy);
-    }
+    // get correct shift values on periodic surface (adjusted borders)
+    int dx = (imax * 2 < winx) ? imax : (imax - winx);
+    int dy = (jmax * 2 < winy) ? jmax : (jmax - winy);
 
     // some trust decreasing for large shifts
 
@@ -763,10 +738,7 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
     // reject if relative diffference correlmax from correlmean is small
     // probably due to scene change
     if (*trust < trust_limit) {
-        dx = 0; // set value to pure 0, what will be interpreted as bad mark (scene change)
-        dy = 0;
-        xadd = 0.0f;
-        yadd = 0.0f;
+        // pure 0 will be interpreted as bad mark (scene change)
         *fdx = 0.0f;
         *fdy = 0.0f;
 
@@ -774,30 +746,16 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
         // normal, no scene change
         // get more precise float dx, dy by interpolation
         // get i, j, of left and right of max
-        if (imax + 1 < winx)
-            imaxp1 = imax + 1; // plus 1
-        else
-            imaxp1 = imax + 1 - winx; // over period
-
-        if (imax - 1 >= 0)
-            imaxm1 = imax - 1; // minus 1
-        else
-            imaxm1 = imax - 1 + winx;
-
-        if (jmax + 1 < winy)
-            jmaxp1 = jmax + 1;
-        else
-            jmaxp1 = jmax + 1 - winy;
-
-        if (jmax - 1 >= 0)
-            jmaxm1 = jmax - 1;
-        else
-            jmaxm1 = jmax - 1 + winy;
+        int imaxp1 = (imax + 1 < winx) ? (imax + 1) : (imax + 1 - winx); // plus 1, over period
+        int imaxm1 = (imax - 1 >= 0) ? (imax - 1) : (imax - 1 + winx);   // minus 1
+        int jmaxp1 = (jmax + 1 < winy) ? (jmax + 1) : (jmax + 1 - winy);
+        int jmaxm1 = (jmax - 1 >= 0) ? (jmax - 1) : (jmax - 1 + winy);
 
         // first and second differential
-        f1 = (correl[jmax * winxpadded + imaxp1] - correl[jmax * winxpadded + imaxm1]) / 2.0f;
-        f2 = correl[jmax * winxpadded + imaxp1] + correl[jmax * winxpadded + imaxm1] - correl[jmax * winxpadded + imax] * 2.0f;
+        float f1 = (correl[jmax * winxpadded + imaxp1] - correl[jmax * winxpadded + imaxm1]) / 2.0f;
+        float f2 = correl[jmax * winxpadded + imaxp1] + correl[jmax * winxpadded + imaxm1] - correl[jmax * winxpadded + imax] * 2.0f;
 
+        float xadd;
         if (f2 == 0.0f)
             xadd = 0.0f;
         else {
@@ -814,6 +772,7 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
         f1 = (correl[jmaxp1 * winxpadded + imax] - correl[jmaxm1 * winxpadded + imax]) / 2.0f;
         f2 = correl[jmaxp1 * winxpadded + imax] + (correl[jmaxm1 * winxpadded + imax]) - correl[jmax * winxpadded + imax] * 2.0f;
 
+        float yadd;
         if (f2 == 0.0f)
             yadd = 0.0f;
         else {
@@ -863,19 +822,15 @@ static void get_plane_fft(const uint8_t *srcp, ptrdiff_t src_pitch, fftwf_comple
 
 
 static void showcorrelation(const float * MVU_RESTRICT correl, int winx, int winy, uint8_t *dstp, ptrdiff_t dst_pitch, int winleft, int wintop, int pixel_max) {
-    float correlmax, correlmin, cur;
-    int i, j;
     int winxpadded = (winx / 2 + 1) * 2;
 
-    const float *correlp;
-
     // find max and min
-    correlmax = correl[0];
-    correlmin = correl[0];
-    correlp = correl;
-    for (j = 0; j < winy; j++) {
-        for (i = 0; i < winx; i++) {
-            cur = correlp[i];
+    float correlmax = correl[0];
+    float correlmin = correl[0];
+    const float *correlp = correl;
+    for (int j = 0; j < winy; j++) {
+        for (int i = 0; i < winx; i++) {
+            float cur = correlp[i];
             if (correlmax < cur) {
                 correlmax = cur;
             }
@@ -891,27 +846,21 @@ static void showcorrelation(const float * MVU_RESTRICT correl, int winx, int win
 
     dstp += wintop * dst_pitch; // go to first line of window
 
-    int bytes_per_sample;
-    if (pixel_max == 255)
-        bytes_per_sample = 1;
-    else if (pixel_max == 1)
-        bytes_per_sample = 4;
-    else
-        bytes_per_sample = 2;
+    int bytes_per_sample = (pixel_max == 255) ? 1 : (pixel_max == 1) ? 4 : 2;
 
     dstp += winleft * bytes_per_sample;
     correlp = correl;
-    for (j = 0; j < winy; j++) {
+    for (int j = 0; j < winy; j++) {
         if (pixel_max == 255) {
-            for (i = 0; i < winx; i++)
+            for (int i = 0; i < winx; i++)
                 dstp[i] = (int)((correlp[i] - correlmin) * norm); // real part
         } else if (pixel_max == 1) {
-            for (i = 0; i < winx; i++) {
+            for (int i = 0; i < winx; i++) {
                 float *dstpf = (float *)dstp;
                 dstpf[i] = (correlp[i] - correlmin) * norm;
             }
         } else {
-            for (i = 0; i < winx; i++) {
+            for (int i = 0; i < winx; i++) {
                 uint16_t *dstp16 = (uint16_t *)dstp;
                 dstp16[i] = (int)((correlp[i] - correlmin) * norm);
             }
@@ -1314,13 +1263,11 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
 
         if (d->winx > d->vi->width - d->wleft)
             throw std::runtime_error("winx must not be greater than width-wleft");
-        int i;
-        int wx;
         if (d->winx == 0) { // auto
             d->winx = d->vi->width - d->wleft;
             // find max fft window size (power of 2)
-            wx = 1;
-            for (i = 0; i < 13; i++) {
+            int wx = 1;
+            for (int i = 0; i < 13; i++) {
                 if (wx * 2 <= d->winx)
                     wx = wx * 2;
             }
@@ -1342,12 +1289,11 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
         // check and set fft window y size
         if (d->winy > d->vi->height - d->wtop)
             throw std::runtime_error("winy must not be greater than height-wtop");
-        int wy;
         if (d->winy == 0) {
             d->winy = d->vi->height - d->wtop; // start value
             // find max fft window size (power of 2)
-            wy = 1;
-            for (i = 0; i < 13; i++) {
+            int wy = 1;
+            for (int i = 0; i < 13; i++) {
                 if (wy * 2 <= d->winy)
                     wy = wy * 2;
             }
@@ -1511,20 +1457,19 @@ struct DepanCompensateData {
 //
 static void motion2transform(float dx1, float dy1, float rot, float zoom1, float pixaspect, float xcenter, float ycenter, int forward, float fractoffset, transform *tr) {
     const float PI = 3.1415926535897932384626433832795f;
-    float rotradian, sinus, cosinus, dx, dy, zoom;
 
     // fractoffset > 0 for forward, <0 for backward
-    dx = fractoffset * dx1;
-    dy = fractoffset * dy1;
-    rotradian = fractoffset * rot * PI / 180; // from degree to radian
+    float dx = fractoffset * dx1;
+    float dy = fractoffset * dy1;
+    float rotradian = fractoffset * rot * PI / 180; // from degree to radian
     if (fabsf(rotradian) < 1e-6f)
         rotradian = 0.0f; // for some stability of rounding precision
-    zoom = expf(fractoffset * logf(zoom1)); // zoom**(fractoffset) = exp(fractoffset*ln(zoom))
+    float zoom = expf(fractoffset * logf(zoom1)); // zoom**(fractoffset) = exp(fractoffset*ln(zoom))
     if (fabsf(zoom - 1.0f) < 1e-6f)
         zoom = 1.0f; // for some stability of rounding precision
 
-    sinus = sinf(rotradian);
-    cosinus = cosf(rotradian);
+    float sinus = sinf(rotradian);
+    float cosinus = cosf(rotradian);
 
     //    xcenter = row_size_p*(1+uv)/2.0;      //  middle x
     //    ycenter = height_p*(1+uv)/2.0;       //  middle y
@@ -1601,17 +1546,6 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
     pitch /= sizeof(PixelType);
 
-    int h, row;
-    int rowleft, hlow;
-    float xsrc, ysrc;
-    ptrdiff_t w0;
-    int inttr0;
-    int *rowleftwork = work1row_size;
-
-    int smoothed;
-    int blurlen;
-    int i;
-
     // for mirror
 
     int mtop = mirror & MIRROR_TOP;
@@ -1623,30 +1557,24 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
     if (tr->dxy == 0.0f && tr->dyx == 0.0f && tr->dxx == 1.0f && tr->dyy == 1.0f) { // only translation - fast
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            ysrc = tr->dyc + h;
-            hlow = (int)floorf(ysrc + 0.5f);
+            float ysrc = tr->dyc + h;
+            int hlow = (int)floorf(ysrc + 0.5f);
 
-            inttr0 = (int)floorf(tr->dxc + 0.5f);
-            rowleft = inttr0;
-            //            xsrc = tr[0];
-            //            rowleft = (int)floor(xsrc);  // low
+            int inttr0 = (int)floorf(tr->dxc + 0.5f);
 
             if (hlow < 0 && mtop)
                 hlow = -hlow; // mirror borders
             if (hlow >= height && mbottom)
                 hlow = height + height - hlow - 2;
 
-            w0 = hlow * pitch;
+            ptrdiff_t w0 = hlow * pitch;
             if ((hlow >= 0) && (hlow < height)) { // middle lines
 
 
-                for (row = 0; row < row_size; row++) {
-                    rowleft = inttr0 + row;
-
-                    //                    xsrc = tr[0]+row;            // hided simle formulas,
-                    //                    rowleft = (int)floor(xsrc);  // but slow
+                for (int row = 0; row < row_size; row++) {
+                    int rowleft = inttr0 + row;
 
                     //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
 
@@ -1654,9 +1582,9 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         dstp[row] = srcp[w0 + rowleft];
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, -rowleft);
-                            smoothed = 0;
-                            for (i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int smoothed = 0;
+                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -1664,9 +1592,9 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            smoothed = 0;
-                            for (i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                            int smoothed = 0;
+                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -1679,7 +1607,7 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
                 } // end for
             } else if (border >= 0) { // out lines
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
                     dstp[row] = border;
                 }
             }
@@ -1690,42 +1618,41 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     //-----------------------------------------------------------------------------
     else if (tr->dxy == 0.0f && tr->dyx == 0.0f) { // no rotation, only zoom and translation  - fast
 
+        int *rowleftwork = work1row_size;
+
         // prepare positions   (they are not dependent from h) for fast processing
-        for (row = 0; row < row_size; row++) {
-            xsrc = tr->dxc + tr->dxx * row;
+        for (int row = 0; row < row_size; row++) {
+            float xsrc = tr->dxc + tr->dxx * row;
             rowleftwork[row] = (int)floorf(xsrc + 0.5f);
-            rowleft = rowleftwork[row];
         }
 
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            ysrc = tr->dyc + tr->dyy * h;
+            float ysrc = tr->dyc + tr->dyy * h;
 
-            hlow = (int)floorf(ysrc + 0.5f);
+            int hlow = (int)floorf(ysrc + 0.5f);
 
             if (hlow < 0 && mtop)
                 hlow = -hlow; // mirror borders
             if (hlow >= height && mbottom)
                 hlow = height + height - hlow - 2;
 
-            w0 = hlow * pitch;
+            ptrdiff_t w0 = hlow * pitch;
             if ((hlow >= 0) && (hlow < height)) { // incide
 
 
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
 
-                    //                    xsrc = tr[0]+tr[1]*row;
-                    //                    rowleft = floor(xsrc);
-                    rowleft = rowleftwork[row]; //(int)(xsrc);
+                    int rowleft = rowleftwork[row];
 
                     if ((rowleft >= 0) && (rowleft < row_size)) {
                         dstp[row] = srcp[w0 + rowleft];
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, -rowleft);
-                            smoothed = 0;
-                            for (i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int smoothed = 0;
+                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -1733,9 +1660,9 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            smoothed = 0;
-                            for (i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                            int smoothed = 0;
+                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -1746,7 +1673,7 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     }
                 } // end for
             } else if (border >= 0) { // out lines
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
                     dstp[row] = border;
                 }
             }
@@ -1757,24 +1684,16 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     //-----------------------------------------------------------------------------
     else { // rotation, zoom and translation - slow
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            xsrc = tr->dxc + tr->dxy * h; // part not dependent from row
-            ysrc = tr->dyc + tr->dyy * h;
+            float xsrc = tr->dxc + tr->dxy * h; // part not dependent from row
+            float ysrc = tr->dyc + tr->dyy * h;
 
-            for (row = 0; row < row_size; row++) {
+            for (int row = 0; row < row_size; row++) {
 
-                rowleft = (int)(xsrc + 0.5f); // use simply fast (int), not floor(), since followed check
+                int rowleft = (int)(xsrc + 0.5f); // use simply fast (int), not floor(), since followed check
 
-                //                if (xsrc  < rowleft) {
-                //                    rowleft -=1;
-                //                }
-
-                hlow = (int)(ysrc + 0.5f); // use simply fast  (int), not floor(), since followed check
-
-                //                if (ysrc <  hlow) {
-                //                    hlow -=1;
-                //                }
+                int hlow = (int)(ysrc + 0.5f); // use simply fast  (int), not floor(), since followed check
 
 
                 if ((rowleft >= 0) && (rowleft < row_size) && (hlow >= 0) && (hlow < height)) {
@@ -1821,35 +1740,13 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
     pitch /= sizeof(PixelType);
 
-    int h, row;
-    int pixel;
-    int rowleft, hlow;
-    float sx, sy;
-    //    float t0, t1, t2, t3, c0,c1,c2,c3;
-    float xsrc, ysrc;
-    ptrdiff_t w0;
     int intcoef[66];
-    int intcoef2d[4];
-    int ix2, iy2;
-    int i, j;
-    int inttr0;
-    int *rowleftwork = work2row_size4356;
-    int *ix2work = rowleftwork + row_size;
-    int *intcoef2dzoom0 = ix2work + row_size; //[66][66]; // 4356
-    int *intcoef2dzoom = intcoef2dzoom0;
-
-    ptrdiff_t w;
-
-    int smoothed;
-    int blurlen;
 
     // for mirror
     int mtop = mirror & MIRROR_TOP;
     int mbottom = mirror & MIRROR_BOTTOM;
     int mleft = mirror & MIRROR_LEFT;
     int mright = mirror & MIRROR_RIGHT;
-
-    int rowgoodstart, rowgoodend, rowbadstart, rowbadend;
 
     // prepare interpolation coefficients tables
     // for position of xsrc in integer grid
@@ -1865,7 +1762,7 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
     // now sx = i/32, sy = j/32  (discrete approximation)
 
     // float coeff. are changed by integer coeff. scaled by 32
-    for (i = 0; i <= 32; i += 1) {
+    for (int i = 0; i <= 32; i += 1) {
         intcoef[i * 2] = (32 - i);
         intcoef[i * 2 + 1] = i;
     }
@@ -1874,20 +1771,18 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
     if (tr->dxy == 0.0f && tr->dyx == 0.0f && tr->dxx == 1.0f && tr->dyy == 1.0f) { // only translation - fast
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            ysrc = tr->dyc + h;
-            hlow = (int)floorf(ysrc);
-            iy2 = 2 * ((int)floorf((ysrc - hlow) * 32));
+            float ysrc = tr->dyc + h;
+            int hlow = (int)floorf(ysrc);
+            int iy2 = 2 * ((int)floorf((ysrc - hlow) * 32));
 
-            inttr0 = (int)floorf(tr->dxc);
-            rowleft = inttr0;
-            //            xsrc = tr[0];
-            //            rowleft = (int)floor(xsrc);  // low
-            ix2 = 2 * ((int)floorf((tr->dxc - rowleft) * 32));
+            int inttr0 = (int)floorf(tr->dxc);
+            int ix2 = 2 * ((int)floorf((tr->dxc - inttr0) * 32));
 
-            for (j = 0; j < 2; j++) {
-                for (i = 0; i < 2; i++) {
+            int intcoef2d[4];
+            for (int j = 0; j < 2; j++) {
+                for (int i = 0; i < 2; i++) {
                     intcoef2d[j * 2 + i] = (intcoef[j + iy2] * intcoef[i + ix2]); // 4 coeff. for bilinear 2D
                 }
             }
@@ -1897,10 +1792,11 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
             if (hlow >= height && mbottom)
                 hlow = height + height - hlow - 2;
 
-            w0 = hlow * pitch;
+            ptrdiff_t w0 = hlow * pitch;
 
             if ((hlow >= 0) && (hlow < height - 1)) { // middle lines
 
+                int rowgoodstart, rowgoodend, rowbadstart, rowbadend;
                 if (inttr0 >= 0) {
                     rowgoodstart = 0;
                     rowgoodend = row_size - 1 - inttr0;
@@ -1914,33 +1810,27 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                 }
                 //                int rowgoodendpaired = (rowgoodend/2)*2; //even - but it was a little not optimal
                 int rowgoodendpaired = rowgoodstart + ((rowgoodend - rowgoodstart) / 2) * 2; //even length - small fix in v.1.8
-                w = w0 + inttr0 + rowgoodstart;
-                for (row = rowgoodstart; row < rowgoodendpaired; row += 2) { // paired unroll for speed
-                    //                    xsrc = tr[0]+row;            // hided simle formulas,
-                    //                    rowleft = (int)floor(xsrc);  // but slow
-                    //                    rowleft = inttr0 + row;
-                    //                    w = w0+rowleft;
+                ptrdiff_t w = w0 + inttr0 + rowgoodstart;
+                for (int row = rowgoodstart; row < rowgoodendpaired; row += 2) { // paired unroll for speed
                     //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
-                    //                    if ( (rowleft >= 0) && (rowleft<row_size-1)  )
                     dstp[row] = (intcoef2d[0] * srcp[w] + intcoef2d[1] * srcp[w + 1] + intcoef2d[2] * srcp[w + pitch] + intcoef2d[3] * srcp[w + pitch + 1]) >> 10; // i.e. divide by 32*32
                     dstp[row + 1] = (intcoef2d[0] * srcp[w + 1] + intcoef2d[1] * srcp[w + 2] + intcoef2d[2] * srcp[w + pitch + 1] + intcoef2d[3] * srcp[w + pitch + 2]) >> 10; // i.e. divide by 32*32
                     w += 2;
                 }
-                for (row = rowgoodendpaired - 1; row < rowgoodend; row++) { // if odd, process  very last
+                for (int row = rowgoodendpaired - 1; row < rowgoodend; row++) { // if odd, process  very last
                     w = w0 + inttr0 + row;
                     dstp[row] = (intcoef2d[0] * srcp[w] + intcoef2d[1] * srcp[w + 1] +
                                  intcoef2d[2] * srcp[w + pitch] + intcoef2d[3] * srcp[w + pitch + 1]) >>
                                 10; // i.e. divide by 32*32
                 }
-                for (row = rowbadstart; row < rowbadend; row++) {
-                    rowleft = inttr0 + row;
-                    w = w0 + rowleft;
+                for (int row = rowbadstart; row < rowbadend; row++) {
+                    int rowleft = inttr0 + row;
 
                     if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, -rowleft);
-                            smoothed = 0;
-                            for (i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int smoothed = 0;
+                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -1948,9 +1838,9 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                         }
                     } else if (rowleft >= row_size - 1 && mright) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, rowleft - row_size + 2);
-                            smoothed = 0;
-                            for (i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                            int blurlen = VSMIN(blurmax, rowleft - row_size + 2);
+                            int smoothed = 0;
+                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -1962,8 +1852,8 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
                 } // end for
             } else if (hlow == height - 1) { // edge (top, bottom) lines
-                for (row = 0; row < row_size; row++) {
-                    rowleft = inttr0 + row;
+                for (int row = 0; row < row_size; row++) {
+                    int rowleft = inttr0 + row;
                     if ((rowleft >= 0) && (rowleft < row_size)) {
                         dstp[row] = srcp[w0 + rowleft]; // nearest pixel, may be bilinear is better
                     } else if (rowleft < 0 && mleft) {
@@ -1975,7 +1865,7 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     }
                 }
             } else if (border >= 0) { // out lines
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
                     dstp[row] = border;
                 }
             }
@@ -1986,35 +1876,40 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
     //-----------------------------------------------------------------------------
     else if (tr->dxy == 0.0f && tr->dyx == 0.0f) { // no rotation, only zoom and translation  - fast
 
+        int *rowleftwork = work2row_size4356;
+        int *ix2work = rowleftwork + row_size;
+        int *intcoef2dzoom0 = ix2work + row_size; //[66][66]; // 4356
+        int *intcoef2dzoom = intcoef2dzoom0;
+
         // prepare positions   (they are not dependent from h) for fast processing
-        for (row = 0; row < row_size; row++) {
-            xsrc = tr->dxc + tr->dxx * row;
+        for (int row = 0; row < row_size; row++) {
+            float xsrc = tr->dxc + tr->dxx * row;
             rowleftwork[row] = (int)floorf(xsrc);
-            rowleft = rowleftwork[row];
+            int rowleft = rowleftwork[row];
             ix2work[row] = 2 * ((int)floorf((xsrc - rowleft) * 32));
         }
 
-        for (j = 0; j < 66; j++) {
-            for (i = 0; i < 66; i++) {
+        for (int j = 0; j < 66; j++) {
+            for (int i = 0; i < 66; i++) {
                 intcoef2dzoom[i] = (intcoef[j] * intcoef[i]); //  coeff. for bilinear 2D
             }
             intcoef2dzoom += 66;
         }
         intcoef2dzoom -= 66 * 66; //restore
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            ysrc = tr->dyc + tr->dyy * h;
+            float ysrc = tr->dyc + tr->dyy * h;
 
-            hlow = (int)floorf(ysrc);
-            iy2 = 2 * ((int)floorf((ysrc - hlow) * 32));
+            int hlow = (int)floorf(ysrc);
+            int iy2 = 2 * ((int)floorf((ysrc - hlow) * 32));
 
             if (hlow < 0 && mtop)
                 hlow = -hlow; // mirror borders
             if (hlow >= height && mbottom)
                 hlow = height + height - hlow - 2;
 
-            w0 = hlow * pitch;
+            ptrdiff_t w0 = hlow * pitch;
 
             if ((hlow >= 0) && (hlow < height - 1)) { // incide
 
@@ -2022,33 +1917,27 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                 intcoef2dzoom += iy2 * 66;
 
 
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
 
-                    //                    xsrc = tr[0]+tr[1]*row;
-                    rowleft = rowleftwork[row]; //(int)(xsrc);
-                    //                    rowleft = floor(xsrc);
+                    int rowleft = rowleftwork[row];
 
                     //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
 
                     if ((rowleft >= 0) && (rowleft < row_size - 1)) {
 
-                        //                        ix2 = 2*((int)((xsrc-rowleft)*32));
-                        ix2 = ix2work[row];
-                        w = w0 + rowleft;
+                        int ix2 = ix2work[row];
+                        ptrdiff_t w = w0 + rowleft;
 
-                        //                        pixel = ( intcoef[iy2]*(intcoef[ix2]*srcp[w] + intcoef[ix2+1]*srcp[w+1] ) +
-                        //                                intcoef[iy2+1]*(intcoef[ix2]*srcp[w+src_pitch] + intcoef[ix2+1]*srcp[w+src_pitch+1] ) )/1024;
-                        pixel = (intcoef2dzoom[ix2] * srcp[w] + intcoef2dzoom[ix2 + 1] * srcp[w + 1] +
+                        int pixel = (intcoef2dzoom[ix2] * srcp[w] + intcoef2dzoom[ix2 + 1] * srcp[w + 1] +
                                  intcoef2dzoom[ix2 + 66] * srcp[w + pitch] + intcoef2dzoom[ix2 + 67] * srcp[w + pitch + 1]) >>
                                 10;
 
-                        //                        dstp[row] = max(min(pixel,255),0);
                         dstp[row] = pixel; // maxmin disabled in v1.6
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, -rowleft);
-                            smoothed = 0;
-                            for (i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int smoothed = 0;
+                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -2056,9 +1945,9 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                         }
                     } else if (rowleft >= row_size - 1 && mright) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, rowleft - row_size + 2);
-                            smoothed = 0;
-                            for (i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                            int blurlen = VSMIN(blurmax, rowleft - row_size + 2);
+                            int smoothed = 0;
+                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -2069,8 +1958,8 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     }
                 } // end for
             } else if (hlow == height - 1) { // edge ( bottom) lines
-                for (row = 0; row < row_size; row++) {
-                    rowleft = rowleftwork[row];
+                for (int row = 0; row < row_size; row++) {
+                    int rowleft = rowleftwork[row];
                     if ((rowleft >= 0) && (rowleft < row_size)) {
                         dstp[row] = srcp[rowleft + hlow * pitch]; // nearest pixel, may be bilinear is better
                     } else if (border >= 0) { // left or right
@@ -2078,7 +1967,7 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     }
                 }
             } else if (border >= 0) { // out lines
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
                     dstp[row] = border;
                 }
             }
@@ -2089,22 +1978,22 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
     //-----------------------------------------------------------------------------
     else { // rotation, zoom and translation - slow
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            xsrc = tr->dxc + tr->dxy * h; // part not dependent from row
-            ysrc = tr->dyc + tr->dyy * h;
+            float xsrc = tr->dxc + tr->dxy * h; // part not dependent from row
+            float ysrc = tr->dyc + tr->dyy * h;
 
-            for (row = 0; row < row_size; row++) {
+            for (int row = 0; row < row_size; row++) {
 
-                rowleft = (int)(xsrc); // use simply fast (int), not floor(), since followed check >1
-                sx = xsrc - rowleft;
+                int rowleft = (int)(xsrc); // use simply fast (int), not floor(), since followed check >1
+                float sx = xsrc - rowleft;
                 if (sx < 0) {
                     sx += 1;
                     rowleft -= 1;
                 }
 
-                hlow = (int)(ysrc); // use simply fast  (int), not floor(), since followed check >1
-                sy = ysrc - hlow;
+                int hlow = (int)(ysrc); // use simply fast  (int), not floor(), since followed check >1
+                float sy = ysrc - hlow;
                 if (sy < 0) {
                     sy += 1;
                     hlow -= 1;
@@ -2115,15 +2004,14 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
                 if ((rowleft >= 0) && (rowleft < row_size - 1) && (hlow >= 0) && (hlow < height - 1)) {
 
-                    ix2 = ((int)(sx * 32)) << 1; // i.e. *2
-                    iy2 = ((int)(sy * 32)) << 1; // i.e. *2
-                    w0 = rowleft + hlow * pitch;
+                    int ix2 = ((int)(sx * 32)) << 1; // i.e. *2
+                    int iy2 = ((int)(sy * 32)) << 1; // i.e. *2
+                    ptrdiff_t w0 = rowleft + hlow * pitch;
 
-                    pixel = ((intcoef[ix2] * srcp[w0] + intcoef[ix2 + 1] * srcp[w0 + 1]) * intcoef[iy2] +
+                    int pixel = ((intcoef[ix2] * srcp[w0] + intcoef[ix2 + 1] * srcp[w0 + 1]) * intcoef[iy2] +
                              (intcoef[ix2] * srcp[w0 + pitch] + intcoef[ix2 + 1] * srcp[w0 + pitch + 1]) * intcoef[iy2 + 1]) >>
                             10;
 
-                    //                    dstp[row] = max(min(pixel,255),0);
                     dstp[row] = pixel; //maxmin disabled in v1.6
                 } else {
                     if (hlow < 0 && mtop)
@@ -2166,25 +2054,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
     pitch /= sizeof(PixelType);
 
-    int h, row;
-    int rowleft, hlow;
-    float sx, sy;
-    //    float t0, t1, t2, t3, c0,c1,c2,c3;
-    float xsrc, ysrc;
-    ptrdiff_t w0;
-    int ix4, iy4;
-    int i, j;
-    int inttr0, inttr3;
-    int *rowleftwork = work2width1030;
-    int *ix4work = work2width1030 + row_size;
-    //    int intcoef[1030];
-    int *intcoef = ix4work + row_size;
-    int64_t ts[4];
-    int intcoef2d[16];
-
-    ptrdiff_t w;
-    int smoothed;
-    int blurlen;
+    int *intcoef = work2width1030 + 2 * row_size;
 
     // for mirror
     int mtop = mirror & MIRROR_TOP;
@@ -2210,7 +2080,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     // now sx = i/256, sy = j/256  (discrete approximation)
 
     // float coeff. are changed by integer coeff. scaled by 256*256*256/8192 = 2048
-    for (i = 0; i <= 256; i += 1) { // 257 steps, 1028 numbers
+    for (int i = 0; i <= 256; i += 1) { // 257 steps, 1028 numbers
         intcoef[i * 4] = -((i * (256 - i) * (256 - i))) / 8192;
         intcoef[i * 4 + 1] = (256 * 256 * 256 - 2 * 256 * i * i + i * i * i) / 8192;
         intcoef[i * 4 + 2] = (i * (256 * 256 + 256 * i - i * i)) / 8192;
@@ -2221,21 +2091,19 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
     if (tr->dxy == 0.0f && tr->dyx == 0.0f && tr->dxx == 1.0f && tr->dyy == 1.0f) { // only translation - fast
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            ysrc = tr->dyc + h;
-            inttr3 = (int)floorf(tr->dyc);
-            hlow = (int)floorf(ysrc);
-            iy4 = 4 * ((int)((ysrc - hlow) * 256));
+            float ysrc = tr->dyc + h;
+            int inttr3 = (int)floorf(tr->dyc);
+            int hlow = (int)floorf(ysrc);
+            int iy4 = 4 * ((int)((ysrc - hlow) * 256));
 
-            inttr0 = (int)floorf(tr->dxc);
-            rowleft = inttr0;
-            //            xsrc = tr[0];
-            //            rowleft = (int)floor(xsrc);  // low
-            ix4 = 4 * ((int)((tr->dxc - inttr0) * 256));
+            int inttr0 = (int)floorf(tr->dxc);
+            int ix4 = 4 * ((int)((tr->dxc - inttr0) * 256));
 
-            for (j = 0; j < 4; j++) {
-                for (i = 0; i < 4; i++) {
+            int intcoef2d[16];
+            for (int j = 0; j < 4; j++) {
+                for (int i = 0; i < 4; i++) {
                     intcoef2d[j * 4 + i] = ((intcoef[j + iy4] * intcoef[i + ix4])) / 2048; // 16 coeff. for bicubic 2D, scaled by 2048
                 }
             }
@@ -2245,20 +2113,18 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
             if (hlow >= height && mbottom)
                 hlow = height + height - hlow - 2;
 
-            w0 = hlow * pitch;
+            ptrdiff_t w0 = hlow * pitch;
 
             if ((hlow >= 1) && (hlow < height - 2)) { // middle lines
 
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
 
-                    rowleft = inttr0 + row;
-
-                    //                    xsrc = tr[0]+row;
+                    int rowleft = inttr0 + row;
 
                     //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
 
                     if ((rowleft >= 1) && (rowleft < row_size - 2)) {
-                        w = w0 + rowleft;
+                        ptrdiff_t w = w0 + rowleft;
 
                         int pixel = (intcoef2d[0] * srcp[w - pitch - 1] + intcoef2d[1] * srcp[w - pitch] + intcoef2d[2] * srcp[w - pitch + 1] + intcoef2d[3] * srcp[w - pitch + 2] +
                                  intcoef2d[4] * srcp[w - 1] + intcoef2d[5] * srcp[w] + intcoef2d[6] * srcp[w + 1] + intcoef2d[7] * srcp[w + 2] +
@@ -2270,9 +2136,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, -rowleft);
-                            smoothed = 0;
-                            for (i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int smoothed = 0;
+                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -2280,9 +2146,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            smoothed = 0;
-                            for (i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                            int smoothed = 0;
+                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -2296,12 +2162,12 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
                 } // end for
             } else if (hlow == 0 || hlow == height - 2) { // near edge (top-1, bottom-1) lines
-                for (row = 0; row < row_size; row++) {
-                    rowleft = inttr0 + row;
-                    sx = tr->dxc - inttr0;
-                    sy = tr->dyc - inttr3;
+                for (int row = 0; row < row_size; row++) {
+                    int rowleft = inttr0 + row;
+                    float sx = tr->dxc - inttr0;
+                    float sy = tr->dyc - inttr3;
                     if ((rowleft >= 0) && (rowleft < row_size - 1)) { // bug fixed for right edge in v.1.1.1
-                        w = w0 + rowleft;
+                        ptrdiff_t w = w0 + rowleft;
                         dstp[row] = (int)((1.0 - sy) * ((1.0 - sx) * srcp[w] + sx * srcp[w + 1]) +
                                           sy * ((1.0 - sx) * srcp[w + pitch] + sx * srcp[w + pitch + 1])); // bilinear
                     } else if (rowleft == row_size - 1) { // added in v.1.1.1
@@ -2315,8 +2181,8 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     }
                 }
             } else if (hlow == height - 1) { // bottom line
-                for (row = 0; row < row_size; row++) {
-                    rowleft = inttr0 + row;
+                for (int row = 0; row < row_size; row++) {
+                    int rowleft = inttr0 + row;
                     if (rowleft >= 0 && rowleft < row_size) {
                         dstp[row] = srcp[w0 + rowleft];
                     } else if (rowleft < 0 && mleft) {
@@ -2328,7 +2194,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     }
                 }
             } else if (border >= 0) { // out lines
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
                     dstp[row] = border;
                 }
             }
@@ -2339,47 +2205,47 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     //-----------------------------------------------------------------------------
     else if (tr->dxy == 0.0f && tr->dyx == 0.0f) { // no rotation, only zoom and translation  - fast
 
+        int *rowleftwork = work2width1030;
+        int *ix4work = work2width1030 + row_size;
+
         // prepare positions   (they are not dependent from h) for fast processing
-        for (row = 0; row < row_size; row++) {
-            xsrc = tr->dxc + tr->dxx * row;
+        for (int row = 0; row < row_size; row++) {
+            float xsrc = tr->dxc + tr->dxx * row;
             rowleftwork[row] = (int)floorf(xsrc);
-            rowleft = rowleftwork[row];
+            int rowleft = rowleftwork[row];
             ix4work[row] = 4 * ((int)((xsrc - rowleft) * 256));
         }
 
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            ysrc = tr->dyc + tr->dyy * h;
+            float ysrc = tr->dyc + tr->dyy * h;
 
-            hlow = (int)floorf(ysrc);
-            iy4 = 4 * ((int)((ysrc - hlow) * 256));
+            int hlow = (int)floorf(ysrc);
+            int iy4 = 4 * ((int)((ysrc - hlow) * 256));
 
-            sy = ysrc - hlow;
+            float sy = ysrc - hlow;
 
             if (hlow < 0 && mtop)
                 hlow = -hlow; // mirror borders
             if (hlow >= height && mbottom)
                 hlow = height + height - hlow - 2;
 
-            w0 = hlow * pitch;
+            ptrdiff_t w0 = hlow * pitch;
             if ((hlow >= 1) && (hlow < height - 2)) { // incide
 
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
 
-                    //                    xsrc = tr[0]+tr[1]*row;
-                    //                    rowleft = floor(xsrc);
-                    rowleft = rowleftwork[row]; //(int)(xsrc);
+                    int rowleft = rowleftwork[row];
 
                     //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
 
                     if ((rowleft >= 1) && (rowleft < row_size - 2)) {
 
-                        //                        ix4 = 4*((int)((xsrc-rowleft)*256));
-                        ix4 = ix4work[row];
-                        w = w0 + rowleft;
+                        int ix4 = ix4work[row];
+                        ptrdiff_t w = w0 + rowleft;
 
-
+                        int64_t ts[4];
                         srcp -= pitch; // prev line
                         ts[0] = (intcoef[ix4] * srcp[w - 1] + intcoef[ix4 + 1] * srcp[w] + intcoef[ix4 + 2] * srcp[w + 1] + intcoef[ix4 + 3] * srcp[w + 2]);
                         srcp += pitch; // next line
@@ -2396,9 +2262,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         dstp[row] = static_cast<PixelType>(VSMAX(VSMIN(pixel, pixel_max), 0));
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, -rowleft);
-                            smoothed = 0;
-                            for (i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int smoothed = 0;
+                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else {
@@ -2406,9 +2272,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
-                            blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            smoothed = 0;
-                            for (i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                            int smoothed = 0;
+                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + i];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
@@ -2421,12 +2287,12 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     }
                 } // end for
             } else if (hlow == 0 || hlow == height - 2) { // near edge (top-1, bottom-1) lines
-                for (row = 0; row < row_size; row++) {
-                    rowleft = rowleftwork[row];
+                for (int row = 0; row < row_size; row++) {
+                    int rowleft = rowleftwork[row];
                     if ((rowleft >= 0) && (rowleft < row_size - 1)) { // bug fixed for right bound in v.1.10.0
-                        xsrc = tr->dxc + tr->dxx * row;
-                        sx = xsrc - rowleft;
-                        w = w0 + rowleft;
+                        float xsrc = tr->dxc + tr->dxx * row;
+                        float sx = xsrc - rowleft;
+                        ptrdiff_t w = w0 + rowleft;
                         int pixel = (int)((1.0 - sy) * ((1.0 - sx) * srcp[w] + sx * srcp[w + 1]) +
                                       sy * ((1.0 - sx) * srcp[w + pitch] + sx * srcp[w + pitch + 1])); // bilinear
                         dstp[row] = VSMAX(VSMIN(pixel, pixel_max), 0);
@@ -2441,8 +2307,8 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     }
                 }
             } else if (hlow == height - 1) { // bottom line
-                for (row = 0; row < row_size; row++) {
-                    rowleft = rowleftwork[row];
+                for (int row = 0; row < row_size; row++) {
+                    int rowleft = rowleftwork[row];
                     if (rowleft >= 0 && rowleft < row_size) {
                         dstp[row] = (srcp[w0 + rowleft] + srcp[w0 + rowleft - pitch]) / 2; // for some smoothing
                     } else if (rowleft < 0 && mleft) {
@@ -2454,7 +2320,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     }
                 }
             } else if (border >= 0) { // out lines
-                for (row = 0; row < row_size; row++) {
+                for (int row = 0; row < row_size; row++) {
                     // bug fixed here in v. 0.9.1 (access violation - bad w0)
                     /*                    rowleft = rowleftwork[row];
                     if (rowleft >=0 && rowleft < row_size) {
@@ -2479,18 +2345,18 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     //-----------------------------------------------------------------------------
     else { // rotation, zoom and translation - slow
 
-        for (h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) {
 
-            for (row = 0; row < row_size; row++) {
+            for (int row = 0; row < row_size; row++) {
 
-                xsrc = tr->dxc + tr->dxx * row + tr->dxy * h;
-                ysrc = tr->dyc + tr->dyx * row + tr->dyy * h;
-                rowleft = (int)(xsrc); // use simply fast (int), not floor(), since followed check >1
+                float xsrc = tr->dxc + tr->dxx * row + tr->dxy * h;
+                float ysrc = tr->dyc + tr->dyx * row + tr->dyy * h;
+                int rowleft = (int)(xsrc); // use simply fast (int), not floor(), since followed check >1
                 if (xsrc < rowleft) {
                     rowleft -= 1;
                 }
 
-                hlow = (int)(ysrc); // use simply fast  (int), not floor(), since followed check >1
+                int hlow = (int)(ysrc); // use simply fast  (int), not floor(), since followed check >1
                 if (ysrc < hlow) {
                     hlow -= 1;
                 }
@@ -2499,10 +2365,11 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
                 if ((rowleft >= 1) && (rowleft < row_size - 2) && (hlow >= 1) && (hlow < height - 2)) {
 
-                    ix4 = 4 * ((int)((xsrc - rowleft) * 256));
+                    int ix4 = 4 * ((int)((xsrc - rowleft) * 256));
 
-                    w0 = rowleft + hlow * pitch;
+                    ptrdiff_t w0 = rowleft + hlow * pitch;
 
+                    int64_t ts[4];
                     srcp -= pitch; // prev line
                     ts[0] = (intcoef[ix4] * srcp[w0 - 1] + intcoef[ix4 + 1] * srcp[w0] + intcoef[ix4 + 2] * srcp[w0 + 1] + intcoef[ix4 + 3] * srcp[w0 + 2]);
                     srcp += pitch; // next line
@@ -2515,7 +2382,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     srcp -= (pitch << 1); // restore pointer, changed to shift in v.1.1.1
 
 
-                    iy4 = ((int)((ysrc - hlow) * 256)) << 2; //changed to shift in v.1.1.1
+                    int iy4 = ((int)((ysrc - hlow) * 256)) << 2; //changed to shift in v.1.1.1
 
                     int64_t pixel = (intcoef[iy4] * ts[0] + intcoef[iy4 + 1] * ts[1] + intcoef[iy4 + 2] * ts[2] + intcoef[iy4 + 3] * ts[3]) >> 22;
                     dstp[row] = static_cast<PixelType>(VSMAX(VSMIN(pixel, pixel_max), 0));
@@ -2896,9 +2763,6 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
     const float cutoff = d->cutoff;
     const float tzoom = d->tzoom;
 
-    int n;
-    transform trinv, trcur, trtemp;
-
     // set null as smoothed for base - v1.12
     // set null as smoothed for base+1 - v1.12
     trsmoothed[nbase].setNull();
@@ -2908,7 +2772,7 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
     float cquad = 39.44f / (fps * fps);
 
     // recurrent calculation of smoothed cumulative transforms from base+2 to ndest frames
-    for (n = nbase + 2; n <= ndest; n++) {
+    for (int n = nbase + 2; n <= ndest; n++) {
 
         // dxc predictor:
         trsmoothed[n].dxc = 2 * trsmoothed[n - 1].dxc - trsmoothed[n - 2].dxc -
@@ -2968,7 +2832,8 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
         azoom[nbase + 1] = initzoom;
         azoomsmoothed[nbase] = initzoom;
         azoomsmoothed[nbase + 1] = initzoom;
-        for (n = nbase + 2; n <= ndest; n++) {
+        for (int n = nbase + 2; n <= ndest; n++) {
+            transform trinv, trcur, trtemp;
             // get inverse transform
             inversetransform(&trcumul[n], &trinv);
             // calculate difference between smoothed and original non-smoothed cumulative transform
@@ -3041,6 +2906,7 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
             sumtransform(&trsmoothed[n], &trtemp, &trsmoothed[n]); // added v.1.5.0
         }
     } else {
+        transform trtemp;
         motion2transform(0, 0, 0, initzoom, pixaspect / nfields, xcenter, ycenter, 1, 1.0, &trtemp); // added in v.1.7
         sumtransform(&trsmoothed[ndest], &trtemp, &trsmoothed[ndest]);                                 // added v.1.7
     }
@@ -3048,6 +2914,7 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
     // calculate difference between smoothed and original non-smoothed cumulative tranform
     // it will be used as stabilization values
 
+    transform trinv;
     inversetransform(&trcumul[ndest], &trinv);
     sumtransform(&trinv, &trsmoothed[ndest], ptrdif);
 }
@@ -3059,7 +2926,6 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
     const float pixaspect = d->pixaspect;
     const int nfields = d->nfields;
     const int addzoom = d->addzoom;
-    float azoomsmoothed;
     const float initzoom = d->initzoom;
     const float xcenter = d->xcenter;
     const float ycenter = d->ycenter;
@@ -3071,20 +2937,17 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
     const float * const winrz = d->winrz.data();
 
 
-    int n;
-    transform trinv, trcur, trtemp;
-
     float norm = 0;
     trsmoothed.dxc = 0;
     trsmoothed.dyc = 0;
     trsmoothed.dxy = 0;
-    for (n = nbase; n < ndest; n++) {
+    for (int n = nbase; n < ndest; n++) {
         trsmoothed.dxc += trcumul[n].dxc * wint[ndest - n];
         trsmoothed.dyc += trcumul[n].dyc * wint[ndest - n];
         trsmoothed.dxy += trcumul[n].dxy * wint[ndest - n];
         norm += wint[ndest - n];
     }
-    for (n = ndest; n <= nmax; n++) {
+    for (int n = ndest; n <= nmax; n++) {
         trsmoothed.dxc += trcumul[n].dxc * wint[n - ndest];
         trsmoothed.dyc += trcumul[n].dyc * wint[n - ndest];
         trsmoothed.dxy += trcumul[n].dxy * wint[n - ndest];
@@ -3096,11 +2959,11 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
     trsmoothed.dyx = -trsmoothed.dxy * (pixaspect / nfields) * (pixaspect / nfields); // must be consistent
     norm = 0;
     trsmoothed.dxx = 0;
-    for (n = VSMAX(nbase, ndest - 1); n < ndest; n++) { // very short interval
+    for (int n = VSMAX(nbase, ndest - 1); n < ndest; n++) { // very short interval
         trsmoothed.dxx += trcumul[n].dxx * wint[ndest - n];
         norm += wint[ndest - n];
     }
-    for (n = ndest; n <= VSMIN(nmax, ndest + 1); n++) {
+    for (int n = ndest; n <= VSMIN(nmax, ndest + 1); n++) {
         trsmoothed.dxx += trcumul[n].dxx * wint[n - ndest];
         norm += wint[n - ndest];
     }
@@ -3119,7 +2982,8 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
         //               nbasez = ndest - min(nmaxz-ndest, ndest-nbasez);
 
         azoom[nbasez] = initzoom;
-        for (n = nbasez + 1; n <= nmaxz; n++) {
+        for (int n = nbasez + 1; n <= nmaxz; n++) {
+            transform trinv, trcur;
             // get inverse transform
             inversetransform(&trcumul[n], &trinv);
             // calculate difference between smoothed and original non-smoothed cumulative transform
@@ -3147,12 +3011,12 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
         //                    zf = 1/(cutoff*tzoom);
 
         norm = 0;
-        azoomsmoothed = 0.0;
-        for (n = nbasez; n < ndest; n++) {
+        float azoomsmoothed = 0.0;
+        for (int n = nbasez; n < ndest; n++) {
             azoomsmoothed += azoom[n] * winfz[ndest - n]; // fall
             norm += winfz[ndest - n];
         }
-        for (n = ndest; n <= nmaxz; n++) {
+        for (int n = ndest; n <= nmaxz; n++) {
             azoomsmoothed += azoom[n] * winrz[n - ndest]; // rize
             norm += winrz[n - ndest];
         }
@@ -3167,18 +3031,21 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
         if (azoomsmoothed > 1)
             azoomsmoothed = 1; // not decrease image size
         // make zoom transform
+        transform trtemp;
         motion2transform(0, 0, 0, azoomsmoothed, pixaspect / nfields, xcenter, ycenter, 1, 1.0, &trtemp);
         sumtransform(&trsmoothed, &trtemp, &trsmoothed);
 
         //            }
     } else // no addzoom
     {
+        transform trtemp;
         motion2transform(0, 0, 0, initzoom, pixaspect / nfields, xcenter, ycenter, 1, 1.0, &trtemp); // added in v.1.7
         sumtransform(&trsmoothed, &trtemp, &trsmoothed); // added v.1.7
     }
     // calculate difference between smoothed and original non-smoothed cumulative tranform
     // it will be used as stabilization values
 
+    transform trinv;
     inversetransform(&trcumul[ndest], &trinv);
     sumtransform(&trinv, &trsmoothed, ptrdif);
 }
@@ -3331,8 +3198,6 @@ static void compensateFrame(const VSFrame *src, VSFrame *dst, DepanStabiliseData
 
 
 static void fillBorderPrev(VSFrame *dst, DepanStabiliseData *d, int nbase, int ndest, const transform *trdif, int *work2width4356, int *notfilled, VSFrameContext *frameCtx, const VSAPI *vsapi) {
-    float dxt1, dyt1, rott1, zoomt1;
-
     int nprev = ndest - d->prev; // get prev frame number
     if (nprev < nbase)
         nprev = nbase; //  prev distance not exceed base
@@ -3343,12 +3208,12 @@ static void fillBorderPrev(VSFrame *dst, DepanStabiliseData *d, int nbase, int n
     transform tr[3];
     tr[0] = *trdif; // luma transform
 
-    transform trcur;
-
     for (int n = ndest - 1; n >= nprev; n--) { // summary inverse transform
+        transform trcur;
         motion2transform(d->motionx[n + 1], d->motiony[n + 1], d->motionrot[n + 1], d->motionzoom[n + 1], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
         nprevbest = n;
         sumtransform(&tr[0], &trcur, &tr[0]);
+        float dxt1, dyt1, rott1, zoomt1;
         transform2motion(&tr[0], 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxt1, &dyt1, &rott1, &zoomt1);
         if ((fabsf(dxt1) + fabsf(dyt1) + ndest - n) < dabsmin) { // most centered and nearest
             dabsmin = fabsf(dxt1) + fabsf(dyt1) + ndest - n;
@@ -3394,8 +3259,6 @@ static void fillBorderPrev(VSFrame *dst, DepanStabiliseData *d, int nbase, int n
 
 
 static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const transform *trdif, int *work2width4356, int *notfilled, VSFrameContext *frameCtx, const VSAPI *vsapi) {
-    float dxt1, dyt1, rott1, zoomt1;
-
     int nnext = ndest + d->next;
     if (nnext >= d->vi->numFrames)
         nnext = d->vi->numFrames - 1;
@@ -3404,8 +3267,6 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
 
     transform tr[3];
     tr[0] = *trdif; // luma transform for current frame
-
-    transform trcur, trinv;
 
     // get motion info about frames in interval from begin source to dest in reverse order
     {
@@ -3425,9 +3286,11 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
 
     for (int n = ndest + 1; n <= nnext; n++) {
         if (d->motionx[n] != MOTIONBAD) { //if good
+            transform trcur, trinv;
             motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
             inversetransform(&trcur, &trinv);
             sumtransform(&trinv, &tr[0], &tr[0]);
+            float dxt1, dyt1, rott1, zoomt1;
             transform2motion(&tr[0], 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxt1, &dyt1, &rott1, &zoomt1);
             if ((fabsf(dxt1) + fabsf(dyt1) + n - ndest) < dabsmin) { // most centered and nearest
                 dabsmin = fabsf(dxt1) + fabsf(dyt1) + n - ndest;
@@ -3943,8 +3806,6 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
         return;
     }
 
-    float lambda;
-
     d->zoommax = d->zoommax > 0 ? VSMAX(d->zoommax, d->initzoom) : -VSMAX(-d->zoommax, d->initzoom);
 
     // correction for fieldbased
@@ -3972,7 +3833,7 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
     // elastic stiffness of spring
     d->kstiff = 1.0; // value is not important - (not included in result)
     //  relative frequency lambda at half height of response
-    lambda = sqrtf(1 + 6 * d->damping * d->damping + sqrtf((1 + 6 * d->damping * d->damping) * (1 + 6 * d->damping * d->damping) + 3));
+    float lambda = sqrtf(1 + 6 * d->damping * d->damping + sqrtf((1 + 6 * d->damping * d->damping) * (1 + 6 * d->damping * d->damping) + 3));
     // native oscillation frequency
     d->freqnative = d->cutoff / lambda;
     // mass of camera
