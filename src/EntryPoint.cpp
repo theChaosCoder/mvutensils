@@ -40,7 +40,7 @@ VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
     flowinterRegister(plugin, vspapi);
     flowfpsRegister(plugin, vspapi);
     scdetectionRegister(plugin, vspapi);
-    //mvdepanRegister(plugin, vspapi);
+    depanRegister(plugin, vspapi);
 
     g_cpuinfo = cpu_detect();
 }

@@ -97,6 +97,8 @@
     <ClInclude Include="..\src\Common.h" />
     <ClInclude Include="..\src\CopyCode.h" />
     <ClInclude Include="..\src\CPU.h" />
+    <ClInclude Include="..\src\DepanCompensatePlane.h" />
+    <ClInclude Include="..\src\DepanShared.h" />
     <ClInclude Include="..\src\FlowShared.h" />
     <ClInclude Include="..\src\MaskResize.h" />
     <ClInclude Include="..\src\MotionBlockPyramid.h" />
@@ -109,6 +111,11 @@
   <ItemGroup>
     <ClCompile Include="..\src\CopyCode.cpp" />
     <ClCompile Include="..\src\CPU.cpp" />
+    <ClCompile Include="..\src\DepanAnalyse.cpp" />
+    <ClCompile Include="..\src\DepanCompensate.cpp" />
+    <ClCompile Include="..\src\DepanEstimate.cpp" />
+    <ClCompile Include="..\src\DepanShared.cpp" />
+    <ClCompile Include="..\src\DepanStabilise.cpp" />
     <ClCompile Include="..\src\EntryPoint.cpp" />
     <ClCompile Include="..\src\MaskResize.cpp" />
     <ClCompile Include="..\src\MotionBlockPyramid.cpp" />
@@ -122,10 +129,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\src\Degrains_AVX2.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\src\MVDepan.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
