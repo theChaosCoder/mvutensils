@@ -37,6 +37,8 @@ constexpr char prop_Depan_rot[] = "Depan_rot";
 constexpr float MOTIONUNKNOWN = 9999.0f;
 constexpr float MOTIONBAD = 0.0f;
 
+static std::mutex g_fftw_plans_mutex;
+
 struct DepanAnalyseData {
     VSNode *clip = nullptr;
     VSNode *vectors = nullptr;
@@ -1177,11 +1179,6 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
 
     return NULL;
 }
-
-
-// Defined in DCTFFTW.cpp because that file was the first to use fftw.
-extern std::mutex g_fftw_plans_mutex;
-
 
 static void VS_CC depanEstimateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
     DepanEstimateData *d = (DepanEstimateData *)instanceData;
