@@ -260,189 +260,182 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
             vsapi->requestFrameFilter(n, d->mask, frameCtx);
     } else if (activationReason == arAllFramesReady) {
         const VSFrame *src = vsapi->getFrameFilter(n, d->clip, frameCtx);
-        const VSFrame *mask = NULL;
-        if (d->mask)
-            mask = vsapi->getFrameFilter(n, d->mask, frameCtx);
-
         VSFrame *dst = vsapi->copyFrame(src, core);
         vsapi->freeFrame(src);
-        VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
 
-        const int nFields = d->fields ? 2 : 1;
-
-        const uint8_t *maskp = NULL;
-        ptrdiff_t mask_pitch = 0;
-        if (d->mask) {
-            maskp = vsapi->getReadPtr(mask, 0);
-            mask_pitch = vsapi->getStride(mask, 0);
-        }
-
-        const bool backward = d->deltaFrame > 0;
-        int nframemv = backward ? std::max(0, n - 1) : n; // set prev frame number as data frame if backward
-
-        const VSFrame *mvn = vsapi->getFrameFilter(nframemv, d->vectors, frameCtx);
-        MotionBlockPyramid vectors(mvn, 1, d->prefix, vsapi);
-
-        const size_t num_blocks = (size_t)vectors.nBlkX * (size_t)vectors.nBlkY;
-
-        std::vector<float> blockDx;   // dx vector
-        std::vector<float> blockDy;   // dy
-        std::vector<int64_t> blockSAD;
-        std::vector<int> blockX;      // block x position
-        std::vector<int> blockY;
-        std::vector<float> blockWeight;
-        std::vector<float> blockWeightMask;
+        const VSFrame *mask = nullptr;
 
         try {
-            blockDx.resize(num_blocks);
-            blockDy.resize(num_blocks);
-            blockSAD.resize(num_blocks);
-            blockX.resize(num_blocks);
-            blockY.resize(num_blocks);
-            blockWeight.resize(num_blocks);
-            blockWeightMask.resize(num_blocks);
+            VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
+
+            const int nFields = d->fields ? 2 : 1;
+
+            const uint8_t *maskp = nullptr;
+            ptrdiff_t mask_pitch = 0;
+            if (d->mask) {
+                mask = vsapi->getFrameFilter(n, d->mask, frameCtx);
+                maskp = vsapi->getReadPtr(mask, 0);
+                mask_pitch = vsapi->getStride(mask, 0);
+            }
+
+            const bool backward = d->deltaFrame > 0;
+            int nframemv = backward ? std::max(0, n - 1) : n; // set prev frame number as data frame if backward
+
+            const VSFrame *mvn = vsapi->getFrameFilter(nframemv, d->vectors, frameCtx);
+            MotionBlockPyramid vectors(mvn, 1, d->prefix, vsapi);
+
+            const size_t num_blocks = (size_t)vectors.nBlkX * (size_t)vectors.nBlkY;
+
+            std::vector<float> blockDx(num_blocks); // dx vector
+            std::vector<float> blockDy(num_blocks); // dy
+            std::vector<int64_t> blockSAD(num_blocks);
+            std::vector<int> blockX(num_blocks); // block x position
+            std::vector<int> blockY(num_blocks);
+            std::vector<float> blockWeight(num_blocks);
+            std::vector<float> blockWeightMask(num_blocks);
+
+            transform tr;
+
+            float errorcur = d->error * 2;
+            int iter = 0; // start iteration
+
+
+            if (vectors.IsUsable(d->thscd1, d->thscd2)) {
+                const float dPel = 1.0f / vectors.nPel; // subpixel precision value
+
+                for (int j = 0; j < vectors.nBlkY; j++) {
+                    for (int i = 0; i < vectors.nBlkX; i++) {
+                        int nb = j * vectors.nBlkX + i;
+                        const auto fbd = vectors.GetBlock(nb);
+                        blockDx[nb] = fbd.vector.x * dPel;
+                        blockDy[nb] = fbd.vector.y * dPel;
+                        blockSAD[nb] = fbd.vector.sad;
+                        blockX[nb] = fbd.x + vectors.nBlkSizeX / 2;
+                        blockY[nb] = fbd.y + vectors.nBlkSizeY / 2;
+                        if (d->mask && blockX[nb] < d->vi->width && blockY[nb] < d->vi->height)
+                            blockWeightMask[nb] = maskp[blockX[nb] + blockY[nb] * mask_pitch];
+                        else
+                            blockWeightMask[nb] = 1.0f;
+                        blockWeight[nb] = blockWeightMask[nb];
+                    }
+                }
+
+                // begin with translation only
+                float safety = 0.3f; // begin with small safety factor
+                int ifRot0 = 0;
+                int ifZoom0 = 0;
+                float globalDif0 = 1000.0f;
+                int ignoredBorder = mask ? 0 : 4;
+
+
+                for (; iter < 5; iter++) {
+                    TrasformUpdate(&tr, blockDx.data(), blockDy.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, safety, ifZoom0, ifRot0, &errorcur, d->pixaspect / nFields);
+                    RejectBadBlocks(&tr, blockDx.data(), blockDy.data(), blockSAD.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif0, d->thscd1, d->zerow, blockWeightMask.data(), ignoredBorder);
+                }
+
+
+                const float errordif = 0.01f;   // error difference to terminate iterations
+
+                for (; iter < 100; iter++) {
+                    if (iter < 8)
+                        safety = 0.3f; // use for safety
+                    else if (iter < 10)
+                        safety = 0.6f;
+                    else
+                        safety = 1.0f;
+                    float errorprev = errorcur;
+                    TrasformUpdate(&tr, blockDx.data(), blockDy.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, safety, d->zoom, d->rot, &errorcur, d->pixaspect / nFields);
+                    if (((errorprev - errorcur) < errordif * 0.5f && iter > 9) || errorcur < errordif)
+                        break; // check convergence, accuracy increased in v1.2.5
+                    float globalDif = errorcur * 2;
+                    RejectBadBlocks(&tr, blockDx.data(), blockDy.data(), blockSAD.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif, d->thscd1, d->zerow, blockWeightMask.data(), ignoredBorder);
+                }
+            }
+
+            // mask data has been fully consumed, release it as early as possible
+            vsapi->freeFrame(mask);
+            mask = nullptr;
+
+            // we get transform (null if scenechange)
+
+            float xcenter = (float)d->vi->width / 2;
+            float ycenter = (float)d->vi->height / 2;
+
+            float motionx = 0.0f;
+            float motiony = 0.0f;
+            float motionrot = 0.0f;
+            float motionzoom = 1.0f;
+
+            if (errorcur < d->error) { // if not bad result
+                // convert transform data to ordinary motion format
+                if (backward) {
+                    transform trinv;
+                    inversetransform(&tr, &trinv);
+                    transform2motion(&trinv, 0, xcenter, ycenter, d->pixaspect / nFields, &motionx, &motiony, &motionrot, &motionzoom);
+                } else
+                    transform2motion(&tr, 1, xcenter, ycenter, d->pixaspect / nFields, &motionx, &motiony, &motionrot, &motionzoom);
+
+                // fieldbased correction
+                if (d->fields) {
+                    const VSFrame *temp = vsapi->getFrameFilter(n, d->clip, frameCtx);
+                    const VSMap *temp_props = vsapi->getFramePropertiesRO(temp);
+                    int err;
+                    int top_field = !!vsapi->mapGetInt(temp_props, "_Field", 0, &err);
+                    vsapi->freeFrame(temp);
+
+                    if (err && !d->tff_exists) {
+                        vsapi->setFilterError("DepanAnalyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
+                        vsapi->freeFrame(dst);
+                        return nullptr;
+                    }
+
+                    if (d->tff_exists)
+                        top_field = d->tff ^ (n % 2);
+
+                    float yadd = top_field ? 0.5f : -0.5f;
+
+                    // scale dy for fieldbased frame by factor 2 (for compatibility)
+                    yadd = yadd * 2;
+                    motiony += yadd;
+                }
+
+                // if it is accidentally very small, reset it to small, but non-zero value,
+                // to differ from pure 0, which be interpreted as bad value mark (scene change)
+                if (fabsf(motionx) < 0.01f)
+                    motionx = (rand() > RAND_MAX / 2) ? 0.011f : -0.011f;
+            }
+
+            if (d->info) {
+#define INFO_SIZE 128
+                char info[INFO_SIZE + 1] = { 0 };
+
+                snprintf(info, INFO_SIZE, "fn=%d iter=%d error=%.3f dx=%.2f dy=%.2f rot=%.3f zoom=%.5f", n, iter, errorcur, motionx, motiony, motionrot, motionzoom);
+#undef INFO_SIZE
+
+                vsapi->mapSetData(dst_props, prop_DepanAnalyse_info, info, -1, dtUtf8, maReplace);
+            }
+
+            vsapi->mapSetFloat(dst_props, prop_Depan_dx, motionx, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_Depan_dy, motiony, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_Depan_zoom, motionzoom, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_Depan_rot, motionrot, maReplace);
+
+            return dst;
         } catch (const std::exception &e) {
             vsapi->setFilterError(("DepanAnalyse: " + std::string(e.what())).c_str(), frameCtx);
             vsapi->freeFrame(mask);
             vsapi->freeFrame(dst);
             return nullptr;
         }
-
-        transform tr;
-
-        float errorcur = d->error * 2;
-        int iter = 0; // start iteration
-
-
-        if (vectors.IsUsable(d->thscd1, d->thscd2)) {
-            const float dPel = 1.0f / vectors.nPel; // subpixel precision value
-
-            for (int j = 0; j < vectors.nBlkY; j++) {
-                for (int i = 0; i < vectors.nBlkX; i++) {
-                    int nb = j * vectors.nBlkX + i;
-                    const auto fbd = vectors.GetBlock(nb);
-                    blockDx[nb] = fbd.vector.x * dPel;
-                    blockDy[nb] = fbd.vector.y * dPel;
-                    blockSAD[nb] = fbd.vector.sad;
-                    blockX[nb] = fbd.x + vectors.nBlkSizeX / 2;
-                    blockY[nb] = fbd.y + vectors.nBlkSizeY / 2;
-                    if (d->mask && blockX[nb] < d->vi->width && blockY[nb] < d->vi->height)
-                        blockWeightMask[nb] = maskp[blockX[nb] + blockY[nb] * mask_pitch];
-                    else
-                        blockWeightMask[nb] = 1.0f;
-                    blockWeight[nb] = blockWeightMask[nb];
-                }
-            }
-
-            // begin with translation only
-            float safety = 0.3f; // begin with small safety factor
-            int ifRot0 = 0;
-            int ifZoom0 = 0;
-            float globalDif0 = 1000.0f;
-            int ignoredBorder = mask ? 0 : 4;
-
-
-            for (; iter < 5; iter++) {
-                TrasformUpdate(&tr, blockDx.data(), blockDy.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, safety, ifZoom0, ifRot0, &errorcur, d->pixaspect / nFields);
-                RejectBadBlocks(&tr, blockDx.data(), blockDy.data(), blockSAD.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif0, d->thscd1, d->zerow, blockWeightMask.data(), ignoredBorder);
-            }
-
-
-            const float errordif = 0.01f;   // error difference to terminate iterations
-
-            for (; iter < 100; iter++) {
-                if (iter < 8)
-                    safety = 0.3f; // use for safety
-                else if (iter < 10)
-                    safety = 0.6f;
-                else
-                    safety = 1.0f;
-                float errorprev = errorcur;
-                TrasformUpdate(&tr, blockDx.data(), blockDy.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, safety, d->zoom, d->rot, &errorcur, d->pixaspect / nFields);
-                if (((errorprev - errorcur) < errordif * 0.5f && iter > 9) || errorcur < errordif)
-                    break; // check convergence, accuracy increased in v1.2.5
-                float globalDif = errorcur * 2;
-                RejectBadBlocks(&tr, blockDx.data(), blockDy.data(), blockSAD.data(), blockX.data(), blockY.data(), blockWeight.data(), vectors.nBlkX, vectors.nBlkY, d->wrong, globalDif, d->thscd1, d->zerow, blockWeightMask.data(), ignoredBorder);
-            }
-        }
-
-        // we get transform (null if scenechange)
-
-        float xcenter = (float)d->vi->width / 2;
-        float ycenter = (float)d->vi->height / 2;
-
-        float motionx = 0.0f;
-        float motiony = 0.0f;
-        float motionrot = 0.0f;
-        float motionzoom = 1.0f;
-
-        if (errorcur < d->error) { // if not bad result
-            // convert transform data to ordinary motion format
-            if (backward) {
-                transform trinv;
-                inversetransform(&tr, &trinv);
-                transform2motion(&trinv, 0, xcenter, ycenter, d->pixaspect / nFields, &motionx, &motiony, &motionrot, &motionzoom);
-            } else
-                transform2motion(&tr, 1, xcenter, ycenter, d->pixaspect / nFields, &motionx, &motiony, &motionrot, &motionzoom);
-
-            // fieldbased correction
-            if (d->fields) {
-                const VSFrame *temp = vsapi->getFrameFilter(n, d->clip, frameCtx);
-                const VSMap *temp_props = vsapi->getFramePropertiesRO(temp);
-                int err;
-                int top_field = !!vsapi->mapGetInt(temp_props, "_Field", 0, &err);
-                vsapi->freeFrame(temp);
-
-                if (err && !d->tff_exists) {
-                    vsapi->setFilterError("DepanAnalyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                    vsapi->freeFrame(mask);
-                    vsapi->freeFrame(dst);
-                    return NULL;
-                }
-
-                if (d->tff_exists)
-                    top_field = d->tff ^ (n % 2);
-
-                float yadd = top_field ? 0.5f : -0.5f;
-
-                // scale dy for fieldbased frame by factor 2 (for compatibility)
-                yadd = yadd * 2;
-                motiony += yadd;
-            }
-
-            // if it is accidentally very small, reset it to small, but non-zero value,
-            // to differ from pure 0, which be interpreted as bad value mark (scene change)
-            if (fabsf(motionx) < 0.01f)
-                motionx = (rand() > RAND_MAX / 2) ? 0.011f : -0.011f;
-        }
-
-        if (d->info) {
-#define INFO_SIZE 128
-            char info[INFO_SIZE + 1] = { 0 };
-
-            snprintf(info, INFO_SIZE, "fn=%d iter=%d error=%.3f dx=%.2f dy=%.2f rot=%.3f zoom=%.5f", n, iter, errorcur, motionx, motiony, motionrot, motionzoom);
-#undef INFO_SIZE
-
-            vsapi->mapSetData(dst_props, prop_DepanAnalyse_info, info, -1, dtUtf8, maReplace);
-        }
-
-        vsapi->mapSetFloat(dst_props, prop_Depan_dx, motionx, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_Depan_dy, motiony, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_Depan_zoom, motionzoom, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_Depan_rot, motionrot, maReplace);
-
-        vsapi->freeFrame(mask);
-
-        return dst;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static bool invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VSAPI *vsapi) noexcept {
     VSPlugin *text_plugin = vsapi->getPluginByID("com.vapoursynth.text", core);
 
-    VSNode *node = vsapi->mapGetNode(out, "clip", 0, NULL);
+    VSNode *node = vsapi->mapGetNode(out, "clip", 0, nullptr);
     VSMap *args = vsapi->createMap();
     vsapi->mapSetNode(args, "clip", node, maReplace);
     vsapi->freeNode(node);
@@ -457,7 +450,7 @@ static bool invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const V
         return false;
     }
 
-    node = vsapi->mapGetNode(ret, "clip", 0, NULL);
+    node = vsapi->mapGetNode(ret, "clip", 0, nullptr);
     vsapi->freeMap(ret);
     vsapi->mapSetNode(out, "clip", node, maReplace);
     vsapi->freeNode(node);
@@ -520,13 +513,13 @@ static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData
         if (d->pixaspect <= 0.0f)
             throw std::runtime_error("pixaspect must be positive");
 
-        d->clip = vsapi->mapGetNode(in, "clip", 0, NULL);
+        d->clip = vsapi->mapGetNode(in, "clip", 0, nullptr);
         d->vi = vsapi->getVideoInfo(d->clip);
 
         if (!vsh::isConstantVideoFormat(d->vi))
             throw std::runtime_error("clip must have constant format and dimensions");
 
-        d->vectors = vsapi->mapGetNode(in, "vectors", 0, NULL);
+        d->vectors = vsapi->mapGetNode(in, "vectors", 0, nullptr);
 
         MotionBlockPyramid vectors(d->vectors, d->prefix, vsapi);
 
@@ -968,7 +961,7 @@ static const VSFrame *VS_CC depanEstimateStage1GetFrame(int n, int activationRea
         return dst;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 
@@ -982,146 +975,147 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
         const VSFrame *prev = vsapi->getFrameFilter(std::max(0, n - 1), d->clip, frameCtx);
         const VSFrame *cur = vsapi->getFrameFilter(n, d->clip, frameCtx);
 
-        const VSMap *prev_props = vsapi->getFramePropertiesRO(prev);
-        const VSMap *cur_props = vsapi->getFramePropertiesRO(cur);
-        int err;
+        VSFrame *dst = nullptr;
 
-        int top_field = 0;
-        if (d->fields) {
-            top_field = !!vsapi->mapGetInt(cur_props, "_Field", 0, &err);
+        try {
+            const VSMap *prev_props = vsapi->getFramePropertiesRO(prev);
+            const VSMap *cur_props = vsapi->getFramePropertiesRO(cur);
+            int err;
 
-            if (err && !d->tff_exists) {
-                vsapi->setFilterError("DepanEstimate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                vsapi->freeFrame(prev);
-                vsapi->freeFrame(cur);
-                return nullptr;
+            int top_field = 0;
+            if (d->fields) {
+                top_field = !!vsapi->mapGetInt(cur_props, "_Field", 0, &err);
+
+                if (err && !d->tff_exists)
+                    throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
+
+                if (d->tff_exists)
+                    top_field = d->tff ^ (n % 2);
             }
 
-            if (d->tff_exists)
-                top_field = d->tff ^ (n % 2);
-        }
+            if (d->fftsize != (size_t)vsapi->mapGetDataSize(prev_props, prop_DepanEstimateFFT, 0, &err) ||
+                d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT, 0, &err))
+                throw std::runtime_error("temporary property '" + std::string(prop_DepanEstimateFFT) + "' has the wrong size. This should never happen");
 
-        if (d->fftsize != (size_t)vsapi->mapGetDataSize(prev_props, prop_DepanEstimateFFT, 0, &err) ||
-            d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT, 0, &err)) {
-            vsapi->setFilterError(("DepanEstimate: temporary property '" + std::string(prop_DepanEstimateFFT) + "' has the wrong size. This should never happen.").c_str(), frameCtx);
-            vsapi->freeFrame(prev);
-            vsapi->freeFrame(cur);
-            return nullptr;
-        }
-
-        if (d->zoommax != 1.0f) {
-            if (d->fftsize != (size_t)vsapi->mapGetDataSize(prev_props, prop_DepanEstimateFFT2, 0, &err) ||
-                d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT2, 0, &err)) {
-                vsapi->setFilterError(("DepanEstimate: temporary property '" + std::string(prop_DepanEstimateFFT2) + "' has the wrong size. This should never happen.").c_str(), frameCtx);
-                vsapi->freeFrame(prev);
-                vsapi->freeFrame(cur);
-                return nullptr;
+            if (d->zoommax != 1.0f) {
+                if (d->fftsize != (size_t)vsapi->mapGetDataSize(prev_props, prop_DepanEstimateFFT2, 0, &err) ||
+                    d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT2, 0, &err))
+                    throw std::runtime_error("temporary property '" + std::string(prop_DepanEstimateFFT2) + "' has the wrong size. This should never happen");
             }
-        }
 
-        const fftwf_complex *fftprev = (const fftwf_complex *)vsapi->mapGetData(prev_props, prop_DepanEstimateFFT, 0, &err);
-        const fftwf_complex *fftcur = (const fftwf_complex *)vsapi->mapGetData(cur_props, prop_DepanEstimateFFT, 0, &err);
+            const fftwf_complex *fftprev = (const fftwf_complex *)vsapi->mapGetData(prev_props, prop_DepanEstimateFFT, 0, &err);
+            const fftwf_complex *fftcur = (const fftwf_complex *)vsapi->mapGetData(cur_props, prop_DepanEstimateFFT, 0, &err);
 
-        // memory for correlation matrice
-        fftwf_complex *correl = (fftwf_complex *)fftwf_malloc(d->fftsize);
+            // memory for correlation matrice
+            fftwf_complex *correl = (fftwf_complex *)fftwf_malloc(d->fftsize);
 
-        float dx1, dy1, trust1;
+            float dx1, dy1, trust1;
 
-        // prepare correlation data = mult fftsrc* by fftprev
-        mult_conj_data2d(fftcur, fftprev, correl, d->winx, d->winy);
-        // make inverse fft of prepared correl data
-        fftwf_execute_dft_c2r(d->planinv, correl, (float *)correl);
-        // now correl is is true correlation surface
-        // find global motion vector as maximum on correlation sufrace
-        // save vector to motion table
-        get_motion_vector((float *)correl, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, &dx1, &dy1, &trust1);
-
-
-        int winleft = d->wleft;
-
-        VSFrame *dst = vsapi->copyFrame(cur, core);
-        uint8_t *dstp = NULL;
-        ptrdiff_t dst_stride = 0;
-
-        if (d->show) { // show correlation sufrace
-            dstp = vsapi->getWritePtr(dst, 0);
-            dst_stride = vsapi->getStride(dst, 0);
-
-            showcorrelation((float *)correl, d->winx, d->winy, dstp, dst_stride, winleft, d->wtop, d->pixel_max);
-        }
-
-        fftwf_free(correl);
-
-        float motionx, motiony, motionzoom, trust;
-
-        if (d->zoommax == 1.0f) { // NO ZOOM
-            motionzoom = 1.0f; //no zoom
-            motionx = dx1;
-            motiony = dy1;
-            trust = trust1;
-        } else { // ZOOM, calculate 2 data sets (left and right)
-            int winleft2 = d->wleft + d->vi->width / 2; // left edge of right (2)fft window
-
-            const fftwf_complex *fftprev2 = (const fftwf_complex *)vsapi->mapGetData(prev_props, prop_DepanEstimateFFT2, 0, &err);
-            const fftwf_complex *fftcur2 = (const fftwf_complex *)vsapi->mapGetData(cur_props, prop_DepanEstimateFFT2, 0, &err);
-
-            fftwf_complex *correl2 = (fftwf_complex *)fftwf_malloc(d->fftsize);
-
-            float dx2, dy2, trust2;
-
-            // right window
             // prepare correlation data = mult fftsrc* by fftprev
-            mult_conj_data2d(fftcur2, fftprev2, correl2, d->winx, d->winy);
+            mult_conj_data2d(fftcur, fftprev, correl, d->winx, d->winy);
             // make inverse fft of prepared correl data
-            fftwf_execute_dft_c2r(d->planinv, correl2, (float *)correl2);
+            fftwf_execute_dft_c2r(d->planinv, correl, (float *)correl);
             // now correl is is true correlation surface
             // find global motion vector as maximum on correlation sufrace
             // save vector to motion table
-            get_motion_vector((float *)correl2, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, &dx2, &dy2, &trust2);
+            get_motion_vector((float *)correl, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, &dx1, &dy1, &trust1);
 
-            // now we have 2 motion data sets for left and right windows
-            // estimate zoom factor
-            float zoom = 1.0f + (dx2 - dx1) / (winleft2 - winleft);
-            if ((dx1 != 0.0f) && (dx2 != 0.0f) && (fabsf(zoom - 1.0f) < (d->zoommax - 1.0f))) { // if motion data and zoom good
-                motionx = (dx1 + dx2) / 2.0f;
-                motiony = (dy1 + dy2) / 2.0f;
-                motionzoom = zoom;
-                trust = VSMIN(trust1, trust2);
-            } else { // bad zoom,
-                motionx = 0.0f;
-                motiony = 0.0f;
-                motionzoom = 1.0f;
-                trust = VSMIN(trust1, trust2);
+
+            int winleft = d->wleft;
+
+            dst = vsapi->copyFrame(cur, core);
+            uint8_t *dstp = nullptr;
+            ptrdiff_t dst_stride = 0;
+
+            if (d->show) { // show correlation sufrace
+                dstp = vsapi->getWritePtr(dst, 0);
+                dst_stride = vsapi->getStride(dst, 0);
+
+                showcorrelation((float *)correl, d->winx, d->winy, dstp, dst_stride, winleft, d->wtop, d->pixel_max);
             }
 
-            if (d->show) // show correlation sufrace
-                showcorrelation((float *)correl2, d->winx, d->winy, dstp, dst_stride, winleft2, d->wtop, d->pixel_max);
+            fftwf_free(correl);
 
-            fftwf_free(correl2);
+            float motionx, motiony, motionzoom, trust;
+
+            if (d->zoommax == 1.0f) { // NO ZOOM
+                motionzoom = 1.0f; //no zoom
+                motionx = dx1;
+                motiony = dy1;
+                trust = trust1;
+            } else { // ZOOM, calculate 2 data sets (left and right)
+                int winleft2 = d->wleft + d->vi->width / 2; // left edge of right (2)fft window
+
+                const fftwf_complex *fftprev2 = (const fftwf_complex *)vsapi->mapGetData(prev_props, prop_DepanEstimateFFT2, 0, &err);
+                const fftwf_complex *fftcur2 = (const fftwf_complex *)vsapi->mapGetData(cur_props, prop_DepanEstimateFFT2, 0, &err);
+
+                fftwf_complex *correl2 = (fftwf_complex *)fftwf_malloc(d->fftsize);
+
+                float dx2, dy2, trust2;
+
+                // right window
+                // prepare correlation data = mult fftsrc* by fftprev
+                mult_conj_data2d(fftcur2, fftprev2, correl2, d->winx, d->winy);
+                // make inverse fft of prepared correl data
+                fftwf_execute_dft_c2r(d->planinv, correl2, (float *)correl2);
+                // now correl is is true correlation surface
+                // find global motion vector as maximum on correlation sufrace
+                // save vector to motion table
+                get_motion_vector((float *)correl2, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, &dx2, &dy2, &trust2);
+
+                // now we have 2 motion data sets for left and right windows
+                // estimate zoom factor
+                float zoom = 1.0f + (dx2 - dx1) / (winleft2 - winleft);
+                if ((dx1 != 0.0f) && (dx2 != 0.0f) && (fabsf(zoom - 1.0f) < (d->zoommax - 1.0f))) { // if motion data and zoom good
+                    motionx = (dx1 + dx2) / 2.0f;
+                    motiony = (dy1 + dy2) / 2.0f;
+                    motionzoom = zoom;
+                    trust = VSMIN(trust1, trust2);
+                } else { // bad zoom,
+                    motionx = 0.0f;
+                    motiony = 0.0f;
+                    motionzoom = 1.0f;
+                    trust = VSMIN(trust1, trust2);
+                }
+
+                if (d->show) // show correlation sufrace
+                    showcorrelation((float *)correl2, d->winx, d->winy, dstp, dst_stride, winleft2, d->wtop, d->pixel_max);
+
+                fftwf_free(correl2);
+            }
+
+            // the FFT data aliased into prev/cur has been consumed; release them now
+            vsapi->freeFrame(prev);
+            prev = nullptr;
+            vsapi->freeFrame(cur);
+            cur = nullptr;
+
+            VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
+
+            vsapi->mapDeleteKey(dst_props, prop_DepanEstimateFFT);
+            vsapi->mapDeleteKey(dst_props, prop_DepanEstimateFFT2);
+
+            if (n == 0) {
+                motionx = motiony = trust = 0.0f;
+                motionzoom = 1.0f;
+            }
+
+            vsapi->mapSetFloat(dst_props, prop_DepanEstimateX, motionx, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_DepanEstimateY, motiony, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_DepanEstimateZoom, motionzoom, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_DepanEstimateTrust, trust, maReplace);
+
+            return dst;
+        } catch (const std::exception &e) {
+            vsapi->setFilterError(("DepanEstimate: " + std::string(e.what())).c_str(), frameCtx);
+            vsapi->freeFrame(prev);
+            vsapi->freeFrame(cur);
+            vsapi->freeFrame(dst);
+            return nullptr;
         }
-
-        vsapi->freeFrame(prev);
-        vsapi->freeFrame(cur);
-
-        VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
-
-        vsapi->mapDeleteKey(dst_props, prop_DepanEstimateFFT);
-        vsapi->mapDeleteKey(dst_props, prop_DepanEstimateFFT2);
-
-        if (n == 0) {
-            motionx = motiony = trust = 0.0f;
-            motionzoom = 1.0f;
-        }
-
-        vsapi->mapSetFloat(dst_props, prop_DepanEstimateX, motionx, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_DepanEstimateY, motiony, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_DepanEstimateZoom, motionzoom, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_DepanEstimateTrust, trust, maReplace);
-
-        return dst;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 
@@ -1138,80 +1132,87 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
         src[1] = vsapi->getFrameFilter(n, d->clip, frameCtx);
         src[2] = vsapi->getFrameFilter(VSMIN(n + 1, d->vi->numFrames - 1), d->clip, frameCtx);
 
-        const VSMap *src_props[3];
+        VSFrame *dst = nullptr;
 
-        float trust[3];
+        try {
+            const VSMap *src_props[3];
 
-        for (int i = 0; i < 3; i++) {
-            src_props[i] = vsapi->getFramePropertiesRO(src[i]);
+            float trust[3];
 
-            int err;
-            trust[i] = (float)vsapi->mapGetFloat(src_props[i], prop_DepanEstimateTrust, 0, &err);
-            if (err) {
-                vsapi->setFilterError(("DepanEstimate: temporary property '" + std::string(prop_DepanEstimateTrust) + "' not found in input frame. This should never happen.").c_str(), frameCtx);
-                for (int j = 0; j < 3; j++)
-                    vsapi->freeFrame(src[j]);
-                return NULL;
+            for (int i = 0; i < 3; i++) {
+                src_props[i] = vsapi->getFramePropertiesRO(src[i]);
+
+                int err;
+                trust[i] = (float)vsapi->mapGetFloat(src_props[i], prop_DepanEstimateTrust, 0, &err);
+                if (err)
+                    throw std::runtime_error("temporary property '" + std::string(prop_DepanEstimateTrust) + "' not found in input frame. This should never happen");
             }
-        }
 
-        vsapi->freeFrame(src[0]);
-        vsapi->freeFrame(src[2]);
+            vsapi->freeFrame(src[0]);
+            src[0] = nullptr;
+            vsapi->freeFrame(src[2]);
+            src[2] = nullptr;
 
-        int err[3];
-        float motionx = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateX, 0, &err[0]);
-        float motiony = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateY, 0, &err[1]);
-        float motionzoom = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateZoom, 0, &err[2]);
+            int err[3];
+            float motionx = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateX, 0, &err[0]);
+            float motiony = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateY, 0, &err[1]);
+            float motionzoom = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateZoom, 0, &err[2]);
 
-        if (err[0] || err[1] || err[2]) {
-            vsapi->setFilterError("DepanEstimate: some temporary property was not found in input frame. This should never happen.", frameCtx);
+            if (err[0] || err[1] || err[2])
+                throw std::runtime_error("some temporary property was not found in input frame. This should never happen");
+
+            // check scenechanges in range, as sharp decreasing of trust
+            if (n - 1 >= 0 && n < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[0]) {
+                // very sharp decrease of not very big trust, probably due to scenechange
+                motionx = 0.0f;
+                motiony = 0.0f;
+                motionzoom = 1.0f;
+            }
+            if (n >= 0 && n + 1 < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[2]) {
+                // very sharp decrease of not very big trust, probably due to scenechange
+                motionx = 0.0f;
+                motiony = 0.0f;
+                motionzoom = 1.0f;
+            }
+
+            dst = vsapi->copyFrame(src[1], core);
             vsapi->freeFrame(src[1]);
-            return NULL;
-        }
+            src[1] = nullptr;
 
-        // check scenechanges in range, as sharp decreasing of trust
-        if (n - 1 >= 0 && n < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[0]) {
-            // very sharp decrease of not very big trust, probably due to scenechange
-            motionx = 0.0f;
-            motiony = 0.0f;
-            motionzoom = 1.0f;
-        }
-        if (n >= 0 && n + 1 < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[2]) {
-            // very sharp decrease of not very big trust, probably due to scenechange
-            motionx = 0.0f;
-            motiony = 0.0f;
-            motionzoom = 1.0f;
-        }
+            VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
 
-        VSFrame *dst = vsapi->copyFrame(src[1], core);
-        vsapi->freeFrame(src[1]);
+            vsapi->mapDeleteKey(dst_props, prop_DepanEstimateX);
+            vsapi->mapDeleteKey(dst_props, prop_DepanEstimateY);
+            vsapi->mapDeleteKey(dst_props, prop_DepanEstimateZoom);
+            vsapi->mapDeleteKey(dst_props, prop_DepanEstimateTrust);
 
-        VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
+            vsapi->mapSetFloat(dst_props, prop_Depan_dx, motionx, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_Depan_dy, motiony, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_Depan_zoom, motionzoom, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_Depan_rot, 0, maReplace);
 
-        vsapi->mapDeleteKey(dst_props, prop_DepanEstimateX);
-        vsapi->mapDeleteKey(dst_props, prop_DepanEstimateY);
-        vsapi->mapDeleteKey(dst_props, prop_DepanEstimateZoom);
-        vsapi->mapDeleteKey(dst_props, prop_DepanEstimateTrust);
-
-        vsapi->mapSetFloat(dst_props, prop_Depan_dx, motionx, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_Depan_dy, motiony, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_Depan_zoom, motionzoom, maReplace);
-        vsapi->mapSetFloat(dst_props, prop_Depan_rot, 0, maReplace);
-
-        if (d->info) {
+            if (d->info) {
 #define INFO_SIZE 128
-            char info[INFO_SIZE + 1] = { 0 };
+                char info[INFO_SIZE + 1] = { 0 };
 
-            snprintf(info, INFO_SIZE, "fn=%d dx=%.2f dy=%.2f zoom=%.5f trust=%.2f", n, motionx, motiony, motionzoom, trust[1]);
+                snprintf(info, INFO_SIZE, "fn=%d dx=%.2f dy=%.2f zoom=%.5f trust=%.2f", n, motionx, motiony, motionzoom, trust[1]);
 #undef INFO_SIZE
 
-            vsapi->mapSetData(dst_props, prop_DepanEstimate_info, info, -1, dtUtf8, maReplace);
-        }
+                vsapi->mapSetData(dst_props, prop_DepanEstimate_info, info, -1, dtUtf8, maReplace);
+            }
 
-        return dst;
+            return dst;
+        } catch (const std::exception &e) {
+            vsapi->setFilterError(("DepanEstimate: " + std::string(e.what())).c_str(), frameCtx);
+            vsapi->freeFrame(src[0]);
+            vsapi->freeFrame(src[1]);
+            vsapi->freeFrame(src[2]);
+            vsapi->freeFrame(dst);
+            return nullptr;
+        }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static void VS_CC depanEstimateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
@@ -2550,7 +2551,7 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
 
         if (d->intoffset == 0 || nsrc < 0 || nsrc > d->vi->numFrames - 1) {
             vsapi->requestFrameFilter(ndest, d->clip, frameCtx);
-            return NULL;
+            return nullptr;
         }
 
         int start = VSMIN(nsrc, ndest);
@@ -2565,7 +2566,7 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
     } else if (activationReason == arAllFramesReady) {
         int nsrc = ndest - d->intoffset;
 
-        if (d->intoffset == 0 || nsrc < 0 || nsrc > d->vi->numFrames - 1) //  NULL transform, return source
+        if (d->intoffset == 0 || nsrc < 0 || nsrc > d->vi->numFrames - 1) //  nullptr transform, return source
             return vsapi->getFrameFilter(ndest, d->clip, frameCtx);
 
         int forward = d->intoffset > 0;
@@ -2581,117 +2582,116 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
 
         transform trsum;
 
-        for (int n = start + 1; n <= end; n++) {
-            const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
-            const VSMap *data_props = vsapi->getFramePropertiesRO(dataframe);
+        const VSFrame *src = nullptr;
+        VSFrame *dst = nullptr;
 
-            int err[4];
-            float motionx = (float)vsapi->mapGetFloat(data_props, prop_Depan_dx, 0, &err[0]);
-            float motiony = (float)vsapi->mapGetFloat(data_props, prop_Depan_dy, 0, &err[1]);
-            float motionzoom = (float)vsapi->mapGetFloat(data_props, prop_Depan_zoom, 0, &err[2]);
-            float motionrot = (float)vsapi->mapGetFloat(data_props, prop_Depan_rot, 0, &err[3]);
-
-            vsapi->freeFrame(dataframe);
-
-            if (err[0] || err[1] || err[2] || err[3]) {
-                vsapi->setFilterError("DepanCompensate: required frame properties not found in data clip. Did data clip really come from DepanAnalyse or DepanEstimate?", frameCtx);
-                return NULL;
-            }
-
-            if (motionx == MOTIONBAD) {
-                trsum.setNull();
-                break;
-            }
-
-            transform tr;
-
-            motion2transform(motionx, motiony, motionrot, motionzoom, d->pixaspect / nfields, d->xcenter, d->ycenter, forward, fractoffset, &tr);
-            sumtransform(&trsum, &tr, &trsum);
-        }
-
-        if (d->fields && d->matchfields) {
-            const VSFrame *temp = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
-            const VSMap *temp_props = vsapi->getFramePropertiesRO(temp);
-            int err;
-            int top_field = !!vsapi->mapGetInt(temp_props, "_Field", 0, &err);
-            vsapi->freeFrame(temp);
-
-            if (err && !d->tff_exists) {
-                vsapi->setFilterError("DepanCompensate: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                return NULL;
-            }
-
-            if (d->tff_exists)
-                top_field = d->tff ^ (ndest % 2);
-
-            // reverse 1 line motion correction if matchfields mode
-            trsum.dyc += top_field ? -0.5f : 0.5f;
-        }
-
-
-        const VSFrame *src = vsapi->getFrameFilter(nsrc, d->clip, frameCtx);
-        VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
-
-        std::vector<int> work2width4356;
         try {
-            work2width4356.resize(2 * d->vi->width + 4356);
+            for (int n = start + 1; n <= end; n++) {
+                const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
+                const VSMap *data_props = vsapi->getFramePropertiesRO(dataframe);
+
+                int err[4];
+                float motionx = (float)vsapi->mapGetFloat(data_props, prop_Depan_dx, 0, &err[0]);
+                float motiony = (float)vsapi->mapGetFloat(data_props, prop_Depan_dy, 0, &err[1]);
+                float motionzoom = (float)vsapi->mapGetFloat(data_props, prop_Depan_zoom, 0, &err[2]);
+                float motionrot = (float)vsapi->mapGetFloat(data_props, prop_Depan_rot, 0, &err[3]);
+
+                vsapi->freeFrame(dataframe);
+
+                if (err[0] || err[1] || err[2] || err[3])
+                    throw std::runtime_error("required frame properties not found in data clip. Did data clip really come from DepanAnalyse or DepanEstimate?");
+
+                if (motionx == MOTIONBAD) {
+                    trsum.setNull();
+                    break;
+                }
+
+                transform tr;
+
+                motion2transform(motionx, motiony, motionrot, motionzoom, d->pixaspect / nfields, d->xcenter, d->ycenter, forward, fractoffset, &tr);
+                sumtransform(&trsum, &tr, &trsum);
+            }
+
+            if (d->fields && d->matchfields) {
+                const VSFrame *temp = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
+                const VSMap *temp_props = vsapi->getFramePropertiesRO(temp);
+                int err;
+                int top_field = !!vsapi->mapGetInt(temp_props, "_Field", 0, &err);
+                vsapi->freeFrame(temp);
+
+                if (err && !d->tff_exists)
+                    throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
+
+                if (d->tff_exists)
+                    top_field = d->tff ^ (ndest % 2);
+
+                // reverse 1 line motion correction if matchfields mode
+                trsum.dyc += top_field ? -0.5f : 0.5f;
+            }
+
+
+            src = vsapi->getFrameFilter(nsrc, d->clip, frameCtx);
+            dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
+
+            std::vector<int> work2width4356(2 * d->vi->width + 4356);
+
+            int border[3] = { 0, 1 << (d->vi->format.bitsPerSample - 1), border[1] };
+            int blur[3] = { d->blur, d->blur, d->blur };
+            transform tr[3];
+
+            tr[0] = tr[1] = trsum;
+            if (d->vi->format.subSamplingW == 1 && d->vi->format.subSamplingH == 1) { // 420
+                tr[1].dxc /= 2;
+                tr[1].dyc /= 2;
+
+                blur[1] = blur[2] = blur[0] / 2;
+            } else if (d->vi->format.subSamplingW == 1 && d->vi->format.subSamplingH == 0) { // 422
+                tr[1].dxc /= 2;
+                tr[1].dxy /= 2;
+                tr[1].dyx *= 2;
+
+                blur[1] = blur[2] = blur[0] / 2;
+            }
+            tr[2] = tr[1];
+
+            for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
+                const uint8_t *srcp = vsapi->getReadPtr(src, plane);
+                int src_width = vsapi->getFrameWidth(src, plane);
+                int src_height = vsapi->getFrameHeight(src, plane);
+                ptrdiff_t src_pitch = vsapi->getStride(src, plane);
+
+                uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+
+                d->compensate_plane(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+            }
+
+            vsapi->freeFrame(src);
+            src = nullptr;
+
+            if (d->info) {
+                float dxsum = 0.0f, dysum = 0.0f, rotsum = 0.0f, zoomsum = 1.0f;
+                transform2motion(&trsum, forward, d->xcenter, d->ycenter, d->pixaspect / nfields, &dxsum, &dysum, &rotsum, &zoomsum);
+
+#define INFO_SIZE 128
+                char info[INFO_SIZE + 1] = { 0 };
+
+                snprintf(info, INFO_SIZE, "offset=%.2f, %d to %d, dx=%.2f, dy=%.2f, rot=%.3f zoom=%.5f", d->offset, ndest - d->intoffset, ndest, dxsum, dysum, rotsum, zoomsum);
+#undef INFO_SIZE
+
+                VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
+                vsapi->mapSetData(dst_props, prop_DepanCompensate_info, info, -1, dtUtf8, maReplace);
+            }
+
+            return dst;
         } catch (const std::exception &e) {
             vsapi->setFilterError(("DepanCompensate: " + std::string(e.what())).c_str(), frameCtx);
             vsapi->freeFrame(src);
             vsapi->freeFrame(dst);
             return nullptr;
         }
-
-        int border[3] = { 0, 1 << (d->vi->format.bitsPerSample - 1), border[1] };
-        int blur[3] = { d->blur, d->blur, d->blur };
-        transform tr[3];
-
-        tr[0] = tr[1] = trsum;
-        if (d->vi->format.subSamplingW == 1 && d->vi->format.subSamplingH == 1) { // 420
-            tr[1].dxc /= 2;
-            tr[1].dyc /= 2;
-
-            blur[1] = blur[2] = blur[0] / 2;
-        } else if (d->vi->format.subSamplingW == 1 && d->vi->format.subSamplingH == 0) { // 422
-            tr[1].dxc /= 2;
-            tr[1].dxy /= 2;
-            tr[1].dyx *= 2;
-
-            blur[1] = blur[2] = blur[0] / 2;
-        }
-        tr[2] = tr[1];
-
-        for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-            const uint8_t *srcp = vsapi->getReadPtr(src, plane);
-            int src_width = vsapi->getFrameWidth(src, plane);
-            int src_height = vsapi->getFrameHeight(src, plane);
-            ptrdiff_t src_pitch = vsapi->getStride(src, plane);
-
-            uint8_t *dstp = vsapi->getWritePtr(dst, plane);
-
-            d->compensate_plane(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
-        }
-
-        vsapi->freeFrame(src);
-
-        if (d->info) {
-            float dxsum = 0.0f, dysum = 0.0f, rotsum = 0.0f, zoomsum = 1.0f;
-            transform2motion(&trsum, forward, d->xcenter, d->ycenter, d->pixaspect / nfields, &dxsum, &dysum, &rotsum, &zoomsum);
-
-#define INFO_SIZE 128
-            char info[INFO_SIZE + 1] = { 0 };
-
-            snprintf(info, INFO_SIZE, "offset=%.2f, %d to %d, dx=%.2f, dy=%.2f, rot=%.3f zoom=%.5f", d->offset, ndest - d->intoffset, ndest, dxsum, dysum, rotsum, zoomsum);
-#undef INFO_SIZE
-
-            VSMap *dst_props = vsapi->getFramePropertiesRW(dst);
-            vsapi->mapSetData(dst_props, prop_DepanCompensate_info, info, -1, dtUtf8, maReplace);
-        }
-
-        return dst;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
@@ -3535,7 +3535,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
                     const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
                     if (!getDepanProps(&d->motionx[n], &d->motiony[n], &d->motionrot[n], &d->motionzoom[n], dataframe, frameCtx, vsapi)) {
                         vsapi->freeFrame(dataframe);
-                        return NULL;
+                        return nullptr;
                     }
                     vsapi->freeFrame(dataframe);
                 }
@@ -3549,110 +3549,103 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         }
 
 
-        float dxdif, dydif, zoomdif, rotdif;
-        transform trdif;
+        const VSFrame *src = nullptr;
+        VSFrame *dst = nullptr;
 
-        if (nbase == ndest) { // we are at new scene start,
-            motion2transform(0, 0, 0, d->initzoom, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trdif);
-        } else { // prepare stabilization data by estimation and smoothing of cumulative motion
-
-            // cumulative transform (position) for all sequence from base
-
-            size_t elements = ndest - nbase + 1;
-
-            std::vector<transform> trcumul;
-            std::vector<transform> trsmoothed;
-            std::vector<float> azoom;
-            std::vector<float> azoomsmoothed;
-
-            try {
-                trcumul.resize(elements);
-                trsmoothed.resize(elements);
-                azoom.resize(elements);
-                azoomsmoothed.resize(elements);
-            } catch (const std::exception &e) {
-                vsapi->setFilterError(("DepanStabilise: " + std::string(e.what())).c_str(), frameCtx);
-                return nullptr;
-            }
-
-            // base as null
-            trcumul[0].setNull();
-
-            // get cumulative transforms from base to ndest
-            for (int n = nbase + 1; n <= ndest; n++) {
-                transform trcur;
-
-                motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
-                sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
-            }
-
-            Inertial(d, trcumul.data() - nbase, trsmoothed.data() - nbase, azoom.data() - nbase, azoomsmoothed.data() - nbase, nbase, ndest, &trdif);
-
-            // summary motion from summary transform
-            transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
-            // fit last - decrease motion correction near end of clip - added in v.1.2.0
-
-            if (d->vi->numFrames < d->fitlast + ndest + 1) {
-                float endFactor = ((float)(d->vi->numFrames - ndest - 1)) / d->fitlast; // decrease factor
-                dxdif *= endFactor;
-                dydif *= endFactor;
-                rotdif *= endFactor;
-                zoomdif = d->initzoom + (zoomdif - d->initzoom) * endFactor;
-            }
-
-            InertialLimit(d, &dxdif, &dydif, &zoomdif, &rotdif, ndest, &nbase);
-
-            // summary motion from summary transform after max correction
-            motion2transform(dxdif, dydif, rotdif, zoomdif, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trdif);
-        }
-
-        // ---------------------------------------------------------------------------
-        const VSFrame *src = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
-        VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
-
-        //--------------------------------------------------------------------------
-        // Ready to make motion stabilization,
-
-        std::vector<int> work2width4356; // work
         try {
-            work2width4356.resize(2 * d->vi->width + 4356);
+            float dxdif, dydif, zoomdif, rotdif;
+            transform trdif;
+
+            if (nbase == ndest) { // we are at new scene start,
+                motion2transform(0, 0, 0, d->initzoom, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trdif);
+            } else { // prepare stabilization data by estimation and smoothing of cumulative motion
+
+                // cumulative transform (position) for all sequence from base
+
+                size_t elements = ndest - nbase + 1;
+
+                std::vector<transform> trcumul(elements);
+                std::vector<transform> trsmoothed(elements);
+                std::vector<float> azoom(elements);
+                std::vector<float> azoomsmoothed(elements);
+
+                // base as null
+                trcumul[0].setNull();
+
+                // get cumulative transforms from base to ndest
+                for (int n = nbase + 1; n <= ndest; n++) {
+                    transform trcur;
+
+                    motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
+                    sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
+                }
+
+                Inertial(d, trcumul.data() - nbase, trsmoothed.data() - nbase, azoom.data() - nbase, azoomsmoothed.data() - nbase, nbase, ndest, &trdif);
+
+                // summary motion from summary transform
+                transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
+                // fit last - decrease motion correction near end of clip - added in v.1.2.0
+
+                if (d->vi->numFrames < d->fitlast + ndest + 1) {
+                    float endFactor = ((float)(d->vi->numFrames - ndest - 1)) / d->fitlast; // decrease factor
+                    dxdif *= endFactor;
+                    dydif *= endFactor;
+                    rotdif *= endFactor;
+                    zoomdif = d->initzoom + (zoomdif - d->initzoom) * endFactor;
+                }
+
+                InertialLimit(d, &dxdif, &dydif, &zoomdif, &rotdif, ndest, &nbase);
+
+                // summary motion from summary transform after max correction
+                motion2transform(dxdif, dydif, rotdif, zoomdif, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trdif);
+            }
+
+            // ---------------------------------------------------------------------------
+            src = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
+            dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
+
+            //--------------------------------------------------------------------------
+            // Ready to make motion stabilization,
+
+            std::vector<int> work2width4356(2 * d->vi->width + 4356); // work
+
+            // --------------------------------------------------------------------
+            // use some previous frame to fill borders
+            int notfilled = 1; // init as not filled (borders by neighbor frames)
+
+            if (d->prev > 0)
+                fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi);
+
+            // use next frame to fill borders
+            if (d->next > 0) {
+                if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi)) {
+                    vsapi->freeFrame(dst);
+                    vsapi->freeFrame(src);
+                    return nullptr;
+                }
+            }
+
+            compensateFrame(src, dst, d, notfilled, &trdif, work2width4356.data(), vsapi);
+
+            vsapi->freeFrame(src);
+            src = nullptr;
+
+            if (d->info) {
+                transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
+
+                attachInfo(dst, nbase, ndest, dxdif, dydif, rotdif, zoomdif, vsapi);
+            }
+
+            return dst;
         } catch (const std::exception &e) {
             vsapi->setFilterError(("DepanStabilise: " + std::string(e.what())).c_str(), frameCtx);
             vsapi->freeFrame(src);
             vsapi->freeFrame(dst);
             return nullptr;
         }
-
-        // --------------------------------------------------------------------
-        // use some previous frame to fill borders
-        int notfilled = 1; // init as not filled (borders by neighbor frames)
-
-        if (d->prev > 0)
-            fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi);
-
-        // use next frame to fill borders
-        if (d->next > 0) {
-            if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi)) {
-                vsapi->freeFrame(dst);
-                vsapi->freeFrame(src);
-                return NULL;
-            }
-        }
-
-        compensateFrame(src, dst, d, notfilled, &trdif, work2width4356.data(), vsapi);
-
-        vsapi->freeFrame(src);
-
-        if (d->info) {
-            transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
-
-            attachInfo(dst, nbase, ndest, dxdif, dydif, rotdif, zoomdif, vsapi);
-        }
-
-        return dst;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 
@@ -3716,7 +3709,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
                     const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
                     if (!getDepanProps(&d->motionx[n], &d->motiony[n], &d->motionrot[n], &d->motionzoom[n], dataframe, frameCtx, vsapi)) {
                         vsapi->freeFrame(dataframe);
-                        return NULL;
+                        return nullptr;
                     }
                     vsapi->freeFrame(dataframe);
                 }
@@ -3734,7 +3727,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
                     const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
                     if (!getDepanProps(&d->motionx[n], &d->motiony[n], &d->motionrot[n], &d->motionzoom[n], dataframe, frameCtx, vsapi)) {
                         vsapi->freeFrame(dataframe);
-                        return NULL;
+                        return nullptr;
                     }
                     vsapi->freeFrame(dataframe);
                 }
@@ -3748,96 +3741,91 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
         }
 
 
-        int smaller_distance = std::min(nmax - ndest, ndest - nbase);
-        nmax = ndest + smaller_distance;
-        nbase = ndest - smaller_distance;
-
-
-        // cumulative transform (position) for all sequence from base
-
-        size_t elements = nmax - nbase + 1;
-
-        std::vector<transform> trcumul;
-        std::vector<float> azoom;
+        const VSFrame *src = nullptr;
+        VSFrame *dst = nullptr;
 
         try {
-            trcumul.resize(elements);
-            azoom.resize(elements);
-        } catch (const std::exception &e) {
-            vsapi->setFilterError(("DepanStabilise: " + std::string(e.what())).c_str(), frameCtx);
-            return nullptr;
-        }
-
-        // base as null
-        trcumul[0].setNull();
-
-        float dxdif, dydif, zoomdif, rotdif;
-        transform trdif;
-
-        // get cumulative transforms from base to ndest
-        for (int n = nbase + 1; n <= nmax; n++) {
-            transform trcur;
-
-            motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
-            sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
-        }
-
-        Average(d, trcumul.data() - nbase, azoom.data() - nbase, nbase, ndest, nmax, &trdif);
-
-        // summary motion from summary transform
-        transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
-
-        // summary motion from summary transform after max correction
-        motion2transform(dxdif, dydif, rotdif, zoomdif, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trdif);
+            int smaller_distance = std::min(nmax - ndest, ndest - nbase);
+            nmax = ndest + smaller_distance;
+            nbase = ndest - smaller_distance;
 
 
-        // ---------------------------------------------------------------------------
-        const VSFrame *src = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
-        VSFrame *dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
+            // cumulative transform (position) for all sequence from base
 
-        //--------------------------------------------------------------------------
-        // Ready to make motion stabilization,
+            size_t elements = nmax - nbase + 1;
 
-        std::vector<int> work2width4356; // work
-        try {
-            work2width4356.resize(2 * d->vi->width + 4356);
+            std::vector<transform> trcumul(elements);
+            std::vector<float> azoom(elements);
+
+            // base as null
+            trcumul[0].setNull();
+
+            float dxdif, dydif, zoomdif, rotdif;
+            transform trdif;
+
+            // get cumulative transforms from base to ndest
+            for (int n = nbase + 1; n <= nmax; n++) {
+                transform trcur;
+
+                motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
+                sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
+            }
+
+            Average(d, trcumul.data() - nbase, azoom.data() - nbase, nbase, ndest, nmax, &trdif);
+
+            // summary motion from summary transform
+            transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
+
+            // summary motion from summary transform after max correction
+            motion2transform(dxdif, dydif, rotdif, zoomdif, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trdif);
+
+
+            // ---------------------------------------------------------------------------
+            src = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
+            dst = vsapi->newVideoFrame(&d->vi->format, d->vi->width, d->vi->height, src, core);
+
+            //--------------------------------------------------------------------------
+            // Ready to make motion stabilization,
+
+            std::vector<int> work2width4356(2 * d->vi->width + 4356); // work
+
+            // --------------------------------------------------------------------
+            // use some previous frame to fill borders
+            int notfilled = 1; // init as not filled (borders by neighbor frames)
+
+            if (d->prev > 0)
+                fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi);
+
+            // use next frame to fill borders
+            if (d->next > 0) {
+                if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi)) {
+                    vsapi->freeFrame(dst);
+                    vsapi->freeFrame(src);
+                    return nullptr;
+                }
+            }
+
+            compensateFrame(src, dst, d, notfilled, &trdif, work2width4356.data(), vsapi);
+
+            vsapi->freeFrame(src);
+            src = nullptr;
+
+            if (d->info) {
+                transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
+
+                attachInfo(dst, nbase, ndest, dxdif, dydif, rotdif, zoomdif, vsapi);
+            }
+
+            return dst;
         } catch (const std::exception &e) {
             vsapi->setFilterError(("DepanStabilise: " + std::string(e.what())).c_str(), frameCtx);
             vsapi->freeFrame(src);
             vsapi->freeFrame(dst);
             return nullptr;
         }
-
-        // --------------------------------------------------------------------
-        // use some previous frame to fill borders
-        int notfilled = 1; // init as not filled (borders by neighbor frames)
-
-        if (d->prev > 0)
-            fillBorderPrev(dst, d, nbase, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi);
-
-        // use next frame to fill borders
-        if (d->next > 0) {
-            if (!fillBorderNext(dst, d, ndest, &trdif, work2width4356.data(), &notfilled, frameCtx, vsapi)) {
-                vsapi->freeFrame(dst);
-                vsapi->freeFrame(src);
-                return NULL;
-            }
-        }
-
-        compensateFrame(src, dst, d, notfilled, &trdif, work2width4356.data(), vsapi);
-
-        vsapi->freeFrame(src);
-
-        if (d->info) {
-            transform2motion(&trdif, 1, d->xcenter, d->ycenter, d->pixaspect / d->nfields, &dxdif, &dydif, &rotdif, &zoomdif);
-
-            attachInfo(dst, nbase, ndest, dxdif, dydif, rotdif, zoomdif, vsapi);
-        }
-
-        return dst;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
