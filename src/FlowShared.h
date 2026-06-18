@@ -41,15 +41,19 @@ static void FlowInter(
     int nPelLog = ilog2(prefB.nPel);
 
     for (int h = 0; h < height; h++) {
+        int yBase = (h + dstY) << nPelLog;
+        const PixelType *prefF0Ptr = reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(dstX << nPelLog, yBase));
+        const PixelType *prefB0Ptr = reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(dstX << nPelLog, yBase));
         for (int w = 0; w < width; w++) {
+            int xBase = (w + dstX) << nPelLog;
             int vxF = ((static_cast<int>(VXFullF[w]) - (1 << 15)) * time256) >> 8;
             int vyF = ((static_cast<int>(VYFullF[w]) - (1 << 15)) * time256) >> 8;
-            int64_t dstF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxF + ((w + dstX) << nPelLog), vyF + ((h + dstY) << nPelLog)));
-            int dstF0 = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(((w + dstX) << nPelLog), ((h + dstY) << nPelLog)));
+            int64_t dstF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxF + xBase, vyF + yBase));
+            int dstF0 = prefF0Ptr[w];
             int vxB = ((static_cast<int>(VXFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
             int vyB = ((static_cast<int>(VYFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int64_t dstB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxB + ((w + dstX) << nPelLog), vyB + ((h + dstY) << nPelLog)));
-            int dstB0 = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(((w + dstX) << nPelLog), ((h + dstY) << nPelLog)));
+            int64_t dstB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxB + xBase, vyB + yBase));
+            int dstB0 = prefB0Ptr[w];
             pdst[w] = (PixelType)((((dstF * (256 - MaskF[w]) + ((MaskF[w] * (dstB * (256 - MaskB[w]) + MaskB[w] * dstF0) + 256) >> 8) + 256) >> 8) * (256 - time256) +
                 ((dstB * (256 - MaskB[w]) + ((MaskB[w] * (dstF * (256 - MaskF[w]) + MaskF[w] * dstB0) + 256) >> 8) + 256) >> 8) * time256) >> 8) - 1;
         }
@@ -85,22 +89,24 @@ static void FlowInterExtra(
     int nPelLog = ilog2(prefB.nPel);
 
     for (int h = 0; h < height; h++) {
+        int yBase = (h + dstY) << nPelLog;
         for (int w = 0; w < width; w++) {
+            int xBase = (w + dstX) << nPelLog;
             int vxF = ((static_cast<int>(VXFullF[w]) - (1 << 15)) * time256) >> 8;
             int vyF = ((static_cast<int>(VYFullF[w]) - (1 << 15)) * time256) >> 8;
-            int dstF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxF + ((w + dstX) << nPelLog), vyF + ((h + dstY) << nPelLog)));
+            int dstF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxF + xBase, vyF + yBase));
 
             int vxFF = ((static_cast<int>(VXFullFF[w]) - (1 << 15)) * time256) >> 8;
             int vyFF = ((static_cast<int>(VYFullFF[w]) - (1 << 15)) * time256) >> 8;
-            int dstFF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxFF + ((w + dstX) << nPelLog), vyFF + ((h + dstY) << nPelLog)));
+            int dstFF = *reinterpret_cast<const PixelType *>(prefF.GetPointer<PixelType>(vxFF + xBase, vyFF + yBase));
 
             int vxB = ((static_cast<int>(VXFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
             int vyB = ((static_cast<int>(VYFullB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int dstB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxB + ((w + dstX) << nPelLog), vyB + ((h + dstY) << nPelLog)));
+            int dstB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxB + xBase, vyB + yBase));
 
             int vxBB = ((static_cast<int>(VXFullBB[w]) - (1 << 15)) * (256 - time256)) >> 8;
             int vyBB = ((static_cast<int>(VYFullBB[w]) - (1 << 15)) * (256 - time256)) >> 8;
-            int dstBB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxBB + ((w + dstX) << nPelLog), vyBB + ((h + dstY) << nPelLog)));
+            int dstBB = *reinterpret_cast<const PixelType *>(prefB.GetPointer<PixelType>(vxBB + xBase, vyBB + yBase));
 
             /* use median, firsly get min max of compensations */
             int minfb = std::min(dstB, dstF);

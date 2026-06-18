@@ -70,12 +70,13 @@ static void flowFetch(uint8_t *MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
 
     // fetch mode
     for (int h = 0; h < height; h++) {
+        int yBase = (h + dstY) << nPelLog;
         for (int w = 0; w < width; w++) {
+            int xBase = (w + dstX) << nPelLog;
             // use interpolated image
             int vx = ((static_cast<int>(VXFull[w]) - (1 << 15)) * time256 + 128) >> 8;
             int vy = ((static_cast<int>(VYFull[w]) - (1 << 15)) * time256 + 128) >> 8;
-            // FIXME, maybe template this on npel as well for speed?
-            pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(((dstX + w) << nPelLog) + vx, ((dstY + h) << nPelLog) + vy));
+            pdst[w] = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(xBase + vx, yBase + vy));
         }
         pdst += dst_pitch;
         VXFull += tilePitch;

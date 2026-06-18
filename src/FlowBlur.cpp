@@ -72,9 +72,11 @@ static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
 
     /* very slow, but precise motion blur */
     for (int h = 0; h < height; h++) {
+        int yBase = (h + dstY) << nPelLog;
+        const PixelType *prefPtr = reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>(dstX << nPelLog, yBase));
         for (int w = 0; w < width; w++) {
-            // FIXME, only accesses pel1 data, maybe add a faster function to access it
-            int64_t bluredsum = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((w + dstX) << nPelLog, (h + dstY) << nPelLog));
+            int xBase = (w + dstX) << nPelLog;
+            int64_t blurredsum = prefPtr[w];
             int vxF0 = (static_cast<int>(VXFullF[w]) - (1 << 15)) * blur256;
             int vyF0 = (static_cast<int>(VYFullF[w]) - (1 << 15)) * blur256;
             int mF = (std::max(abs(vxF0), abs(vyF0)) / prec) >> 8;
@@ -84,8 +86,8 @@ static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
                 int vxF = vxF0;
                 int vyF = vyF0;
                 for (int i = 0; i < mF; i++) {
-                    int dstF = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((vxF >> 8) + ((w + dstX) << nPelLog), (vyF >> 8) + ((h + dstY) << nPelLog)));
-                    bluredsum += dstF;
+                    int dstF = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((vxF >> 8) + xBase, (vyF >> 8) + yBase));
+                    blurredsum += dstF;
                     vxF += vxF0;
                     vyF += vyF0;
                 }
@@ -99,13 +101,13 @@ static void FlowBlur(uint8_t * MVU_RESTRICT pdst8, ptrdiff_t dst_pitch, const Py
                 int vxB = vxB0;
                 int vyB = vyB0;
                 for (int i = 0; i < mB; i++) {
-                    int dstB = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((vxB >> 8) + ((w + dstX) << nPelLog), (vyB >> 8) + ((h + dstY) << nPelLog)));
-                    bluredsum += dstB;
+                    int dstB = *reinterpret_cast<const PixelType *>(pref.GetPointer<PixelType>((vxB >> 8) + xBase, (vyB >> 8) + yBase));
+                    blurredsum += dstB;
                     vxB += vxB0;
                     vyB += vyB0;
                 }
             }
-            pdst[w] = static_cast<PixelType>(bluredsum / (mF + mB + 1));
+            pdst[w] = static_cast<PixelType>(blurredsum / (mF + mB + 1));
         }
         pdst += dst_pitch;
         VXFullB += tilePitch;
