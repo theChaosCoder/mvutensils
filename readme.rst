@@ -62,6 +62,8 @@ Changes
     
     * Renamed lambda to mvlamda and global to globalmv to not collide with python keywords
     
+    * Speedups due to no longer testing the same motion vector predictors multiple times
+    
 * AnalyseMany:
     * A helper function to generate multiple analysis clips quickly to pass to DegrainN and friends, takes the same arguments as Analyse except that delta is a positive number controlling the step size backward and forward. The radius argument determines how many vectors are produced and defaults to 1. For example radius=2 will return [Analyse(delta=1), Analyse(delta=-1), Analyse(delta=2), Analyse(delta=-2)]
     
@@ -129,6 +131,9 @@ Changes
 
 * Finest:
     * Removed since its only real use was as a support function for other filters due to lazy frame data access code
+    
+* DepanAnalyse/DepanEstimate/DepanCompensate/DepanStabilise
+    * Bug fixes, maybe some should be backported
 
 Planned changes/mysteries
 =========================
@@ -137,8 +142,4 @@ Planned changes/mysteries
 
 * The tff stuff present in most filters needs cleanup
 
-* Mask doesn't need source properties passed on or the possibility to specify the output format?
-
-* Big additional code cleanups
-
-* Depan
+* Mask doesn't need source properties passed on or the possibility to specify the output format
