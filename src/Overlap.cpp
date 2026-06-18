@@ -151,13 +151,12 @@ struct OverlapsWrapper {
                 __m128i win = _mm_loadu_si128((const __m128i *)&pWin[x]);
                 __m128i dst = _mm_loadu_si128((__m128i *)&pDst[x]);
 
-                src = _mm_unpacklo_epi8(src, _mm_setzero_si128());
-
-                __m128i lo = _mm_mullo_epi16(src, win);
-                __m128i hi = _mm_mulhi_epi16(src, win);
-                lo = _mm_srli_epi16(lo, 6);
-                hi = _mm_slli_epi16(hi, 10);
-                dst = _mm_adds_epu16(dst, _mm_or_si128(lo, hi));
+                // (src * win) >> 6 as the high 16 bits of (src<<8)*(win<<2) =
+                // src*win*2^10 (>>16 nets >>6). One mulhi replaces the
+                // mullo/mulhi/srli/slli/or split-product sequence.
+                src = _mm_unpacklo_epi8(_mm_setzero_si128(), src); // widen + (src << 8)
+                win = _mm_slli_epi16(win, 2);                       // win << 2
+                dst = _mm_adds_epu16(dst, _mm_mulhi_epu16(src, win));
                 _mm_storeu_si128((__m128i *)&pDst[x], dst);
             }
 
@@ -180,13 +179,10 @@ struct OverlapsWrapper<4, blockHeight> {
             __m128i win = _mm_loadl_epi64((const __m128i *)pWin);
             __m128i dst = _mm_loadl_epi64((const __m128i *)pDst);
 
-            src = _mm_unpacklo_epi8(src, _mm_setzero_si128());
-
-            __m128i lo = _mm_mullo_epi16(src, win);
-            __m128i hi = _mm_mulhi_epi16(src, win);
-            lo = _mm_srli_epi16(lo, 6);
-            hi = _mm_slli_epi16(hi, 10);
-            dst = _mm_adds_epu16(dst, _mm_or_si128(lo, hi));
+            // (src * win) >> 6 == high 16 bits of (src<<8)*(win<<2).
+            src = _mm_unpacklo_epi8(_mm_setzero_si128(), src); // widen + (src << 8)
+            win = _mm_slli_epi16(win, 2);                       // win << 2
+            dst = _mm_adds_epu16(dst, _mm_mulhi_epu16(src, win));
             _mm_storel_epi64((__m128i *)pDst, dst);
 
             pDst += nDstPitch;

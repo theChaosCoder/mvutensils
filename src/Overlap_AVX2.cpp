@@ -22,23 +22,24 @@ static void overlaps_avx2(uint8_t *pDst8, ptrdiff_t nDstPitch, const uint8_t *pS
 
             if (blockWidth == 8) {
                 src = _mm256_cvtepu8_epi16(_mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i *)(pSrc + x)), _mm_loadl_epi64((const __m128i *)(pSrc + nSrcPitch + x))));
-                win = _mm256_insertf128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i *)(pWin + x))), _mm_loadu_si128((const __m128i *)(pWin + nWinPitch + x)), 1);
-                dst = _mm256_insertf128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i *)(pDst + x))), _mm_loadu_si128((const __m128i *)(pDst8 + nDstPitch + x * sizeof(uint16_t))), 1);
+                win = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i *)(pWin + x))), _mm_loadu_si128((const __m128i *)(pWin + nWinPitch + x)), 1);
+                dst = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i *)(pDst + x))), _mm_loadu_si128((const __m128i *)(pDst8 + nDstPitch + x * sizeof(uint16_t))), 1);
             } else {
                 src = _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i *)(pSrc + x)));
                 win = _mm256_loadu_si256((const __m256i *)(pWin + x));
                 dst = _mm256_loadu_si256((const __m256i *)(pDst + x));
             }
 
-            __m256i lo = _mm256_mullo_epi16(src, win);
-            __m256i hi = _mm256_mulhi_epi16(src, win);
-            lo = _mm256_srli_epi16(lo, 6);
-            hi = _mm256_slli_epi16(hi, 10);
-            dst = _mm256_adds_epu16(dst, _mm256_or_si256(lo, hi));
+            // (src * win) >> 6 as the high 16 bits of (src<<8)*(win<<2) =
+            // src*win*2^10 (>>16 nets >>6). One mulhi replaces the
+            // mullo/mulhi/srli/slli/or split-product sequence.
+            src = _mm256_slli_epi16(src, 8);
+            win = _mm256_slli_epi16(win, 2);
+            dst = _mm256_adds_epu16(dst, _mm256_mulhi_epu16(src, win));
 
             if (blockWidth == 8) {
                 _mm_storeu_si128((__m128i *)(pDst + x), _mm256_castsi256_si128(dst));
-                _mm_storeu_si128((__m128i *)(pDst8 + nDstPitch + x * sizeof(uint16_t)), _mm256_extractf128_si256(dst, 1));
+                _mm_storeu_si128((__m128i *)(pDst8 + nDstPitch + x * sizeof(uint16_t)), _mm256_extracti128_si256(dst, 1));
             } else {
                 _mm256_storeu_si256((__m256i *)(pDst + x), dst);
             }
