@@ -113,11 +113,11 @@ static void VS_CC maskCreate(const VSMap *in, VSMap *out, void *userData, VSCore
     else if (d->kind == 2)
         d->filterName = "OcclusionMask";
 
-    float ml = (float)vsapi->mapGetFloat(in, "ml", 0, &err);
+    float ml = vsapi->mapGetFloatSaturated(in, "ml", 0, &err);
     if (err)
         ml = 100.0f;
 
-    d->fGamma = (float)vsapi->mapGetFloat(in, "gamma", 0, &err);
+    d->fGamma = vsapi->mapGetFloatSaturated(in, "gamma", 0, &err);
     if (err)
         d->fGamma = 1.0f;
 

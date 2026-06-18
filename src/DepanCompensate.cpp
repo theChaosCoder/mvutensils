@@ -94,10 +94,10 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
                 const VSMap *data_props = vsapi->getFramePropertiesRO(dataframe);
 
                 int err[4];
-                float motionx = (float)vsapi->mapGetFloat(data_props, prop_Depan_dx, 0, &err[0]);
-                float motiony = (float)vsapi->mapGetFloat(data_props, prop_Depan_dy, 0, &err[1]);
-                float motionzoom = (float)vsapi->mapGetFloat(data_props, prop_Depan_zoom, 0, &err[2]);
-                float motionrot = (float)vsapi->mapGetFloat(data_props, prop_Depan_rot, 0, &err[3]);
+                float motionx = vsapi->mapGetFloatSaturated(data_props, prop_Depan_dx, 0, &err[0]);
+                float motiony = vsapi->mapGetFloatSaturated(data_props, prop_Depan_dy, 0, &err[1]);
+                float motionzoom = vsapi->mapGetFloatSaturated(data_props, prop_Depan_zoom, 0, &err[2]);
+                float motionrot = vsapi->mapGetFloatSaturated(data_props, prop_Depan_rot, 0, &err[3]);
 
                 vsapi->freeFrame(dataframe);
 
@@ -216,13 +216,13 @@ static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userD
 
     int err;
 
-    d->offset = (float)vsapi->mapGetFloat(in, "offset", 0, &err);
+    d->offset = vsapi->mapGetFloatSaturated(in, "offset", 0, &err);
 
     d->subpixel = vsapi->mapGetIntSaturated(in, "subpixel", 0, &err);
     if (err)
         d->subpixel = 2;
 
-    d->pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
+    d->pixaspect = vsapi->mapGetFloatSaturated(in, "pixaspect", 0, &err);
     if (err)
         d->pixaspect = 1.0f;
 

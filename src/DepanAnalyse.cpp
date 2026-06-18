@@ -348,21 +348,21 @@ static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData
         if (err)
             d->rot = 1;
 
-        d->pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
+        d->pixaspect = vsapi->mapGetFloatSaturated(in, "pixaspect", 0, &err);
         if (err)
             d->pixaspect = 1.0f;
 
-        d->error = (float)vsapi->mapGetFloat(in, "error", 0, &err);
+        d->error = vsapi->mapGetFloatSaturated(in, "error", 0, &err);
         if (err)
             d->error = 15.0f;
 
         d->info = !!vsapi->mapGetInt(in, "info", 0, &err);
 
-        d->wrong = (float)vsapi->mapGetFloat(in, "wrong", 0, &err);
+        d->wrong = vsapi->mapGetFloatSaturated(in, "wrong", 0, &err);
         if (err)
             d->wrong = 10.0f;
 
-        d->zerow = (float)vsapi->mapGetFloat(in, "zerow", 0, &err);
+        d->zerow = vsapi->mapGetFloatSaturated(in, "zerow", 0, &err);
         if (err)
             d->zerow = 0.05f;
 

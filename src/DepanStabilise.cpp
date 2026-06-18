@@ -475,10 +475,10 @@ static int getDepanProps(float *motionx, float *motiony, float *motionrot, float
 
     int err[4];
 
-    float x = (float)vsapi->mapGetFloat(frame_props, prop_Depan_dx, 0, &err[0]);
-    float y = (float)vsapi->mapGetFloat(frame_props, prop_Depan_dy, 0, &err[1]);
-    float rot = (float)vsapi->mapGetFloat(frame_props, prop_Depan_rot, 0, &err[2]);
-    float zoom = (float)vsapi->mapGetFloat(frame_props, prop_Depan_zoom, 0, &err[3]);
+    float x = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_dx, 0, &err[0]);
+    float y = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_dy, 0, &err[1]);
+    float rot = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_rot, 0, &err[2]);
+    float zoom = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_zoom, 0, &err[3]);
 
     if (err[0] || err[1] || err[2] || err[3]) {
         vsapi->setFilterError("DepanStabilise: required frame properties not found in data clip.", frameCtx);
@@ -1058,15 +1058,15 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 
     int err;
 
-    d->cutoff = (float)vsapi->mapGetFloat(in, "cutoff", 0, &err);
+    d->cutoff = vsapi->mapGetFloatSaturated(in, "cutoff", 0, &err);
     if (err)
         d->cutoff = 1.0f;
 
-    d->damping = (float)vsapi->mapGetFloat(in, "damping", 0, &err);
+    d->damping = vsapi->mapGetFloatSaturated(in, "damping", 0, &err);
     if (err)
         d->damping = 0.9f;
 
-    d->initzoom = (float)vsapi->mapGetFloat(in, "initzoom", 0, &err);
+    d->initzoom = vsapi->mapGetFloatSaturated(in, "initzoom", 0, &err);
     if (err)
         d->initzoom = 1.0f;
 
@@ -1080,19 +1080,19 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 
     d->blur = vsapi->mapGetIntSaturated(in, "blur", 0, &err);
 
-    d->dxmax = (float)vsapi->mapGetFloat(in, "dxmax", 0, &err);
+    d->dxmax = vsapi->mapGetFloatSaturated(in, "dxmax", 0, &err);
     if (err)
         d->dxmax = 60.0f;
 
-    d->dymax = (float)vsapi->mapGetFloat(in, "dymax", 0, &err);
+    d->dymax = vsapi->mapGetFloatSaturated(in, "dymax", 0, &err);
     if (err)
         d->dymax = 30.0f;
 
-    d->zoommax = (float)vsapi->mapGetFloat(in, "zoommax", 0, &err);
+    d->zoommax = vsapi->mapGetFloatSaturated(in, "zoommax", 0, &err);
     if (err)
         d->zoommax = 1.05f;
 
-    d->rotmax = (float)vsapi->mapGetFloat(in, "rotmax", 0, &err);
+    d->rotmax = vsapi->mapGetFloatSaturated(in, "rotmax", 0, &err);
     if (err)
         d->rotmax = 1.0f;
 
@@ -1100,13 +1100,13 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
     if (err)
         d->subpixel = 2;
 
-    d->pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
+    d->pixaspect = vsapi->mapGetFloatSaturated(in, "pixaspect", 0, &err);
     if (err)
         d->pixaspect = 1.0f;
 
     d->fitlast = vsapi->mapGetIntSaturated(in, "fitlast", 0, &err);
 
-    d->tzoom = (float)vsapi->mapGetFloat(in, "tzoom", 0, &err);
+    d->tzoom = vsapi->mapGetFloatSaturated(in, "tzoom", 0, &err);
     if (err)
         d->tzoom = 3.0f;
 

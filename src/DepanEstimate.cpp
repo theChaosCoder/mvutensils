@@ -560,7 +560,7 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
                 src_props[i] = vsapi->getFramePropertiesRO(src[i]);
 
                 int err;
-                trust[i] = (float)vsapi->mapGetFloat(src_props[i], prop_DepanEstimateTrust, 0, &err);
+                trust[i] = vsapi->mapGetFloatSaturated(src_props[i], prop_DepanEstimateTrust, 0, &err);
                 if (err)
                     throw std::runtime_error("temporary property '" + std::string(prop_DepanEstimateTrust) + "' not found in input frame. This should never happen");
             }
@@ -571,9 +571,9 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
             src[2] = nullptr;
 
             int err[3];
-            float motionx = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateX, 0, &err[0]);
-            float motiony = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateY, 0, &err[1]);
-            float motionzoom = (float)vsapi->mapGetFloat(src_props[1], prop_DepanEstimateZoom, 0, &err[2]);
+            float motionx = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateX, 0, &err[0]);
+            float motiony = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateY, 0, &err[1]);
+            float motionzoom = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateZoom, 0, &err[2]);
 
             if (err[0] || err[1] || err[2])
                 throw std::runtime_error("some temporary property was not found in input frame. This should never happen");
@@ -638,7 +638,7 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
 
     int err;
 
-    d->trust_limit = (float)vsapi->mapGetFloat(in, "trust", 0, &err);
+    d->trust_limit = vsapi->mapGetFloatSaturated(in, "trust", 0, &err);
     if (err)
         d->trust_limit = 4.0f;
 
@@ -662,15 +662,15 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
     if (err)
         d->dymax = -1;
 
-    d->zoommax = (float)vsapi->mapGetFloat(in, "zoommax", 0, &err);
+    d->zoommax = vsapi->mapGetFloatSaturated(in, "zoommax", 0, &err);
     if (err)
         d->zoommax = 1.0f;
 
-    d->stab = (float)vsapi->mapGetFloat(in, "stab", 0, &err);
+    d->stab = vsapi->mapGetFloatSaturated(in, "stab", 0, &err);
     if (err)
         d->stab = 1.0f;
 
-    d->pixaspect = (float)vsapi->mapGetFloat(in, "pixaspect", 0, &err);
+    d->pixaspect = vsapi->mapGetFloatSaturated(in, "pixaspect", 0, &err);
     if (err)
         d->pixaspect = 1.0f;
 
