@@ -577,6 +577,9 @@ static void fillBorderPrev(VSFrame *dst, DepanStabiliseData *d, int nbase, int n
     int border[3] = { 0, 1 << (d->vi->format.bitsPerSample - 1), border[1] };
     int blur[3] = { d->blur, d->blur, d->blur };
 
+    // chroma planes use the same (accumulated) luma transform, scaled below for subsampling
+    tr[1] = tr[0];
+
     if (d->vi->format.subSamplingW == 1 && d->vi->format.subSamplingH == 1) { // 420
         tr[1].dxc /= 2;
         tr[1].dyc /= 2;
@@ -660,6 +663,9 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
 
     int border[3] = { -1, -1, -1 };
     int blur[3] = { d->blur, d->blur, d->blur };
+
+    // chroma planes use the same (accumulated) luma transform, scaled below for subsampling
+    tr[1] = tr[0];
 
     if (d->vi->format.subSamplingW == 1 && d->vi->format.subSamplingH == 1) { // 420
         tr[1].dxc /= 2;
@@ -911,7 +917,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
             }
 
             if (d->next) {
-                for (int i = nmax + 1; i <= ndest; i++) {
+                for (int i = nmax + 1; i <= nnext; i++) {
                     if (d->motionx[i] == MOTIONUNKNOWN)
                         vsapi->requestFrameFilter(i, d->data, frameCtx);
                     vsapi->requestFrameFilter(i, d->clip, frameCtx);
@@ -1157,24 +1163,24 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 
         if (d->vi->numFrames > vsapi->getVideoInfo(d->data)->numFrames)
             throw std::runtime_error("data must have at least as many frames as clip");
+
+        d->zoommax = d->zoommax > 0 ? VSMAX(d->zoommax, d->initzoom) : -VSMAX(-d->zoommax, d->initzoom);
+
+        // correction for fieldbased
+        if (d->fields)
+            d->nfields = 2;
+        else
+            d->nfields = 1;
+
+
+        d->motionx.resize(d->vi->numFrames);
+        d->motiony.resize(d->vi->numFrames);
+        d->motionrot.resize(d->vi->numFrames);
+        d->motionzoom.resize(d->vi->numFrames);
     } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("DepanStabilise: " + std::string(e.what())).c_str());
         return;
     }
-
-    d->zoommax = d->zoommax > 0 ? VSMAX(d->zoommax, d->initzoom) : -VSMAX(-d->zoommax, d->initzoom);
-
-    // correction for fieldbased
-    if (d->fields)
-        d->nfields = 2;
-    else
-        d->nfields = 1;
-
-
-    d->motionx.resize(d->vi->numFrames);
-    d->motiony.resize(d->vi->numFrames);
-    d->motionrot.resize(d->vi->numFrames);
-    d->motionzoom.resize(d->vi->numFrames);
 
     d->motionx[0] = 0.0f;
     d->motiony[0] = 0.0f;
@@ -1239,9 +1245,10 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
     }
 
 
-    d->initzoom = 1 / d->initzoom; // make consistent with internal definition - v1.7
+    d->initzoom = 1 / d->initzoom;
 
-    d->wintsize = (int)(d->fps / (4 * d->cutoff));
+    // FIXME, investigate wintsize more, maybe max isn't the right solution here
+    d->wintsize = std::max(1, (int)(d->fps / (4 * d->cutoff)));
     d->radius = d->wintsize;
     d->wint.resize(d->wintsize + 1);
 
