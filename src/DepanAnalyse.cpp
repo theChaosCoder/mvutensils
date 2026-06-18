@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -116,13 +117,13 @@ static void RejectBadBlocks(const transform *tr, const float *blockDx, const flo
                 blockWeight[n] = 0; // disable  blocks near frame borders
             } else if (blockSAD[n] > thSCD1) {
                 blockWeight[n] = 0; // disable bad block with big SAD
-            } else if (i > 0 && i < (nBlkX - 1) && (fabsf((blockDx[n - 1 - nBlkX] + blockDx[n - nBlkX] + blockDx[n + 1 - nBlkX] +
+            } else if (i > 0 && i < (nBlkX - 1) && j > 0 && j < (nBlkY - 1) && (fabsf((blockDx[n - 1 - nBlkX] + blockDx[n - nBlkX] + blockDx[n + 1 - nBlkX] +
                                                           blockDx[n - 1] + blockDx[n + 1] +
                                                           blockDx[n - 1 + nBlkX] + blockDx[n + nBlkX] + blockDx[n + 1 + nBlkX]) /
                                                              8 -
                                                          blockDx[n]) > wrongDif)) {
                 blockWeight[n] = 0; // disable blocks very different from neighbours
-            } else if (j > 0 && j < (nBlkY - 1) && (fabsf((blockDy[n - 1 - nBlkX] + blockDy[n - nBlkX] + blockDy[n + 1 - nBlkX] +
+            } else if (i > 0 && i < (nBlkX - 1) && j > 0 && j < (nBlkY - 1) && (fabsf((blockDy[n - 1 - nBlkX] + blockDy[n - nBlkX] + blockDy[n + 1 - nBlkX] +
                                                           blockDy[n - 1] + blockDy[n + 1] +
                                                           blockDy[n - 1 + nBlkX] + blockDy[n + nBlkX] + blockDy[n + 1 + nBlkX]) /
                                                              8 -
@@ -294,8 +295,10 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
                 // if it is accidentally very small, reset it to small, but non-zero value,
                 // to differ from pure 0, which be interpreted as bad value mark (scene change)
-                if (fabsf(motionx) < 0.01f)
-                    motionx = (rand() > RAND_MAX / 2) ? 0.011f : -0.011f;
+                if (fabsf(motionx) < 0.01f) {
+                    static thread_local std::mt19937 rng{ std::random_device{}() };
+                    motionx = (rng() & 1) ? 0.011f : -0.011f;
+                }
             }
 
             if (d->info) {
@@ -424,12 +427,14 @@ static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData
     VSFilterDependency deps[3] = {
         {d->clip, rpStrictSpatial},
         {d->vectors, rpGeneral},
-        {d->mask, rpStrictSpatial},
     };
+    int numDeps = 2;
+    if (d->mask)
+        deps[numDeps++] = { d->mask, rpStrictSpatial }; // optional: only a real node may be a dependency
 
     bool info = d->info;
 
-    vsapi->createVideoFilter(out, "DepanAnalyse", d->vi, depanAnalyseGetFrame, filterFree<DepanAnalyseData>, fmParallel, deps, ARRAY_SIZE(deps), d.get(), core);
+    vsapi->createVideoFilter(out, "DepanAnalyse", d->vi, depanAnalyseGetFrame, filterFree<DepanAnalyseData>, fmParallel, deps, numDeps, d.get(), core);
     d.release();
 
     if (vsapi->mapGetError(out))

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <string>
 
 #include <fftw3.h>
@@ -30,33 +31,36 @@ constexpr char prop_DepanEstimateTrust[] = "DepanEstimateTrust";
 
 struct DepanEstimateData {
     VSNode *clip = nullptr;
-    float trust_limit;
-    int winx;
-    int winy;
-    int wleft;
-    int wtop;
-    int dxmax;
-    int dymax;
-    float zoommax;
-    float stab;
-    float pixaspect;
-    bool info;
-    bool show;
-    bool fields;
-    bool tff;
-    bool tff_exists;
+    float trust_limit = 0.0f;
+    int winx = 0;
+    int winy = 0;
+    int wleft = 0;
+    int wtop = 0;
+    int dxmax = 0;
+    int dymax = 0;
+    float zoommax = 0.0f;
+    float stab = 0.0f;
+    float pixaspect = 0.0f;
+    bool info = false;
+    bool show = false;
+    bool fields = false;
+    bool tff = false;
+    bool tff_exists = false;
 
-    const VSVideoInfo *vi;
+    const VSVideoInfo *vi = nullptr;
 
-    int stage;
+    // FIXME, convert to enum class
+    int stage = -1;
 
-    int pixel_max;
+    int pixel_max = 0;
 
-    size_t fftsize;
+    size_t fftsize = 0;
 
-    fftwf_complex *unused_array;
+    fftwf_complex *unused_array = nullptr;
 
-    fftwf_plan plan, planinv;
+    fftwf_plan plan = nullptr;
+    
+    fftwf_plan planinv = nullptr;
 
     const VSAPI *vsapi;
 
@@ -64,6 +68,12 @@ struct DepanEstimateData {
 
     ~DepanEstimateData() {
         vsapi->freeNode(clip);
+        fftwf_free(unused_array);
+        {
+            std::lock_guard<std::mutex> guard(g_fftw_plans_mutex);
+            fftwf_destroy_plan(plan);
+            fftwf_destroy_plan(planinv);
+        }
     }
 };
 
@@ -260,8 +270,10 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
 
         // if it is accidentally very small, reset it to small, but non-zero value,
         // to differ from pure 0, which be interpreted as bad value mark (scene change)
-        if (fabsf(*fdx) < 0.01f)
-            *fdx = (rand() > RAND_MAX / 2) ? 0.011f : -0.011f;
+        if (fabsf(*fdx) < 0.01f) {
+            static thread_local std::mt19937 rng{ std::random_device{}() };
+            *fdx = (rng() & 1) ? 0.011f : -0.011f;
+        }
 
         // if (fabs(*fdy) < 0.01f) *fdy = 0.011f; // disabled in 0.9.1 (only dx used)
     }
@@ -618,22 +630,6 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
     }
 
     return nullptr;
-}
-
-static void VS_CC depanEstimateFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    DepanEstimateData *d = (DepanEstimateData *)instanceData;
-
-    {
-        std::lock_guard<std::mutex> guard(g_fftw_plans_mutex);
-        if (d->stage == 1)
-            fftwf_destroy_plan(d->plan);
-        else if (d->stage == 2)
-            fftwf_destroy_plan(d->planinv);
-    }
-    if (d->stage == 1)
-        fftwf_free(d->unused_array);
-
-    delete d;
 }
 
 
