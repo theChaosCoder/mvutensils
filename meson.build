@@ -16,7 +16,7 @@ incdir = include_directories(
 
 deps = [
     dependency('zimg', version: '>=3.0.5'),
-    dependency('fftw3f', version: '>=3.3.10')
+    dependency('fftw3f', version: '>=3.3.5')
 ]
 
 libs = []
