@@ -35,8 +35,6 @@ struct DepanCompensateData {
 
     int pixel_max;
 
-    CompensateFunction compensate_plane;
-
     const VSAPI *vsapi;
 
     DepanCompensateData(const VSAPI *vsapi) : vsapi(vsapi) {};
@@ -167,7 +165,21 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
 
                 uint8_t *dstp = vsapi->getWritePtr(dst, plane);
 
-                d->compensate_plane(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+                if (d->vi->format.bytesPerSample == 1) {
+                    if (d->subpixel == 0)
+                        compensate_plane_nearest<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+                    else if (d->subpixel == 1)
+                        compensate_plane_bilinear<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+                    else
+                        compensate_plane_bicubic<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+                } else {
+                    if (d->subpixel == 0)
+                        compensate_plane_nearest<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+                    else if (d->subpixel == 1)
+                        compensate_plane_bilinear<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+                    else
+                        compensate_plane_bicubic<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356.data(), blur[plane], d->pixel_max);
+                }
             }
 
             vsapi->freeFrame(src);
@@ -274,20 +286,6 @@ static void VS_CC depanCompensateCreate(const VSMap *in, VSMap *out, void *userD
         d->ycenter = d->vi->height / 2.0f;
 
         d->pixel_max = (1 << d->vi->format.bitsPerSample) - 1;
-
-        CompensateFunction compensate_functions[6] = {
-            compensate_plane_nearest<uint8_t>,
-            compensate_plane_bilinear<uint8_t>,
-            compensate_plane_bicubic<uint8_t>,
-
-            compensate_plane_nearest<uint16_t>,
-            compensate_plane_bilinear<uint16_t>,
-            compensate_plane_bicubic<uint16_t>
-        };
-        if (d->vi->format.bitsPerSample == 8)
-            d->compensate_plane = compensate_functions[d->subpixel];
-        else
-            d->compensate_plane = compensate_functions[d->subpixel + 3];
     } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("DepanCompensate: " + std::string(e.what())).c_str());
         return;

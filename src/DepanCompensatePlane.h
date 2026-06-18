@@ -10,9 +10,6 @@
 #include "DepanShared.h"
 
 
-typedef void (*CompensateFunction)(uint8_t *dstp, const uint8_t *srcp, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work1row_size, int blurmax, int pixel_max);
-
-
 #define MIRROR_TOP 1
 #define MIRROR_BOTTOM 2
 #define MIRROR_LEFT 4

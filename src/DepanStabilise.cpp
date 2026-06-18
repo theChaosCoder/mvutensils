@@ -70,9 +70,6 @@ struct DepanStabiliseData {
     float xcenter; // center of frame
     float ycenter;
 
-    CompensateFunction compensate_plane;
-    CompensateFunction compensate_plane_nearest;
-
     std::mutex motion_mutex;
 
     const VSAPI *vsapi;
@@ -531,7 +528,21 @@ static void compensateFrame(const VSFrame *src, VSFrame *dst, DepanStabiliseData
         uint8_t *dstp = vsapi->getWritePtr(dst, plane);
 
         // move src frame plane by vector to partially motion compensated position
-        d->compensate_plane(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+        if (d->vi->format.bytesPerSample == 1) {
+            if (d->subpixel == 0)
+                compensate_plane_nearest<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+            else if (d->subpixel == 1)
+                compensate_plane_bilinear<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+            else
+                compensate_plane_bicubic<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+        } else {
+            if (d->subpixel == 0)
+                compensate_plane_nearest<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+            else if (d->subpixel == 1)
+                compensate_plane_bilinear<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+            else
+                compensate_plane_bicubic<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+        }
     }
 }
 
@@ -588,7 +599,10 @@ static void fillBorderPrev(VSFrame *dst, DepanStabiliseData *d, int nbase, int n
 
         uint8_t *dstp = vsapi->getWritePtr(dst, plane);
 
-        d->compensate_plane_nearest(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356, blur[plane], d->pixel_max);
+        if (d->vi->format.bytesPerSample == 1)
+            compensate_plane_nearest<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356, blur[plane], d->pixel_max);
+        else
+            compensate_plane_nearest<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror, border[plane], work2width4356, blur[plane], d->pixel_max);
     }
 
     *notfilled = 0; // mark as FILLED
@@ -675,7 +689,10 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
         uint8_t *dstp = vsapi->getWritePtr(dst, plane);
 
         // move src frame plane by vector to partially motion compensated position
-        d->compensate_plane_nearest(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * *notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+        if (d->vi->format.bytesPerSample == 1)
+            compensate_plane_nearest<uint8_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * *notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
+        else
+            compensate_plane_nearest<uint16_t>(dstp, srcp, src_pitch, src_width, src_height, &tr[plane], d->mirror * *notfilled, border[plane], work2width4356, blur[plane], d->pixel_max);
     }
 
     *notfilled = 0; // mark as filled
@@ -1250,23 +1267,6 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
     d->ycenter = d->vi->height / 2.0f;
 
     d->pixel_max = (1 << d->vi->format.bitsPerSample) - 1;
-
-    CompensateFunction compensate_functions[6] = {
-        compensate_plane_nearest<uint8_t>,
-        compensate_plane_bilinear<uint8_t>,
-        compensate_plane_bicubic<uint8_t>,
-
-        compensate_plane_nearest<uint16_t>,
-        compensate_plane_bilinear<uint16_t>,
-        compensate_plane_bicubic<uint16_t>
-    };
-    if (d->vi->format.bitsPerSample == 8) {
-        d->compensate_plane = compensate_functions[d->subpixel];
-        d->compensate_plane_nearest = compensate_plane_nearest<uint8_t>;
-    } else {
-        d->compensate_plane = compensate_functions[d->subpixel + 3];
-        d->compensate_plane_nearest = compensate_plane_nearest<uint16_t>;
-    }
 
 
     VSFilterGetFrame getframe_functions[2] = {
