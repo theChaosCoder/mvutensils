@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <algorithm>
+#include <climits>
 #include <memory>
 #include <cmath>
 #include "Common.h"
@@ -420,7 +421,7 @@ MotionBlockLevel::~MotionBlockLevel() {
     mvu_aligned_free(pSrc_temp[2]);
 }
 
-void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept {
+void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[4]) noexcept {
     // Left (or right) predictor
     if ((blkScanDir == 1 && blkx > 0) || (blkScanDir == -1 && blkx < nBlkX - 1))
         predictors[1] = ClipMV(vectors[blkidx - blkScanDir]);
@@ -464,8 +465,6 @@ void MotionBlockLevel::FetchPredictors(int blkidx, int blkx, int blky, int blkSc
         predictor = predictors[0];
     double scale = (double)LSAD / std::max<int64_t>(LSAD + (predictor.sad >> 1), 1);
     nLambda = static_cast<int64_t>(nLambda * scale * scale);
-
-    predictors[4] = ClipMV(zeroMV);
 }
 
 void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma, int bytesPerSample) {
@@ -778,10 +777,6 @@ void MotionBlockLevel::Refine() noexcept {
 template <int nLogPel, typename PixelType>
 void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkScanDir, int64_t badSAD, int badrange, bool tryMany, int &badcount) noexcept {
 
-    // FIXME, aren't several predictors usually the same? make sure duplicate vectors aren't tested several times
-    VECTOR predictors[5]; /* set of predictors for the current block */
-    FetchPredictors(blkIdx, blkx, blky, blkScanDir, predictors);
-
     // We treat zero alone
     // Do we bias zero with not taking into account distorsion ?
     bestMV.x = zeroMVfieldShifted.x;
@@ -826,6 +821,9 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         bestMVMany[1] = bestMV; // save bestMV
         nMinCostMany[1] = nMinCost;
     }
+
+    VECTOR predictors[4]; /* set of predictors for the current block */
+    FetchPredictors(blkIdx, blkx, blky, blkScanDir, predictors);
     const uint8_t *predBlocks[3] = {
         GetRefBlock<nLogPel, PixelType>(predictor.x, predictor.y),
         chroma ? GetRefBlockU<nLogPel, PixelType>(predictor.x, predictor.y) : nullptr,
@@ -851,10 +849,26 @@ void MotionBlockLevel::PseudoEPZSearch(int blkIdx, int blkx, int blky, int blkSc
         nMinCostMany[2] = nMinCost;
     }
 
-    // then all the other predictors
+    // then all the other predictors, skipping any already tested above
     int npred = 4;
 
+    for (auto &p : predictors) {
+        if ((p.x == zeroMVfieldShifted.x && p.y == zeroMVfieldShifted.y) ||
+            (p.x == globalMVPredictor.x && p.y == globalMVPredictor.y) ||
+            (p.x == predictor.x && p.y == predictor.y))
+            p.x = INT_MIN;
+    }
+
     for (int i = 0; i < npred; i++) {
+        if (predictors[i].x == INT_MIN) {
+            if (tryMany)
+                nMinCostMany[i + 3] = verybigSAD + 1;
+            continue;
+        }
+        for (int j = i + 1; j < npred; j++) {
+            if (predictors[j].x == predictors[i].x && predictors[j].y == predictors[i].y)
+                predictors[j].x = INT_MIN;
+        }
         if (tryMany)
             nMinCost = verybigSAD + 1;
         CheckMV0<nLogPel, PixelType>(predictors[i].x, predictors[i].y);

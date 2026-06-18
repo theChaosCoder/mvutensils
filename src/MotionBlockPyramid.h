@@ -203,7 +203,7 @@ private:
     bool IsVectorOK(int vx, int vy) const noexcept;
     int64_t MotionDistorsion(int vx, int vy) const noexcept;
     VECTOR ClipMV(VECTOR v) const noexcept;
-    void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[5]) noexcept;
+    void FetchPredictors(int blkidx, int blkx, int blky, int blkScanDir, VECTOR predictors[4]) noexcept;
     void InitMotionEstimationFields(bool useSatd, bool chroma, int bytesPerSample);
     void EstimateGlobalMVDoubledFallback(VECTOR &globalMVec) const noexcept;
 public:
