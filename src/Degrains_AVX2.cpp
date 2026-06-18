@@ -102,7 +102,7 @@ static void Degrain_avx2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
 
             if (blockWidth == 8) {
                 _mm_storel_epi64((__m128i *)(pDst + x), _mm256_castsi256_si128(accum));
-                _mm_storel_epi64((__m128i *)(pDst + nDstPitch + x), _mm256_extractf128_si256(accum, 1));
+                _mm_storel_epi64((__m128i *)(pDst + nDstPitch + x), _mm256_extracti128_si256(accum, 1));
             } else {
                 accum = _mm256_permute4x64_epi64(accum, _MM_SHUFFLE(0, 0, 2, 0));
                 _mm_storeu_si128((__m128i *)(pDst + x), _mm256_castsi256_si128(accum));
