@@ -29,12 +29,12 @@ jobs:
         CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=15
         CIBW_BEFORE_ALL_LINUX: >
           if command -v dnf >/dev/null 2>&1; then
-            dnf -y install nasm
+            dnf -y install fftw-devel nasm
           else
-            apk add --no-cache nasm
+            apk add --no-cache fftw-dev nasm
           fi
         CIBW_BEFORE_ALL_MACOS: >
-          brew install nasm
+          brew install fftw nasm
       with:
         output-dir: dist
         extras: uv
@@ -63,6 +63,7 @@ jobs:
         msystem: CLANG64
         update: true
         install: >-
+          mingw-w64-clang-x86_64-fftw
           mingw-w64-clang-x86_64-git
           mingw-w64-clang-x86_64-nasm
           mingw-w64-clang-x86_64-ninja
