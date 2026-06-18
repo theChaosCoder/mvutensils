@@ -996,10 +996,10 @@ void MotionBlockLevel::DoSearchMVs(const FramePyramidLevel &pSrcFrame, const Fra
             int blkIdx = blky * nBlkX + blkx;
 
             //create aligned copy
-            BLITLUMA(pSrc_temp[0], nSrcPitch_temp[0], pSrcFrame.planes[0].GetAbsolutePelPointer<PixelType>(x[0], y[0]), pSrcFrame.planes[0].nPitch);
+            BLITLUMA(pSrc_temp[0], nSrcPitch_temp[0], pSrcFrame.planes[0].GetAbsolutePointerPel1<PixelType>(x[0], y[0]), pSrcFrame.planes[0].nPitch);
             if (chroma) {
-                BLITCHROMA(pSrc_temp[1], nSrcPitch_temp[1], pSrcFrame.planes[1].GetAbsolutePelPointer<PixelType>(x[1], y[1]), pSrcFrame.planes[1].nPitch);
-                BLITCHROMA(pSrc_temp[2], nSrcPitch_temp[2], pSrcFrame.planes[2].GetAbsolutePelPointer<PixelType>(x[2], y[2]), pSrcFrame.planes[2].nPitch);
+                BLITCHROMA(pSrc_temp[1], nSrcPitch_temp[1], pSrcFrame.planes[1].GetAbsolutePointerPel1<PixelType>(x[1], y[1]), pSrcFrame.planes[1].nPitch);
+                BLITCHROMA(pSrc_temp[2], nSrcPitch_temp[2], pSrcFrame.planes[2].GetAbsolutePointerPel1<PixelType>(x[2], y[2]), pSrcFrame.planes[2].nPitch);
             }
 
             if (blky == 0)
@@ -1191,10 +1191,10 @@ void MotionBlockLevel::DoRecalculateMVs(const FramePyramidLevel &pSrcFrame, cons
             int blkx = blkxStart + iblkx * blkScanDir;
 
             const uint8_t *pRealSrc[3] = {};
-            pRealSrc[0] = pSrcFrame.planes[0].GetAbsolutePelPointer<PixelType>(x[0], y[0]);
+            pRealSrc[0] = pSrcFrame.planes[0].GetAbsolutePointerPel1<PixelType>(x[0], y[0]);
             if (chroma) {
-                pRealSrc[1] = pSrcFrame.planes[1].GetAbsolutePelPointer<PixelType>(x[1], y[1]);
-                pRealSrc[2] = pSrcFrame.planes[2].GetAbsolutePelPointer<PixelType>(x[2], y[2]);
+                pRealSrc[1] = pSrcFrame.planes[1].GetAbsolutePointerPel1<PixelType>(x[1], y[1]);
+                pRealSrc[2] = pSrcFrame.planes[2].GetAbsolutePointerPel1<PixelType>(x[2], y[2]);
             }
 
             BLITLUMA(pSrc_temp[0], nSrcPitch_temp[0], pRealSrc[0], pSrcFrame.planes[0].nPitch);
