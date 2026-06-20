@@ -399,15 +399,8 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
             int err;
 
             int top_field = 0;
-            if (d->fields) {
-                top_field = !!vsapi->mapGetInt(cur_props, "_Field", 0, &err);
-
-                if (err && !d->tff_exists)
-                    throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
-
-                if (d->tff_exists)
-                    top_field = d->tff ^ (n % 2);
-            }
+            if (d->fields)
+                top_field = GetTopField(cur, n, d->tff_exists, d->tff, true, vsapi);
 
             if (d->fftsize != (size_t)vsapi->mapGetDataSize(prev_props, prop_DepanEstimateFFT, 0, &err) ||
                 d->fftsize != (size_t)vsapi->mapGetDataSize(cur_props, prop_DepanEstimateFFT, 0, &err))

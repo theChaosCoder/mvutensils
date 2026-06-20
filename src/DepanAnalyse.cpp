@@ -271,20 +271,8 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
                 // fieldbased correction
                 if (d->fields) {
-                    const VSFrame *temp = vsapi->getFrameFilter(n, d->clip, frameCtx);
-                    const VSMap *temp_props = vsapi->getFramePropertiesRO(temp);
-                    int err;
-                    int top_field = !!vsapi->mapGetInt(temp_props, "_Field", 0, &err);
-                    vsapi->freeFrame(temp);
-
-                    if (err && !d->tff_exists) {
-                        vsapi->setFilterError("DepanAnalyse: _Field property not found in input frame. Therefore, you must pass tff argument.", frameCtx);
-                        vsapi->freeFrame(dst);
-                        return nullptr;
-                    }
-
-                    if (d->tff_exists)
-                        top_field = d->tff ^ (n % 2);
+                    // dst is a copy of the source frame, so it carries the same _Field
+                    bool top_field = GetTopField(dst, n, d->tff_exists, d->tff, true, vsapi);
 
                     float yadd = top_field ? 0.5f : -0.5f;
 

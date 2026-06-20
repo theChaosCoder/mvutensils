@@ -87,6 +87,7 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
 
         const VSFrame *src = nullptr;
         VSFrame *dst = nullptr;
+        const VSFrame *temp = nullptr;
 
         try {
             for (int n = start + 1; n <= end; n++) {
@@ -116,17 +117,10 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
             }
 
             if (d->fields && d->matchfields) {
-                const VSFrame *temp = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
-                const VSMap *temp_props = vsapi->getFramePropertiesRO(temp);
-                int err;
-                int top_field = !!vsapi->mapGetInt(temp_props, "_Field", 0, &err);
+                temp = vsapi->getFrameFilter(ndest, d->clip, frameCtx);
+                bool top_field = GetTopField(temp, ndest, d->tff_exists, d->tff, true, vsapi);
                 vsapi->freeFrame(temp);
-
-                if (err && !d->tff_exists)
-                    throw std::runtime_error("_Field property not found in input frame. Therefore, you must pass tff argument");
-
-                if (d->tff_exists)
-                    top_field = d->tff ^ (ndest % 2);
+                temp = nullptr;
 
                 // reverse 1 line motion correction if matchfields mode
                 trsum.dyc += top_field ? -0.5f : 0.5f;
@@ -204,6 +198,7 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
             vsapi->setFilterError(("DepanCompensate: " + std::string(e.what())).c_str(), frameCtx);
             vsapi->freeFrame(src);
             vsapi->freeFrame(dst);
+            vsapi->freeFrame(temp);
             return nullptr;
         }
     }
