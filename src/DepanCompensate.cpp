@@ -57,8 +57,8 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
             return nullptr;
         }
 
-        int start = VSMIN(nsrc, ndest);
-        int end = VSMAX(nsrc, ndest);
+        int start = std::min(nsrc, ndest);
+        int end = std::max(nsrc, ndest);
 
         vsapi->requestFrameFilter(start, d->clip, frameCtx);
 
@@ -78,8 +78,8 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
         fractoffset += forward ? 1 : -1;
         fractoffset -= d->intoffset;
 
-        int start = VSMIN(nsrc, ndest);
-        int end = VSMAX(nsrc, ndest);
+        int start = std::min(nsrc, ndest);
+        int end = std::max(nsrc, ndest);
 
         int nfields = d->fields ? 2 : 1;
 

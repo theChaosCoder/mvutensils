@@ -40,8 +40,6 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     // mirror = 8 - only right
     // any combination - sum of above
 
-    (void)pixel_max;
-
     const PixelType *srcp = (const PixelType *)srcp8;
     PixelType *dstp = (PixelType *)dstp8;
 
@@ -65,21 +63,21 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
             int rowleft = inttr0 + row;
             if (rowleft < 0 && mleft) {
                 if (blurmax > 0) {
-                    int blurlen = VSMIN(blurmax, -rowleft);
+                    int blurlen = std::min(blurmax, -rowleft);
                     int64_t smoothed = 0;
                     for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                         smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                    dstp[row] = smoothed / blurlen;
+                    dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                 } else { // no blur
                     dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                 }
             } else if (rowleft >= row_size && mright) {
                 if (blurmax > 0) {
-                    int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                    int blurlen = std::min(blurmax, rowleft - row_size + 1);
                     int64_t smoothed = 0;
                     for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                         smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                    dstp[row] = smoothed / blurlen;
+                    dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                 } else { // no blur
                     dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                 }
@@ -155,21 +153,21 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         dstp[row] = srcp[w0 + rowleft];
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int blurlen = std::min(blurmax, -rowleft);
                             int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else { // no blur
                             dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                            int blurlen = std::min(blurmax, rowleft - row_size + 1);
                             int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else { // no blur
                             dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
@@ -238,8 +236,6 @@ template <typename PixelType>
 static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_t * MVU_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2row_size, int blurmax, int pixel_max) {
     // work2row_size is work array, it must have size >= 2*row_size
 
-    (void)pixel_max;
-
     const PixelType *srcp = (const PixelType *)srcp8;
     PixelType *dstp = (PixelType *)dstp8;
 
@@ -275,12 +271,12 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
         int rowgoodstart, rowgoodend, rowbadstart, rowbadend;
         if (inttr0 >= 0) {
             rowgoodstart = 0;
-            rowgoodend = VSMAX(0, row_size - 1 - inttr0); // clamp: empty good span for full-width pans
+            rowgoodend = std::max(0, row_size - 1 - inttr0); // clamp: empty good span for full-width pans
             rowbadstart = rowgoodend;
             rowbadend = row_size;
         } else {
             rowbadstart = 0;
-            rowbadend = VSMIN(row_size, -inttr0); // clamp: bad span cannot exceed the row
+            rowbadend = std::min(row_size, -inttr0); // clamp: bad span cannot exceed the row
             rowgoodstart = rowbadend;
             rowgoodend = row_size;
         }
@@ -321,7 +317,7 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     dstp[row + 1] = (intcoef2d[0] * srcp[w + 1] + intcoef2d[1] * srcp[w + 2] + intcoef2d[2] * srcp[w + pitch + 1] + intcoef2d[3] * srcp[w + pitch + 2]) >> 10; // i.e. divide by 32*32
                     w += 2;
                 }
-                for (int row = VSMAX(rowgoodendpaired, rowgoodstart); row < rowgoodend; row++) { // process leftover odd pixel (if any); guarded against empty span
+                for (int row = std::max(rowgoodendpaired, rowgoodstart); row < rowgoodend; row++) { // process leftover odd pixel (if any); guarded against empty span
                     w = w0 + inttr0 + row;
                     dstp[row] = (intcoef2d[0] * srcp[w] + intcoef2d[1] * srcp[w + 1] +
                                  intcoef2d[2] * srcp[w + pitch] + intcoef2d[3] * srcp[w + pitch + 1]) >>
@@ -332,21 +328,21 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
                     if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int blurlen = std::min(blurmax, -rowleft);
                             int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else { // no blur
                             dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size - 1 && mright) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, rowleft - row_size + 2);
+                            int blurlen = std::min(blurmax, rowleft - row_size + 2);
                             int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else { // no blur
                             dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
@@ -438,21 +434,21 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                         dstp[row] = pixel; // maxmin disabled in v1.6
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int blurlen = std::min(blurmax, -rowleft);
                             int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else { // no blur
                             dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)];
                         }
                     } else if (rowleft >= row_size - 1 && mright) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, rowleft - row_size + 2);
+                            int blurlen = std::min(blurmax, rowleft - row_size + 2);
                             int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else { // no blur
                             dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
@@ -608,21 +604,21 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
             int rowleft = inttr0 + row;
             if (rowleft < 0 && mleft) {
                 if (blurmax > 0) {
-                    int blurlen = VSMIN(blurmax, -rowleft);
+                    int blurlen = std::min(blurmax, -rowleft);
                     int64_t smoothed = 0;
                     for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                         smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                    dstp[row] = smoothed / blurlen;
+                    dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                 } else { // no blur
                     dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                 }
             } else if (rowleft >= row_size && mright) {
                 if (blurmax > 0) {
-                    int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                    int blurlen = std::min(blurmax, rowleft - row_size + 1);
                     int64_t smoothed = 0;
                     for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                         smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                    dstp[row] = smoothed / blurlen;
+                    dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                 } else { // no blur
                     dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                 }
@@ -675,7 +671,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                              intcoef2d[12] * srcp[w + pitch * 2 - 1] + intcoef2d[13] * srcp[w + pitch * 2] + intcoef2d[14] * srcp[w + pitch * 2 + 1] + intcoef2d[15] * srcp[w + pitch * 2 + 2] + 1024) >>
                             11; // i.e. /2048
 
-                    dstp[row] = VSMAX(VSMIN(pixel, pixel_max), 0);
+                    dstp[row] = std::clamp(pixel, 0, pixel_max);
                 }
                 for (int row = fast_end; row < row_size; row++)
                     middle_edge(w0, row);
@@ -778,24 +774,24 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
                         int64_t pixel = (intcoef[iy4] * ts[0] + intcoef[iy4 + 1] * ts[1] + intcoef[iy4 + 2] * ts[2] + intcoef[iy4 + 3] * ts[3]) >> 22;
 
-                        dstp[row] = static_cast<PixelType>(VSMAX(VSMIN(pixel, pixel_max), 0));
+                        dstp[row] = static_cast<PixelType>(std::clamp<int64_t>(pixel, 0, pixel_max));
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, -rowleft);
+                            int blurlen = std::min(blurmax, -rowleft);
                             int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else {
                             dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                            int blurlen = std::min(blurmax, rowleft - row_size + 1);
                             int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
                                 smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
+                            dstp[row] = static_cast<PixelType>(smoothed / blurlen);
                         } else { // no blur
                             dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
@@ -814,7 +810,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                         ptrdiff_t w = w0 + rowleft;
                         int pixel = (int)((1.0 - sy) * ((1.0 - sx) * srcp[w] + sx * srcp[w + 1]) +
                                       sy * ((1.0 - sx) * srcp[w + pitch] + sx * srcp[w + pitch + 1])); // bilinear
-                        dstp[row] = VSMAX(VSMIN(pixel, pixel_max), 0);
+                        dstp[row] = std::clamp(pixel, 0, pixel_max);
                     } else if (rowleft == row_size - 1) { // added in v.1.1.1
                         dstp[row] = srcp[rowleft + w0];
                     } else if (rowleft < 0 && mleft) {
@@ -904,7 +900,7 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     int iy4 = ((int)((ysrc - hlow) * 256)) << 2; //changed to shift in v.1.1.1
 
                     int64_t pixel = (intcoef[iy4] * ts[0] + intcoef[iy4 + 1] * ts[1] + intcoef[iy4 + 2] * ts[2] + intcoef[iy4 + 3] * ts[3]) >> 22;
-                    dstp[row] = static_cast<PixelType>(VSMAX(VSMIN(pixel, pixel_max), 0));
+                    dstp[row] = static_cast<PixelType>(std::clamp<int64_t>(pixel, 0, pixel_max));
                 } else {
                     if (hlow < 0 && mtop)
                         hlow = -hlow; // mirror borders

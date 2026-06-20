@@ -290,11 +290,11 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
     trsmoothed.dyx = -trsmoothed.dxy * (pixaspect / nfields) * (pixaspect / nfields); // must be consistent
     norm = 0;
     trsmoothed.dxx = 0;
-    for (int n = VSMAX(nbase, ndest - 1); n < ndest; n++) { // very short interval
+    for (int n = std::max(nbase, ndest - 1); n < ndest; n++) { // very short interval
         trsmoothed.dxx += trcumul[n].dxx * wint[ndest - n];
         norm += wint[ndest - n];
     }
-    for (int n = ndest; n <= VSMIN(nmax, ndest + 1); n++) {
+    for (int n = ndest; n <= std::min(nmax, ndest + 1); n++) {
         trsmoothed.dxx += trcumul[n].dxx * wint[n - ndest];
         norm += wint[n - ndest];
     }
@@ -306,8 +306,8 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
 
     if (addzoom) { // calculate and add adaptive zoom factor to fill borders (for frames in the window nbasez..nmaxz around ndest)
 
-        int nbasez = VSMAX(nbase, ndest - winfzsize);
-        int nmaxz = VSMIN(nmax, ndest + winrzsize);
+        int nbasez = std::max(nbase, ndest - winfzsize);
+        int nmaxz = std::min(nmax, ndest + winrzsize);
         // symmetrical
         //               nmaxz = ndest + min(nmaxz-ndest, ndest-nbasez);
         //               nbasez = ndest - min(nmaxz-ndest, ndest-nbasez);
@@ -712,7 +712,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         nbase = 0;
 
     if (activationReason == arInitial) {
-        int nprev = VSMAX(nbase, ndest - d->prev);
+        int nprev = std::max(nbase, ndest - d->prev);
 
         std::lock_guard<std::mutex> guard(d->motion_mutex);
 
@@ -726,7 +726,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         vsapi->requestFrameFilter(ndest, d->clip, frameCtx);
 
         if (d->next) {
-            for (int i = ndest + 1; i <= VSMIN(ndest + d->next, d->vi->numFrames - 1); i++) {
+            for (int i = ndest + 1; i <= std::min(ndest + d->next, d->vi->numFrames - 1); i++) {
                 if (!d->motion[i].has_value())
                     vsapi->requestFrameFilter(i, d->data, frameCtx);
                 vsapi->requestFrameFilter(i, d->clip, frameCtx);
@@ -1147,7 +1147,7 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
         if (d->vi->numFrames > vsapi->getVideoInfo(d->data)->numFrames)
             throw std::runtime_error("data must have at least as many frames as clip");
 
-        d->zoommax = d->zoommax > 0 ? VSMAX(d->zoommax, d->initzoom) : -VSMAX(-d->zoommax, d->initzoom);
+        d->zoommax = d->zoommax > 0 ? std::max(d->zoommax, d->initzoom) : -std::max(-d->zoommax, d->initzoom);
 
         // correction for fieldbased
         if (d->fields)

@@ -467,10 +467,10 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
                     result.dx = (md1.dx + md2.dx) / 2.0f;
                     result.dy = (md1.dy + md2.dy) / 2.0f;
                     result.zoom = zoom;
-                    trust = VSMIN(trust1, trust2);
+                    trust = std::min(trust1, trust2);
                 } else { // bad zoom,
                     result.badMotion = true;
-                    trust = VSMIN(trust1, trust2);
+                    trust = std::min(trust1, trust2);
                 }
 
                 if (d->show) // show correlation sufrace
@@ -519,14 +519,14 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
     DepanEstimateData *d = reinterpret_cast<DepanEstimateData *>(instanceData);
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(VSMAX(0, n - 1), d->clip, frameCtx);
+        vsapi->requestFrameFilter(std::max(0, n - 1), d->clip, frameCtx);
         vsapi->requestFrameFilter(n, d->clip, frameCtx);
-        vsapi->requestFrameFilter(VSMIN(n + 1, d->vi->numFrames - 1), d->clip, frameCtx);
+        vsapi->requestFrameFilter(std::min(n + 1, d->vi->numFrames - 1), d->clip, frameCtx);
     } else if (activationReason == arAllFramesReady) {
         const VSFrame *src[3];
-        src[0] = vsapi->getFrameFilter(VSMAX(0, n - 1), d->clip, frameCtx);
+        src[0] = vsapi->getFrameFilter(std::max(0, n - 1), d->clip, frameCtx);
         src[1] = vsapi->getFrameFilter(n, d->clip, frameCtx);
-        src[2] = vsapi->getFrameFilter(VSMIN(n + 1, d->vi->numFrames - 1), d->clip, frameCtx);
+        src[2] = vsapi->getFrameFilter(std::min(n + 1, d->vi->numFrames - 1), d->clip, frameCtx);
 
         VSFrame *dst = nullptr;
 
