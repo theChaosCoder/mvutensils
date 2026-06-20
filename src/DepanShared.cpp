@@ -140,6 +140,34 @@ void sumtransform(const transform *ta, const transform *tb, transform *tba) {
 }
 
 
+bool mapGetMotion(MotionData &m, const VSMap *props, const VSAPI *vsapi) {
+    int err[5];
+    float dx = vsapi->mapGetFloatSaturated(props, prop_Depan_dx, 0, &err[0]);
+    float dy = vsapi->mapGetFloatSaturated(props, prop_Depan_dy, 0, &err[1]);
+    float rot = vsapi->mapGetFloatSaturated(props, prop_Depan_rot, 0, &err[2]);
+    float zoom = vsapi->mapGetFloatSaturated(props, prop_Depan_zoom, 0, &err[3]);
+    int64_t good = vsapi->mapGetInt(props, prop_Depan_goodmotion, 0, &err[4]);
+
+    if (err[0] || err[1] || err[2] || err[3] || err[4])
+        return false;
+
+    m.dx = dx;
+    m.dy = dy;
+    m.rot = rot;
+    m.zoom = zoom;
+    m.badMotion = (good == 0);
+    return true;
+}
+
+void mapSetMotion(VSMap *props, const MotionData &m, const VSAPI *vsapi) {
+    vsapi->mapSetFloat(props, prop_Depan_dx, m.dx, maReplace);
+    vsapi->mapSetFloat(props, prop_Depan_dy, m.dy, maReplace);
+    vsapi->mapSetFloat(props, prop_Depan_rot, m.rot, maReplace);
+    vsapi->mapSetFloat(props, prop_Depan_zoom, m.zoom, maReplace);
+    vsapi->mapSetInt(props, prop_Depan_goodmotion, m.badMotion ? 0 : 1, maReplace);
+}
+
+
 bool invokeFrameProps(const char *prop, VSMap *out, VSCore *core, const VSAPI *vsapi) noexcept {
     VSPlugin *text_plugin = vsapi->getPluginByID("com.vapoursynth.text", core);
 

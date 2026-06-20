@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <memory>
 #include <mutex>
-#include <random>
 #include <string>
 
 #include <fftw3.h>
@@ -26,6 +25,7 @@ constexpr char prop_DepanEstimateFFT2[] = "DepanEstimateFFT2";
 constexpr char prop_DepanEstimateX[] = "DepanEstimateX";
 constexpr char prop_DepanEstimateY[] = "DepanEstimateY";
 constexpr char prop_DepanEstimateZoom[] = "DepanEstimateZoom";
+constexpr char prop_DepanEstimateGood[] = "DepanEstimateGood";
 constexpr char prop_DepanEstimateTrust[] = "DepanEstimateTrust";
 
 
@@ -123,7 +123,7 @@ static void mult_conj_data2d(const fftwf_complex * MVU_RESTRICT fftnext, const f
 }
 
 
-static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int winy, float trust_limit, int dxmax, int dymax, float stab, int fieldbased, int top_field, float pixaspect, float *fdx, float *fdy, float *trust) {
+static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int winy, float trust_limit, int dxmax, int dymax, float stab, int fieldbased, int top_field, float pixaspect, MotionData &md, float *trust) {
     int winxpadded = (winx / 2 + 1) * 2;
 
     // find global max on real part of correlation surface
@@ -200,10 +200,7 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
     // reject if relative diffference correlmax from correlmean is small
     // probably due to scene change
     if (*trust < trust_limit) {
-        // pure 0 will be interpreted as bad mark (scene change)
-        *fdx = 0.0f;
-        *fdy = 0.0f;
-
+        md.badMotion = true; // scene change / unreliable
     } else {
         // normal, no scene change
         // get more precise float dx, dy by interpolation
@@ -259,19 +256,10 @@ static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int w
         }
 
 
-        *fdx = (float)dx + xadd;
-        *fdy = (float)dy + yadd;
+        md.dx = (float)dx + xadd;
+        md.dy = (float)dy + yadd;
 
-        *fdy = (*fdy) / pixaspect;
-
-        // if it is accidentally very small, reset it to small, but non-zero value,
-        // to differ from pure 0, which be interpreted as bad value mark (scene change)
-        if (fabsf(*fdx) < 0.01f) {
-            static thread_local std::mt19937 rng{ std::random_device{}() };
-            *fdx = (rng() & 1) ? 0.011f : -0.011f;
-        }
-
-        // if (fabs(*fdy) < 0.01f) *fdy = 0.011f; // disabled in 0.9.1 (only dx used)
+        md.dy = md.dy / pixaspect;
     }
 }
 
@@ -415,7 +403,8 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
             // memory for correlation matrice
             fftwf_complex *correl = (fftwf_complex *)fftwf_malloc(d->fftsize);
 
-            float dx1, dy1, trust1;
+            MotionData md1;
+            float trust1;
 
             // prepare correlation data = mult fftsrc* by fftprev
             mult_conj_data2d(fftcur, fftprev, correl, d->winx, d->winy);
@@ -424,7 +413,7 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
             // now correl is is true correlation surface
             // find global motion vector as maximum on correlation sufrace
             // save vector to motion table
-            get_motion_vector((float *)correl, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, &dx1, &dy1, &trust1);
+            get_motion_vector((float *)correl, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, md1, &trust1);
 
 
             int winleft = d->wleft;
@@ -442,12 +431,13 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
 
             fftwf_free(correl);
 
-            float motionx, motiony, motionzoom, trust;
+            MotionData result;
+            float trust;
 
             if (d->zoommax == 1.0f) { // NO ZOOM
-                motionzoom = 1.0f; //no zoom
-                motionx = dx1;
-                motiony = dy1;
+                result.dx = md1.dx;
+                result.dy = md1.dy;
+                result.badMotion = md1.badMotion;
                 trust = trust1;
             } else { // ZOOM, calculate 2 data sets (left and right)
                 int winleft2 = d->wleft + d->vi->width / 2; // left edge of right (2)fft window
@@ -457,7 +447,8 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
 
                 fftwf_complex *correl2 = (fftwf_complex *)fftwf_malloc(d->fftsize);
 
-                float dx2, dy2, trust2;
+                MotionData md2;
+                float trust2;
 
                 // right window
                 // prepare correlation data = mult fftsrc* by fftprev
@@ -467,20 +458,18 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
                 // now correl is is true correlation surface
                 // find global motion vector as maximum on correlation sufrace
                 // save vector to motion table
-                get_motion_vector((float *)correl2, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, &dx2, &dy2, &trust2);
+                get_motion_vector((float *)correl2, d->winx, d->winy, d->trust_limit, d->dxmax, d->dymax, d->stab, d->fields, top_field, d->pixaspect, md2, &trust2);
 
                 // now we have 2 motion data sets for left and right windows
                 // estimate zoom factor
-                float zoom = 1.0f + (dx2 - dx1) / (winleft2 - winleft);
-                if ((dx1 != 0.0f) && (dx2 != 0.0f) && (fabsf(zoom - 1.0f) < (d->zoommax - 1.0f))) { // if motion data and zoom good
-                    motionx = (dx1 + dx2) / 2.0f;
-                    motiony = (dy1 + dy2) / 2.0f;
-                    motionzoom = zoom;
+                float zoom = 1.0f + (md2.dx - md1.dx) / (winleft2 - winleft);
+                if (!md1.badMotion && !md2.badMotion && (fabsf(zoom - 1.0f) < (d->zoommax - 1.0f))) { // if motion data and zoom good
+                    result.dx = (md1.dx + md2.dx) / 2.0f;
+                    result.dy = (md1.dy + md2.dy) / 2.0f;
+                    result.zoom = zoom;
                     trust = VSMIN(trust1, trust2);
                 } else { // bad zoom,
-                    motionx = 0.0f;
-                    motiony = 0.0f;
-                    motionzoom = 1.0f;
+                    result.badMotion = true;
                     trust = VSMIN(trust1, trust2);
                 }
 
@@ -502,13 +491,14 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
             vsapi->mapDeleteKey(dst_props, prop_DepanEstimateFFT2);
 
             if (n == 0) {
-                motionx = motiony = trust = 0.0f;
-                motionzoom = 1.0f;
+                result.badMotion = true; // frame 0 has no predecessor: forced scene start
+                trust = 0.0f;            // a zero trust disables frame 1's backward scene-change test in stage3 (preserved from the original)
             }
 
-            vsapi->mapSetFloat(dst_props, prop_DepanEstimateX, motionx, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_DepanEstimateY, motiony, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_DepanEstimateZoom, motionzoom, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_DepanEstimateX, result.dx, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_DepanEstimateY, result.dy, maReplace);
+            vsapi->mapSetFloat(dst_props, prop_DepanEstimateZoom, result.zoom, maReplace);
+            vsapi->mapSetInt(dst_props, prop_DepanEstimateGood, result.badMotion ? 0 : 1, maReplace);
             vsapi->mapSetFloat(dst_props, prop_DepanEstimateTrust, trust, maReplace);
 
             return dst;
@@ -559,26 +549,28 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
             vsapi->freeFrame(src[2]);
             src[2] = nullptr;
 
-            int err[3];
-            float motionx = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateX, 0, &err[0]);
-            float motiony = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateY, 0, &err[1]);
-            float motionzoom = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateZoom, 0, &err[2]);
+            int err[4];
+            MotionData m;
+            m.dx = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateX, 0, &err[0]);
+            m.dy = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateY, 0, &err[1]);
+            m.zoom = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateZoom, 0, &err[2]);
+            int64_t good = vsapi->mapGetInt(src_props[1], prop_DepanEstimateGood, 0, &err[3]);
 
-            if (err[0] || err[1] || err[2])
+            if (err[0] || err[1] || err[2] || err[3])
                 throw std::runtime_error("some temporary property was not found in input frame. This should never happen");
 
+            m.badMotion = (good == 0);
+
             // check scenechanges in range, as sharp decreasing of trust
-            if (n - 1 >= 0 && n < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[0]) {
-                // very sharp decrease of not very big trust, probably due to scenechange
-                motionx = 0.0f;
-                motiony = 0.0f;
-                motionzoom = 1.0f;
-            }
-            if (n >= 0 && n + 1 < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[2]) {
-                // very sharp decrease of not very big trust, probably due to scenechange
-                motionx = 0.0f;
-                motiony = 0.0f;
-                motionzoom = 1.0f;
+            if (n - 1 >= 0 && n < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[0])
+                m.badMotion = true; // very sharp decrease of not very big trust, probably due to scenechange
+            if (n >= 0 && n + 1 < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[2])
+                m.badMotion = true; // very sharp decrease of not very big trust, probably due to scenechange
+
+            if (m.badMotion) { // keep the in-memory values finite for a bad frame
+                m.dx = 0.0f;
+                m.dy = 0.0f;
+                m.zoom = 1.0f;
             }
 
             dst = vsapi->copyFrame(src[1], core);
@@ -590,18 +582,16 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
             vsapi->mapDeleteKey(dst_props, prop_DepanEstimateX);
             vsapi->mapDeleteKey(dst_props, prop_DepanEstimateY);
             vsapi->mapDeleteKey(dst_props, prop_DepanEstimateZoom);
+            vsapi->mapDeleteKey(dst_props, prop_DepanEstimateGood);
             vsapi->mapDeleteKey(dst_props, prop_DepanEstimateTrust);
 
-            vsapi->mapSetFloat(dst_props, prop_Depan_dx, motionx, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_Depan_dy, motiony, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_Depan_zoom, motionzoom, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_Depan_rot, 0, maReplace);
+            mapSetMotion(dst_props, m, vsapi);
 
             if (d->info) {
 #define INFO_SIZE 128
                 char info[INFO_SIZE + 1] = { 0 };
 
-                snprintf(info, INFO_SIZE, "fn=%d dx=%.2f dy=%.2f zoom=%.5f trust=%.2f", n, motionx, motiony, motionzoom, trust[1]);
+                snprintf(info, INFO_SIZE, "fn=%d dx=%.2f dy=%.2f zoom=%.5f trust=%.2f bad=%d", n, m.dx, m.dy, m.zoom, trust[1], m.badMotion);
 #undef INFO_SIZE
 
                 vsapi->mapSetData(dst_props, prop_DepanEstimate_info, info, -1, dtUtf8, maReplace);

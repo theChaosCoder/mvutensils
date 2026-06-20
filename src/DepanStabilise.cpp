@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,10 +46,7 @@ struct DepanStabiliseData {
 
     int nfields;
 
-    std::vector<float> motionx;
-    std::vector<float> motiony;
-    std::vector<float> motionrot;
-    std::vector<float> motionzoom;
+    std::vector<std::optional<MotionData>> motion;
 
 
     transform nonlinfactor;
@@ -467,26 +465,13 @@ static void InertialLimit(DepanStabiliseData *d, float *dxdif, float *dydif, flo
 }
 
 
-static int getDepanProps(float *motionx, float *motiony, float *motionrot, float *motionzoom, const VSFrame *frame, VSFrameContext *frameCtx, const VSAPI *vsapi) {
-    const VSMap *frame_props = vsapi->getFramePropertiesRO(frame);
-
-    int err[4];
-
-    float x = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_dx, 0, &err[0]);
-    float y = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_dy, 0, &err[1]);
-    float rot = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_rot, 0, &err[2]);
-    float zoom = vsapi->mapGetFloatSaturated(frame_props, prop_Depan_zoom, 0, &err[3]);
-
-    if (err[0] || err[1] || err[2] || err[3]) {
+static int getDepanProps(std::optional<MotionData> &slot, const VSFrame *frame, VSFrameContext *frameCtx, const VSAPI *vsapi) {
+    MotionData m;
+    if (!mapGetMotion(m, vsapi->getFramePropertiesRO(frame), vsapi)) {
         vsapi->setFilterError("DepanStabilise: required frame properties not found in data clip.", frameCtx);
         return 0;
     }
-
-    *motionx = x;
-    *motiony = y;
-    *motionrot = rot;
-    *motionzoom = zoom;
-
+    slot = m;
     return 1;
 }
 
@@ -557,7 +542,7 @@ static void fillBorderPrev(VSFrame *dst, DepanStabiliseData *d, int nbase, int n
 
     for (int n = ndest - 1; n >= nprev; n--) { // summary inverse transform
         transform trcur;
-        motion2transform(d->motionx[n + 1], d->motiony[n + 1], d->motionrot[n + 1], d->motionzoom[n + 1], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
+        motion2transform(d->motion[n + 1]->dx, d->motion[n + 1]->dy, d->motion[n + 1]->rot, d->motion[n + 1]->zoom, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
         nprevbest = n;
         sumtransform(&tr[0], &trcur, &tr[0]);
         float dxt1, dyt1, rott1, zoomt1;
@@ -626,9 +611,9 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
         std::lock_guard<std::mutex> guard(d->motion_mutex);
 
         for (int n = ndest + 1; n <= nnext; n++) {
-            if (d->motionx[n] == MOTIONUNKNOWN) {
+            if (!d->motion[n].has_value()) {
                 const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
-                if (!getDepanProps(&d->motionx[n], &d->motiony[n], &d->motionrot[n], &d->motionzoom[n], dataframe, frameCtx, vsapi)) {
+                if (!getDepanProps(d->motion[n], dataframe, frameCtx, vsapi)) {
                     vsapi->freeFrame(dataframe);
                     return 0;
                 }
@@ -638,9 +623,9 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
     }
 
     for (int n = ndest + 1; n <= nnext; n++) {
-        if (d->motionx[n] != MOTIONBAD) { //if good
+        if (!d->motion[n]->badMotion) { //if good
             transform trcur, trinv;
-            motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
+            motion2transform(d->motion[n]->dx, d->motion[n]->dy, d->motion[n]->rot, d->motion[n]->zoom, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
             inversetransform(&trcur, &trinv);
             sumtransform(&trinv, &tr[0], &tr[0]);
             float dxt1, dyt1, rott1, zoomt1;
@@ -732,7 +717,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
         std::lock_guard<std::mutex> guard(d->motion_mutex);
 
         for (int i = nbase; i <= ndest; i++) {
-            if (d->motionx[i] == MOTIONUNKNOWN)
+            if (!d->motion[i].has_value())
                 vsapi->requestFrameFilter(i, d->data, frameCtx);
             if (d->prev && i >= nprev)
                 vsapi->requestFrameFilter(i, d->clip, frameCtx);
@@ -742,7 +727,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
 
         if (d->next) {
             for (int i = ndest + 1; i <= VSMIN(ndest + d->next, d->vi->numFrames - 1); i++) {
-                if (d->motionx[i] == MOTIONUNKNOWN)
+                if (!d->motion[i].has_value())
                     vsapi->requestFrameFilter(i, d->data, frameCtx);
                 vsapi->requestFrameFilter(i, d->clip, frameCtx);
             }
@@ -753,19 +738,19 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
             std::lock_guard<std::mutex> guard(d->motion_mutex);
 
             for (int n = ndest; n >= nbase; n--) {
-                if (d->motionx[n] == MOTIONUNKNOWN) {
+                if (!d->motion[n].has_value()) {
                     const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
-                    if (!getDepanProps(&d->motionx[n], &d->motiony[n], &d->motionrot[n], &d->motionzoom[n], dataframe, frameCtx, vsapi)) {
+                    if (!getDepanProps(d->motion[n], dataframe, frameCtx, vsapi)) {
                         vsapi->freeFrame(dataframe);
                         return nullptr;
                     }
                     vsapi->freeFrame(dataframe);
                 }
 
-                if (d->motionx[n] == MOTIONBAD) {
+                if (d->motion[n]->badMotion) {
                     if (n > nbase)
                         nbase = n;
-                    break; // if strictly =0,  than no good
+                    break; // bad frame becomes the lower bound (excluded by the nbase+1 loop start)
                 }
             }
         }
@@ -798,7 +783,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame0(int ndest, int activationRea
                 for (int n = nbase + 1; n <= ndest; n++) {
                     transform trcur;
 
-                    motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
+                    motion2transform(d->motion[n]->dx, d->motion[n]->dy, d->motion[n]->rot, d->motion[n]->zoom, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
                     sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
                 }
 
@@ -883,7 +868,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
         std::lock_guard<std::mutex> guard(d->motion_mutex);
 
         for (int i = nbase; i <= ndest; i++) {
-            if (d->motionx[i] == MOTIONUNKNOWN)
+            if (!d->motion[i].has_value())
                 vsapi->requestFrameFilter(i, d->data, frameCtx);
             if (d->prev && i >= nprev)
                 vsapi->requestFrameFilter(i, d->clip, frameCtx);
@@ -895,19 +880,19 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
 
         if (nnext < nmax) {
             for (int i = ndest + 1; i <= nnext; i++) {
-                if (d->motionx[i] == MOTIONUNKNOWN)
+                if (!d->motion[i].has_value())
                     vsapi->requestFrameFilter(i, d->data, frameCtx);
                 if (d->next)
                     vsapi->requestFrameFilter(i, d->clip, frameCtx);
             }
 
             for (int i = nnext + 1; i <= nmax; i++) {
-                if (d->motionx[i] == MOTIONUNKNOWN)
+                if (!d->motion[i].has_value())
                     vsapi->requestFrameFilter(i, d->data, frameCtx);
             }
         } else {
             for (int i = ndest + 1; i <= nmax; i++) {
-                if (d->motionx[i] == MOTIONUNKNOWN)
+                if (!d->motion[i].has_value())
                     vsapi->requestFrameFilter(i, d->data, frameCtx);
                 if (d->next)
                     vsapi->requestFrameFilter(i, d->clip, frameCtx);
@@ -915,7 +900,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
 
             if (d->next) {
                 for (int i = nmax + 1; i <= nnext; i++) {
-                    if (d->motionx[i] == MOTIONUNKNOWN)
+                    if (!d->motion[i].has_value())
                         vsapi->requestFrameFilter(i, d->data, frameCtx);
                     vsapi->requestFrameFilter(i, d->clip, frameCtx);
                 }
@@ -927,37 +912,38 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
             std::lock_guard<std::mutex> guard(d->motion_mutex);
 
             for (int n = ndest; n >= nbase; n--) {
-                if (d->motionx[n] == MOTIONUNKNOWN) {
+                if (!d->motion[n].has_value()) {
                     const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
-                    if (!getDepanProps(&d->motionx[n], &d->motiony[n], &d->motionrot[n], &d->motionzoom[n], dataframe, frameCtx, vsapi)) {
+                    if (!getDepanProps(d->motion[n], dataframe, frameCtx, vsapi)) {
                         vsapi->freeFrame(dataframe);
                         return nullptr;
                     }
                     vsapi->freeFrame(dataframe);
                 }
 
-                if (d->motionx[n] == MOTIONBAD) {
+                if (d->motion[n]->badMotion) {
                     if (n > nbase)
                         nbase = n;
-                    break; // if strictly =0,  than no good
+                    break; // bad frame becomes the lower bound (excluded by the nbase+1 loop start)
                 }
             }
 
 
             for (int n = ndest + 1; n <= nmax; n++) {
-                if (d->motionx[n] == MOTIONUNKNOWN) {
+                if (!d->motion[n].has_value()) {
                     const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
-                    if (!getDepanProps(&d->motionx[n], &d->motiony[n], &d->motionrot[n], &d->motionzoom[n], dataframe, frameCtx, vsapi)) {
+                    if (!getDepanProps(d->motion[n], dataframe, frameCtx, vsapi)) {
                         vsapi->freeFrame(dataframe);
                         return nullptr;
                     }
                     vsapi->freeFrame(dataframe);
                 }
 
-                if (d->motionx[n] == MOTIONBAD) {
-                    if (n < nmax)
-                        nmax = std::max(n - 1, ndest);
-                    break; // if strictly =0,  than no good
+                if (d->motion[n]->badMotion) {
+                    // exclude the bad frame from the upper bound unconditionally, so a bad
+                    // frame landing exactly on nmax cannot leak a NaN into the cumulative sum
+                    nmax = std::max(n - 1, ndest);
+                    break;
                 }
             }
         }
@@ -989,7 +975,7 @@ static const VSFrame *VS_CC depanStabiliseGetFrame1(int ndest, int activationRea
             for (int n = nbase + 1; n <= nmax; n++) {
                 transform trcur;
 
-                motion2transform(d->motionx[n], d->motiony[n], d->motionrot[n], d->motionzoom[n], d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
+                motion2transform(d->motion[n]->dx, d->motion[n]->dy, d->motion[n]->rot, d->motion[n]->zoom, d->pixaspect / d->nfields, d->xcenter, d->ycenter, 1, 1.0f, &trcur);
                 sumtransform(&trcumul[n - nbase - 1], &trcur, &trcumul[n - nbase]);
             }
 
@@ -1170,21 +1156,14 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
             d->nfields = 1;
 
 
-        d->motionx.resize(d->vi->numFrames);
-        d->motiony.resize(d->vi->numFrames);
-        d->motionrot.resize(d->vi->numFrames);
-        d->motionzoom.resize(d->vi->numFrames);
+        d->motion.resize(d->vi->numFrames);
     } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("DepanStabilise: " + std::string(e.what())).c_str());
         return;
     }
 
-    d->motionx[0] = 0.0f;
-    d->motiony[0] = 0.0f;
-    d->motionrot[0] = 0.0f;
-    d->motionzoom[0] = 1.0f;
-    for (int i = 1; i < d->vi->numFrames; i++)
-        d->motionx[i] = MOTIONUNKNOWN; // init as unknown for all frames
+    // frame 0 is a forced scene start: present (known) and bad; the rest stay nullopt (not fetched)
+    d->motion[0] = MotionData{ 0.0f, 0.0f, 0.0f, 1.0f, true };
 
 
     // prepare coefficients for inertial motion smoothing filter

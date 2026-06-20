@@ -2,7 +2,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <memory>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -255,19 +254,18 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
             float xcenter = (float)d->vi->width / 2;
             float ycenter = (float)d->vi->height / 2;
 
-            float motionx = 0.0f;
-            float motiony = 0.0f;
-            float motionrot = 0.0f;
-            float motionzoom = 1.0f;
+            MotionData m;
+            m.badMotion = true; // bad until a valid transform is computed below
 
             if (errorcur < d->error) { // if not bad result
+                m.badMotion = false;
                 // convert transform data to ordinary motion format
                 if (backward) {
                     transform trinv;
                     inversetransform(&tr, &trinv);
-                    transform2motion(&trinv, 0, xcenter, ycenter, d->pixaspect / nFields, &motionx, &motiony, &motionrot, &motionzoom);
+                    transform2motion(&trinv, 0, xcenter, ycenter, d->pixaspect / nFields, &m.dx, &m.dy, &m.rot, &m.zoom);
                 } else
-                    transform2motion(&tr, 1, xcenter, ycenter, d->pixaspect / nFields, &motionx, &motiony, &motionrot, &motionzoom);
+                    transform2motion(&tr, 1, xcenter, ycenter, d->pixaspect / nFields, &m.dx, &m.dy, &m.rot, &m.zoom);
 
                 // fieldbased correction
                 if (d->fields) {
@@ -278,14 +276,7 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
                     // scale dy for fieldbased frame by factor 2 (for compatibility)
                     yadd = yadd * 2;
-                    motiony += yadd;
-                }
-
-                // if it is accidentally very small, reset it to small, but non-zero value,
-                // to differ from pure 0, which be interpreted as bad value mark (scene change)
-                if (fabsf(motionx) < 0.01f) {
-                    static thread_local std::mt19937 rng{ std::random_device{}() };
-                    motionx = (rng() & 1) ? 0.011f : -0.011f;
+                    m.dy += yadd;
                 }
             }
 
@@ -293,16 +284,13 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 #define INFO_SIZE 128
                 char info[INFO_SIZE + 1] = { 0 };
 
-                snprintf(info, INFO_SIZE, "fn=%d iter=%d error=%.3f dx=%.2f dy=%.2f rot=%.3f zoom=%.5f", n, iter, errorcur, motionx, motiony, motionrot, motionzoom);
+                snprintf(info, INFO_SIZE, "fn=%d iter=%d error=%.3f dx=%.2f dy=%.2f rot=%.3f zoom=%.5f bad=%d", n, iter, errorcur, m.dx, m.dy, m.rot, m.zoom, m.badMotion);
 #undef INFO_SIZE
 
                 vsapi->mapSetData(dst_props, prop_DepanAnalyse_info, info, -1, dtUtf8, maReplace);
             }
 
-            vsapi->mapSetFloat(dst_props, prop_Depan_dx, motionx, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_Depan_dy, motiony, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_Depan_zoom, motionzoom, maReplace);
-            vsapi->mapSetFloat(dst_props, prop_Depan_rot, motionrot, maReplace);
+            mapSetMotion(dst_props, m, vsapi);
 
             return dst;
         } catch (const std::exception &e) {

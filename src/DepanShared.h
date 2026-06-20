@@ -8,11 +8,16 @@ constexpr char prop_Depan_dx[] = "Depan_dx";
 constexpr char prop_Depan_dy[] = "Depan_dy";
 constexpr char prop_Depan_zoom[] = "Depan_zoom";
 constexpr char prop_Depan_rot[] = "Depan_rot";
+constexpr char prop_Depan_goodmotion[] = "Depan_goodmotion";
 
-// FIXME, why not NaN or inf as special values?
-constexpr float MOTIONUNKNOWN = 9999.0f;
-constexpr float MOTIONBAD = 0.0f;
 
+struct MotionData {
+    float dx = 0.0f;
+    float dy = 0.0f;
+    float rot = 0.0f;
+    float zoom = 1.0f;
+    bool badMotion = false;
+};
 
 struct transform {
     // structure of global motion transform
@@ -47,6 +52,9 @@ void transform2motion(const transform *tr, int forward, float xcenter, float yce
 void inversetransform(const transform *ta, transform *tinv) noexcept;
 void motion2transform(float dx1, float dy1, float rot, float zoom1, float pixaspect, float xcenter, float ycenter, int forward, float fractoffset, transform *tr);
 void sumtransform(const transform *ta, const transform *tb, transform *tba);
+
+bool mapGetMotion(MotionData &m, const VSMap *props, const VSAPI *vsapi);
+void mapSetMotion(VSMap *props, const MotionData &m, const VSAPI *vsapi);
 
 // Invoke text.FrameProps on the "clip" stored in `out` so the info property is
 // rendered onto the frame. Returns false and sets the error on `out` on failure.

@@ -94,25 +94,22 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
                 const VSFrame *dataframe = vsapi->getFrameFilter(n, d->data, frameCtx);
                 const VSMap *data_props = vsapi->getFramePropertiesRO(dataframe);
 
-                int err[4];
-                float motionx = vsapi->mapGetFloatSaturated(data_props, prop_Depan_dx, 0, &err[0]);
-                float motiony = vsapi->mapGetFloatSaturated(data_props, prop_Depan_dy, 0, &err[1]);
-                float motionzoom = vsapi->mapGetFloatSaturated(data_props, prop_Depan_zoom, 0, &err[2]);
-                float motionrot = vsapi->mapGetFloatSaturated(data_props, prop_Depan_rot, 0, &err[3]);
+                MotionData m;
+                bool ok = mapGetMotion(m, data_props, vsapi);
 
                 vsapi->freeFrame(dataframe);
 
-                if (err[0] || err[1] || err[2] || err[3])
+                if (!ok)
                     throw std::runtime_error("required frame properties not found in data clip. Did data clip really come from DepanAnalyse or DepanEstimate?");
 
-                if (motionx == MOTIONBAD) {
+                if (m.badMotion) {
                     trsum.setNull();
                     break;
                 }
 
                 transform tr;
 
-                motion2transform(motionx, motiony, motionrot, motionzoom, d->pixaspect / nfields, d->xcenter, d->ycenter, forward, fractoffset, &tr);
+                motion2transform(m.dx, m.dy, m.rot, m.zoom, d->pixaspect / nfields, d->xcenter, d->ycenter, forward, fractoffset, &tr);
                 sumtransform(&trsum, &tr, &trsum);
             }
 
