@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -14,6 +15,12 @@
 #define MIRROR_BOTTOM 2
 #define MIRROR_LEFT 4
 #define MIRROR_RIGHT 8
+
+
+// Reflected/mirrored source columns can fall outside [0, row_size) for very
+// large pans (the motion comes from the data clip and is never clamped to the
+// frame size), so they are clamped via std::clamp(col, 0, row_size - 1) before
+// indexing to avoid out-of-bounds reads.
 
 
 //****************************************************************************
@@ -76,22 +83,22 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, -rowleft);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (border >= 0) { // if shifted point is out of frame, fill using border value
                         dstp[row] = border;
@@ -144,22 +151,22 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, -rowleft);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (border >= 0) { // if shifted point is out of frame, fill using border value
                         dstp[row] = border;
@@ -292,12 +299,12 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                 int rowgoodstart, rowgoodend, rowbadstart, rowbadend;
                 if (inttr0 >= 0) {
                     rowgoodstart = 0;
-                    rowgoodend = row_size - 1 - inttr0;
+                    rowgoodend = VSMAX(0, row_size - 1 - inttr0); // clamp: empty good span for full-width pans
                     rowbadstart = rowgoodend;
                     rowbadend = row_size;
                 } else {
                     rowbadstart = 0;
-                    rowbadend = -inttr0;
+                    rowbadend = VSMIN(row_size, -inttr0); // clamp: bad span cannot exceed the row
                     rowgoodstart = rowbadend;
                     rowgoodend = row_size;
                 }
@@ -310,7 +317,7 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     dstp[row + 1] = (intcoef2d[0] * srcp[w + 1] + intcoef2d[1] * srcp[w + 2] + intcoef2d[2] * srcp[w + pitch + 1] + intcoef2d[3] * srcp[w + pitch + 2]) >> 10; // i.e. divide by 32*32
                     w += 2;
                 }
-                for (int row = rowgoodendpaired - 1; row < rowgoodend; row++) { // if odd, process  very last
+                for (int row = VSMAX(rowgoodendpaired, rowgoodstart); row < rowgoodend; row++) { // process leftover odd pixel (if any); guarded against empty span
                     w = w0 + inttr0 + row;
                     dstp[row] = (intcoef2d[0] * srcp[w] + intcoef2d[1] * srcp[w + 1] +
                                  intcoef2d[2] * srcp[w + pitch] + intcoef2d[3] * srcp[w + pitch + 1]) >>
@@ -322,22 +329,22 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, -rowleft);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size - 1 && mright) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, rowleft - row_size + 2);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (border >= 0) { // if shifted point is out of frame, fill using border value
                         dstp[row] = border;
@@ -350,9 +357,9 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     if ((rowleft >= 0) && (rowleft < row_size)) {
                         dstp[row] = srcp[w0 + rowleft]; // nearest pixel, may be bilinear is better
                     } else if (rowleft < 0 && mleft) {
-                        dstp[row] = srcp[w0 - rowleft];
+                        dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)];
                     } else if (rowleft >= row_size - 1 && mright) {
-                        dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2];
+                        dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)];
                     } else if (border >= 0) { // left or right
                         dstp[row] = border;
                     }
@@ -429,22 +436,22 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, -rowleft);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 - rowleft];
+                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)];
                         }
                     } else if (rowleft >= row_size - 1 && mright) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, rowleft - row_size + 2);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (border >= 0) { // if shifted point is out of frame, fill using border value
                         dstp[row] = border;
@@ -630,22 +637,22 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, -rowleft);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft == 0 || rowleft == row_size - 1 || rowleft == row_size - 2) { // edges
                         dstp[row] = srcp[w0 + rowleft];
@@ -666,9 +673,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     } else if (rowleft == row_size - 1) { // added in v.1.1.1
                         dstp[row] = srcp[rowleft + w0];
                     } else if (rowleft < 0 && mleft) {
-                        dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                        dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                     } else if (rowleft >= row_size && mright) {
-                        dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2];
+                        dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)];
                     } else if (border >= 0) { // left or right
                         dstp[row] = border;
                     }
@@ -679,9 +686,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     if (rowleft >= 0 && rowleft < row_size) {
                         dstp[row] = srcp[w0 + rowleft];
                     } else if (rowleft < 0 && mleft) {
-                        dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                        dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                     } else if (rowleft >= row_size && mright) {
-                        dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2];
+                        dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)];
                     } else if (border >= 0) { // left or right
                         dstp[row] = border;
                     }
@@ -756,22 +763,22 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     } else if (rowleft < 0 && mleft) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, -rowleft);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else {
-                            dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft >= row_size && mright) {
                         if (blurmax > 0) {
                             int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            int smoothed = 0;
+                            int64_t smoothed = 0;
                             for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + i];
+                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
                             dstp[row] = smoothed / blurlen;
                         } else { // no blur
-                            dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2]; // not very precise - may be bicubic?
+                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
                         }
                     } else if (rowleft == 0 || rowleft == row_size - 1 || rowleft == row_size - 2) { // edges
                         dstp[row] = srcp[w0 + rowleft];
@@ -792,9 +799,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     } else if (rowleft == row_size - 1) { // added in v.1.1.1
                         dstp[row] = srcp[rowleft + w0];
                     } else if (rowleft < 0 && mleft) {
-                        dstp[row] = srcp[w0 - rowleft]; // not very precise - may be bicubic?
+                        dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
                     } else if (rowleft >= row_size && mright) {
-                        dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2];
+                        dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)];
                     } else if (border >= 0) { // left or right
                         dstp[row] = border;
                     }
@@ -805,9 +812,9 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
                     if (rowleft >= 0 && rowleft < row_size) {
                         dstp[row] = (srcp[w0 + rowleft] + srcp[w0 + rowleft - pitch]) / 2; // for some smoothing
                     } else if (rowleft < 0 && mleft) {
-                        dstp[row] = srcp[w0 - rowleft];
+                        dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)];
                     } else if (rowleft >= row_size && mright) {
-                        dstp[row] = srcp[w0 + row_size + row_size - rowleft - 2];
+                        dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)];
                     } else if (border >= 0) { // left or right
                         dstp[row] = border;
                     }
