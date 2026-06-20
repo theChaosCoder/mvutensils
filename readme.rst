@@ -133,7 +133,7 @@ Changes
     * Removed since its only real use was as a support function for other filters due to lazy frame data access code
     
 * DepanAnalyse/DepanEstimate/DepanCompensate/DepanStabilise
-    * Bug fixes, maybe some should be backported
+    * Bug fixes for edge handling and other small details
 
 Planned changes/mysteries
 =========================
