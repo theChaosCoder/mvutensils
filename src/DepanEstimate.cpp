@@ -49,9 +49,6 @@ struct DepanEstimateData {
 
     const VSVideoInfo *vi = nullptr;
 
-    // FIXME, convert to enum class
-    int stage = -1;
-
     int pixel_max = 0;
 
     size_t fftsize = 0;
@@ -787,10 +784,6 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
         data2->planinv = fftwf_plan_dft_c2r_2d(data1->winy, data1->winx, unused_array, (float *)unused_array, FFTW_ESTIMATE); // inverse fft (stage2)
     }
     fftwf_free(unused_array);
-
-    data1->stage = 1;
-    data2->stage = 2;
-    data3->stage = 3;
 
     const bool info = data1->info;
 
