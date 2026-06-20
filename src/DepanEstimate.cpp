@@ -56,8 +56,6 @@ struct DepanEstimateData {
 
     size_t fftsize = 0;
 
-    fftwf_complex *unused_array = nullptr;
-
     fftwf_plan plan = nullptr;
     
     fftwf_plan planinv = nullptr;
@@ -68,11 +66,12 @@ struct DepanEstimateData {
 
     ~DepanEstimateData() {
         vsapi->freeNode(clip);
-        fftwf_free(unused_array);
         {
             std::lock_guard<std::mutex> guard(g_fftw_plans_mutex);
-            fftwf_destroy_plan(plan);
-            fftwf_destroy_plan(planinv);
+            if (plan)
+                fftwf_destroy_plan(plan);
+            if (planinv)
+                fftwf_destroy_plan(planinv);
         }
     }
 };
@@ -634,176 +633,173 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
 
 
 static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) noexcept {
-    std::unique_ptr<DepanEstimateData> d = std::make_unique<DepanEstimateData>(vsapi);
+    std::unique_ptr<DepanEstimateData> data1 = std::make_unique<DepanEstimateData>(vsapi);
 
     int err;
 
-    d->trust_limit = vsapi->mapGetFloatSaturated(in, "trust", 0, &err);
+    data1->trust_limit = vsapi->mapGetFloatSaturated(in, "trust", 0, &err);
     if (err)
-        d->trust_limit = 4.0f;
+        data1->trust_limit = 4.0f;
 
-    d->winx = vsapi->mapGetIntSaturated(in, "winx", 0, &err);
+    data1->winx = vsapi->mapGetIntSaturated(in, "winx", 0, &err);
 
-    d->winy = vsapi->mapGetIntSaturated(in, "winy", 0, &err);
+    data1->winy = vsapi->mapGetIntSaturated(in, "winy", 0, &err);
 
-    d->wleft = vsapi->mapGetIntSaturated(in, "wleft", 0, &err);
+    data1->wleft = vsapi->mapGetIntSaturated(in, "wleft", 0, &err);
     if (err)
-        d->wleft = -1;
+        data1->wleft = -1;
 
-    d->wtop = vsapi->mapGetIntSaturated(in, "wtop", 0, &err);
+    data1->wtop = vsapi->mapGetIntSaturated(in, "wtop", 0, &err);
     if (err)
-        d->wtop = -1;
+        data1->wtop = -1;
 
-    d->dxmax = vsapi->mapGetIntSaturated(in, "dxmax", 0, &err);
+    data1->dxmax = vsapi->mapGetIntSaturated(in, "dxmax", 0, &err);
     if (err)
-        d->dxmax = -1;
+        data1->dxmax = -1;
 
-    d->dymax = vsapi->mapGetIntSaturated(in, "dymax", 0, &err);
+    data1->dymax = vsapi->mapGetIntSaturated(in, "dymax", 0, &err);
     if (err)
-        d->dymax = -1;
+        data1->dymax = -1;
 
-    d->zoommax = vsapi->mapGetFloatSaturated(in, "zoommax", 0, &err);
+    data1->zoommax = vsapi->mapGetFloatSaturated(in, "zoommax", 0, &err);
     if (err)
-        d->zoommax = 1.0f;
+        data1->zoommax = 1.0f;
 
-    d->stab = vsapi->mapGetFloatSaturated(in, "stab", 0, &err);
+    data1->stab = vsapi->mapGetFloatSaturated(in, "stab", 0, &err);
     if (err)
-        d->stab = 1.0f;
+        data1->stab = 1.0f;
 
-    d->pixaspect = vsapi->mapGetFloatSaturated(in, "pixaspect", 0, &err);
+    data1->pixaspect = vsapi->mapGetFloatSaturated(in, "pixaspect", 0, &err);
     if (err)
-        d->pixaspect = 1.0f;
+        data1->pixaspect = 1.0f;
 
-    d->info = !!vsapi->mapGetInt(in, "info", 0, &err);
+    data1->info = !!vsapi->mapGetInt(in, "info", 0, &err);
 
-    d->show = !!vsapi->mapGetInt(in, "show", 0, &err);
+    data1->show = !!vsapi->mapGetInt(in, "show", 0, &err);
 
-    d->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
+    data1->fields = !!vsapi->mapGetInt(in, "fields", 0, &err);
 
-    d->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
-    d->tff_exists = !err;
+    data1->tff = !!vsapi->mapGetInt(in, "tff", 0, &err);
+    data1->tff_exists = !err;
 
 
     try {
-        if (d->trust_limit < 0.0f || d->trust_limit > 100.0f)
+        if (data1->trust_limit < 0.0f || data1->trust_limit > 100.0f)
             throw std::runtime_error("trust must be between 0.0 and 100.0 (inclusive)");
 
-        if (d->pixaspect <= 0.0f)
+        if (data1->pixaspect <= 0.0f)
             throw std::runtime_error("pixaspect must be positive");
 
-        d->clip = vsapi->mapGetNode(in, "clip", 0, nullptr);
-        d->vi = vsapi->getVideoInfo(d->clip);
+        data1->clip = vsapi->mapGetNode(in, "clip", 0, nullptr);
+        data1->vi = vsapi->getVideoInfo(data1->clip);
 
-        if (!vsh::isConstantVideoFormat(d->vi) ||
-            (d->vi->format.colorFamily != cfYUV && d->vi->format.colorFamily != cfGray) ||
-            (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) ||
-            (d->vi->format.sampleType == stFloat && d->vi->format.bitsPerSample != 32))
+        if (!vsh::isConstantVideoFormat(data1->vi) ||
+            (data1->vi->format.colorFamily != cfYUV && data1->vi->format.colorFamily != cfGray) ||
+            (data1->vi->format.sampleType == stInteger && data1->vi->format.bitsPerSample > 16) ||
+            (data1->vi->format.sampleType == stFloat && data1->vi->format.bitsPerSample != 32))
             throw std::runtime_error("clip must have constant format and dimensions, it must be YUV or Gray, and it must be 8..16 bit integer or 32 bit float");
 
         // used only for luma
-        if (d->vi->format.sampleType == stFloat)
-            d->pixel_max = 1;
+        if (data1->vi->format.sampleType == stFloat)
+            data1->pixel_max = 1;
         else
-            d->pixel_max = (1 << d->vi->format.bitsPerSample) - 1;
+            data1->pixel_max = (1 << data1->vi->format.bitsPerSample) - 1;
 
 
-        int wleft0 = d->wleft; // save
-        if (d->wleft < 0)
-            d->wleft = 0; // auto
+        int wleft0 = data1->wleft; // save
+        if (data1->wleft < 0)
+            data1->wleft = 0; // auto
 
         // check and set fft window x size
 
-        if (d->winx > d->vi->width - d->wleft)
+        if (data1->winx > data1->vi->width - data1->wleft)
             throw std::runtime_error("winx must not be greater than width-wleft");
-        if (d->winx == 0) { // auto
-            d->winx = d->vi->width - d->wleft;
+        if (data1->winx == 0) { // auto
+            data1->winx = data1->vi->width - data1->wleft;
             // find max fft window size (power of 2)
             int wx = 1;
             for (int i = 0; i < 13; i++) {
-                if (wx * 2 <= d->winx)
+                if (wx * 2 <= data1->winx)
                     wx = wx * 2;
             }
-            d->winx = wx;
+            data1->winx = wx;
         }
 
-        if (d->zoommax != 1.0f) {
-            d->winx = d->winx / 2; // devide window x by 2 part (left and right)
+        if (data1->zoommax != 1.0f) {
+            data1->winx = data1->winx / 2; // devide window x by 2 part (left and right)
             if (wleft0 < 0)
-                d->wleft = (d->vi->width - d->winx * 2) / 4;
+                data1->wleft = (data1->vi->width - data1->winx * 2) / 4;
         } else if (wleft0 < 0)
-            d->wleft = (d->vi->width - d->winx) / 2;
+            data1->wleft = (data1->vi->width - data1->winx) / 2;
 
+        // when zooming, the right window starts at wleft + width/2 and spans winx
+        // columns; reject a (user-supplied) wleft that would push it past the edge
+        if (data1->zoommax != 1.0f && data1->wleft + data1->vi->width / 2 + data1->winx > data1->vi->width)
+            throw std::runtime_error("wleft is too large: the right zoom window (wleft + width/2 + winx) exceeds the frame width");
 
-        int wtop0 = d->wtop; // save
-        if (d->wtop < 0)
-            d->wtop = 0; // auto
+        int wtop0 = data1->wtop; // save
+        if (data1->wtop < 0)
+            data1->wtop = 0; // auto
 
         // check and set fft window y size
-        if (d->winy > d->vi->height - d->wtop)
+        if (data1->winy > data1->vi->height - data1->wtop)
             throw std::runtime_error("winy must not be greater than height-wtop");
-        if (d->winy == 0) {
-            d->winy = d->vi->height - d->wtop; // start value
+        if (data1->winy == 0) {
+            data1->winy = data1->vi->height - data1->wtop; // start value
             // find max fft window size (power of 2)
             int wy = 1;
             for (int i = 0; i < 13; i++) {
-                if (wy * 2 <= d->winy)
+                if (wy * 2 <= data1->winy)
                     wy = wy * 2;
             }
-            d->winy = wy;
+            data1->winy = wy;
         }
 
         if (wtop0 < 0)
-            d->wtop = (d->vi->height - d->winy) / 2; // auto
+            data1->wtop = (data1->vi->height - data1->winy) / 2; // auto
 
         // max dx shift must be less than winx/2
-        if (d->dxmax < 0)
-            d->dxmax = d->winx / 4; // default
-        if (d->dymax < 0)
-            d->dymax = d->winy / 4; // default
+        if (data1->dxmax < 0)
+            data1->dxmax = data1->winx / 4; // default
+        if (data1->dymax < 0)
+            data1->dymax = data1->winy / 4; // default
 
-        if (d->dxmax >= d->winx / 2)
+        if (data1->dxmax >= data1->winx / 2)
             throw std::runtime_error("dxmax must be less than winx/2");
-        if (d->dymax >= d->winy / 2)
+        if (data1->dymax >= data1->winy / 2)
             throw std::runtime_error("dymax must be less than winy/2");
 
 
-        int winxpadded = (d->winx / 2 + 1) * 2;
-        d->fftsize = d->winy * winxpadded / 2; //complex
-        d->fftsize *= sizeof(fftwf_complex);
+        int winxpadded = (data1->winx / 2 + 1) * 2;
+        data1->fftsize = data1->winy * winxpadded / 2; //complex
+        data1->fftsize *= sizeof(fftwf_complex);
     } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("DepanEstimate: " + std::string(e.what())).c_str());
         return;
     }
 
 
-    d->unused_array = (fftwf_complex *)fftwf_malloc(d->fftsize);
-    {
-        std::lock_guard<std::mutex> guard(g_fftw_plans_mutex);
-        // in-place transforms
-        d->plan = fftwf_plan_dft_r2c_2d(d->winy, d->winx, (float *)d->unused_array, d->unused_array, FFTW_ESTIMATE);    // direct fft
-        d->planinv = fftwf_plan_dft_c2r_2d(d->winy, d->winx, d->unused_array, (float *)d->unused_array, FFTW_ESTIMATE); // inverse fft
-    }
-
-
-    std::unique_ptr<DepanEstimateData> data1 = std::make_unique<DepanEstimateData>(vsapi); 
     std::unique_ptr<DepanEstimateData> data2 = std::make_unique<DepanEstimateData>(vsapi);
     std::unique_ptr<DepanEstimateData> data3 = std::make_unique<DepanEstimateData>(vsapi);
 
-    *data1 = *d;
-    *data2 = *d;
-    *data3 = *d;
-
-    // The clip node pointer was shallow-copied into all three per-stage instances
-    // above. Only data1 actually uses it (data2/data3 get their clip reassigned to
-    // the previous stage's output below), so leave ownership with data1 and clear
-    // it everywhere else to avoid freeing the same node more than once.
-    d->clip = nullptr;
+    *data2 = *data1;
+    *data3 = *data1;
     data2->clip = nullptr;
     data3->clip = nullptr;
+
+    fftwf_complex *unused_array = (fftwf_complex *)fftwf_malloc(data1->fftsize);
+    {
+        std::lock_guard<std::mutex> guard(g_fftw_plans_mutex);
+        data1->plan = fftwf_plan_dft_r2c_2d(data1->winy, data1->winx, (float *)unused_array, unused_array, FFTW_ESTIMATE);    // forward fft (stage1)
+        data2->planinv = fftwf_plan_dft_c2r_2d(data1->winy, data1->winx, unused_array, (float *)unused_array, FFTW_ESTIMATE); // inverse fft (stage2)
+    }
+    fftwf_free(unused_array);
 
     data1->stage = 1;
     data2->stage = 2;
     data3->stage = 3;
+
+    const bool info = data1->info;
 
     VSFilterDependency deps1[1] = { 
         {data1->clip, rpStrictSpatial},
@@ -841,7 +837,7 @@ static void VS_CC depanEstimateCreate(const VSMap *in, VSMap *out, void *userDat
     if (vsapi->mapGetError(out))
         return;
 
-    if (d->info) {
+    if (info) {
         if (!invokeFrameProps(prop_DepanEstimate_info, out, core, vsapi)) {
             vsapi->mapSetError(out, std::string("DepanEstimate: failed to invoke text.FrameProps: ").append(vsapi->mapGetError(out)).c_str());
             return;

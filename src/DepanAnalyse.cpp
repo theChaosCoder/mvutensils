@@ -419,6 +419,8 @@ static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData
         if (abs(vectors.nDeltaFrame) != 1)
             throw std::runtime_error("vectors clip must be created with delta=1 or -1");
 
+        d->deltaFrame = vectors.nDeltaFrame;
+
     } catch (const std::exception &e) {
         vsapi->mapSetError(out, ("DepanAnalyse: " + std::string(e.what())).c_str());
         return;

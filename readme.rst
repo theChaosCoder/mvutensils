@@ -133,7 +133,9 @@ Changes
     * Removed since its only real use was as a support function for other filters due to lazy frame data access code
     
 * DepanAnalyse/DepanEstimate/DepanCompensate/DepanStabilise
-    * Bug fixes for edge handling and other small details
+    * Fixed edge handling and other minor transform issues
+    
+    * Minor speedups
 
 Planned changes/mysteries
 =========================
@@ -142,4 +144,4 @@ Planned changes/mysteries
 
 * The tff stuff present in most filters needs cleanup
 
-* Mask doesn't need source properties passed on or the possibility to specify the output format
+* Mask doesn't need source properties passed on or the possibility to specify the output format?
