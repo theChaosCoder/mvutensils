@@ -54,9 +54,6 @@ struct DepanStabiliseData {
     transform nonlinfactor;
 
     float fps;        // frame per second
-    float mass;       // mass
-    float pdamp;      // damping parameter
-    float kstiff;     // stiffness
     float freqnative; // native frequency
     int radius;       // stabilization radius
 
@@ -1192,32 +1189,13 @@ static void VS_CC depanStabiliseCreate(const VSMap *in, VSMap *out, void *userDa
 
     // prepare coefficients for inertial motion smoothing filter
 
-    // elastic stiffness of spring
-    d->kstiff = 1.0; // value is not important - (not included in result)
     //  relative frequency lambda at half height of response
     float lambda = sqrtf(1 + 6 * d->damping * d->damping + sqrtf((1 + 6 * d->damping * d->damping) * (1 + 6 * d->damping * d->damping) + 3));
     // native oscillation frequency
     d->freqnative = d->cutoff / lambda;
-    // mass of camera
-    d->mass = d->kstiff / ((6.28f * d->freqnative) * (6.28f * d->freqnative));
-    // damping parameter
-    d->pdamp = 2 * d->damping * d->kstiff / (6.28f * d->freqnative);
     // frames per secomd
     d->fps = (float)d->vi->fpsNum / d->vi->fpsDen;
 
-    // old smoothing filter coefficients from paper
-    //        float a1 = (2*mass + pdamp*period)/(mass + pdamp*period + kstiff*period*period);
-    //        float a2 = -mass/(mass + pdamp*period + kstiff*period*period);
-    //        float b1 = (pdamp*period + kstiff*period*period)/(mass + pdamp*period + kstiff*period*period);
-    //        float b2 = -pdamp*period/(mass + pdamp*period + kstiff*period*period);
-
-    /*        s1 = (2*mass*fps*fps - kstiff)/(mass*fps*fps + pdamp*fps/2);
-        s2 = (-mass*fps*fps + pdamp*fps/2)/(mass*fps*fps + pdamp*fps/2);
-        c0 = pdamp*fps/2/(mass*fps*fps + pdamp*fps/2);
-        c1 = kstiff/(mass*fps*fps + pdamp*fps/2);
-        c2 = -pdamp*fps/2/(mass*fps*fps + pdamp*fps/2);
-        cnl = -kstiff/(mass*fps*fps + pdamp*fps/2); // nonlinear
-*/
     // approximate factor values for nonlinear members as half of max
     if (d->dxmax != 0.0f) {
         d->nonlinfactor.dxc = 5 / fabsf(d->dxmax);
