@@ -64,12 +64,10 @@ void inversetransform(const transform *ta, transform *tinv) noexcept {
 //  get  coefficients for coordinates transformation,
 //  which defines source (xsrc, ysrc)  for current destination (x,y)
 //
-//  delta is fracture of deformation (from 0 to 1 for forward,  from -1 to 0 for backward time direction)
+//  fractoffset is the fraction of deformation (from 0 to 1 for forward, from -1 to 0 for backward time direction)
 //
 //
-//  return:
-//  vector:
-//   t[0] = dxc, t[1] = dxx, t[2] = dxy, t[3] = dyc, t[4] = dyx, t[5] = dyy
+//  output: fills the transform struct tr->{dxc, dxx, dxy, dyc, dyx, dyy}
 //
 //
 //   xsrc = dxc + dxx*x + dxy*y
@@ -122,8 +120,7 @@ void motion2transform(float dx1, float dy1, float rot, float zoom1, float pixasp
 //****************************************************************************
 //  get  summary coefficients for summary combined coordinates transformation,
 //  transform_BA = fransform_B ( transform_A )
-//   t[0] = dxc, t[1] = dxx, t[2] = dxy, t[3] = dyc, t[4] = dyx, t[5] = dyy
-//void sumtransform(float ta[], float tb[], float tba[])
+//  output: fills the transform struct tba->{dxc, dxx, dxy, dyc, dyx, dyy}
 void sumtransform(const transform *ta, const transform *tb, transform *tba) {
     transform temp;
 

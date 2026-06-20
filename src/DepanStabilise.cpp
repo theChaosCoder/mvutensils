@@ -306,7 +306,7 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
     //            motion2transform (0, 0, 0, initzoom, pixaspect/nfields, xcenter, ycenter, 1, 1.0, &trtemp); // added in v.1.7
     //            sumtransform (trsmoothed[ndest],trtemp,  &trsmoothed[ndest]); // added v.1.7
 
-    if (addzoom) { // calculate and add adaptive zoom factor to fill borders (for all frames from base to ndest)
+    if (addzoom) { // calculate and add adaptive zoom factor to fill borders (for frames in the window nbasez..nmaxz around ndest)
 
         int nbasez = VSMAX(nbase, ndest - winfzsize);
         int nmaxz = VSMIN(nmax, ndest + winrzsize);
@@ -319,7 +319,7 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
             transform trinv, trcur;
             // get inverse transform
             inversetransform(&trcumul[n], &trinv);
-            // calculate difference between smoothed and original non-smoothed cumulative transform
+            // difference of the cumulative transform with its own inverse (the smoothed variant just below is disabled)
             //                    sumtransform(trinv, trsmoothed[n], &trcur);
             sumtransform(&trinv, &trcumul[n], &trcur);
             // find adaptive zoom factor
@@ -621,7 +621,7 @@ static int fillBorderNext(VSFrame *dst, DepanStabiliseData *d, int ndest, const 
     transform tr[3];
     tr[0] = *trdif; // luma transform for current frame
 
-    // get motion info about frames in interval from begin source to dest in reverse order
+    // get motion info about the next frames in interval from dest+1 to nnext (forward order)
     {
         std::lock_guard<std::mutex> guard(d->motion_mutex);
 

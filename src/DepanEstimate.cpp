@@ -107,7 +107,7 @@ static void frame_data2d(const uint8_t *srcp, ptrdiff_t pitch, float * MVU_RESTR
 static void mult_conj_data2d(const fftwf_complex * MVU_RESTRICT fftnext, const fftwf_complex * MVU_RESTRICT fftsrc, fftwf_complex * MVU_RESTRICT mult, int winx, int winy) {
     // multiply complex conj. *next to src
     // (hermit)
-    int nx = winx / 2 + 1; //padded, odd
+    int nx = winx / 2 + 1; //half-complex row width, odd
 
     int total = winy * nx;                                                                            // even
     for (int k = 0; k < total; k += 2) { //paired for speed

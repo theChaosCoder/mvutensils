@@ -355,7 +355,7 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                     }
 
                 } // end for
-            } else if (hlow == height - 1) { // edge (top, bottom) lines
+            } else if (hlow == height - 1) { // edge (bottom) line
                 for (int row = 0; row < row_size; row++) {
                     int rowleft = inttr0 + row;
                     if ((rowleft >= 0) && (rowleft < row_size)) {
