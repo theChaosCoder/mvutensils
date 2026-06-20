@@ -23,7 +23,7 @@ struct DepanStabiliseData {
     float cutoff;
     float damping;
     float initzoom;
-    int addzoom;
+    bool addzoom;
     int prev;
     int next;
     int mirror;
@@ -85,7 +85,7 @@ static void Inertial(DepanStabiliseData *d, transform *trcumul, transform *trsmo
     const float freqnative = d->freqnative;
     const float pixaspect = d->pixaspect;
     const int nfields = d->nfields;
-    const int addzoom = d->addzoom;
+    const bool addzoom = d->addzoom;
     const float initzoom = d->initzoom;
     const float xcenter = d->xcenter;
     const float ycenter = d->ycenter;
@@ -256,7 +256,7 @@ static void Average(DepanStabiliseData *d, transform *trcumul, float *azoom, con
     const float * const wint = d->wint.data();
     const float pixaspect = d->pixaspect;
     const int nfields = d->nfields;
-    const int addzoom = d->addzoom;
+    const bool addzoom = d->addzoom;
     const float initzoom = d->initzoom;
     const float xcenter = d->xcenter;
     const float ycenter = d->ycenter;

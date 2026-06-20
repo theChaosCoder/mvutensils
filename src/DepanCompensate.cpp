@@ -72,7 +72,7 @@ static const VSFrame *VS_CC depanCompensateGetFrame(int ndest, int activationRea
         if (d->intoffset == 0 || nsrc < 0 || nsrc > d->vi->numFrames - 1) //  nullptr transform, return source
             return vsapi->getFrameFilter(ndest, d->clip, frameCtx);
 
-        int forward = d->intoffset > 0;
+        bool forward = d->intoffset > 0;
 
         float fractoffset = d->offset;
         fractoffset += forward ? 1 : -1;

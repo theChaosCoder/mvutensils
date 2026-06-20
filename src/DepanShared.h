@@ -48,9 +48,9 @@ struct transform {
 
 
 // Convert between the global-motion transform and ordinary dx/dy/rot/zoom motion.
-void transform2motion(const transform *tr, int forward, float xcenter, float ycenter, float pixaspect, float *dx, float *dy, float *rot, float *zoom);
+void transform2motion(const transform *tr, bool forward, float xcenter, float ycenter, float pixaspect, float *dx, float *dy, float *rot, float *zoom);
 void inversetransform(const transform *ta, transform *tinv) noexcept;
-void motion2transform(float dx1, float dy1, float rot, float zoom1, float pixaspect, float xcenter, float ycenter, int forward, float fractoffset, transform *tr);
+void motion2transform(float dx1, float dy1, float rot, float zoom1, float pixaspect, float xcenter, float ycenter, bool forward, float fractoffset, transform *tr);
 void sumtransform(const transform *ta, const transform *tb, transform *tba);
 
 bool mapGetMotion(MotionData &m, const VSMap *props, const VSAPI *vsapi);

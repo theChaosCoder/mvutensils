@@ -49,10 +49,10 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
     // for mirror
 
-    int mtop = mirror & MIRROR_TOP;
-    int mbottom = mirror & MIRROR_BOTTOM;
-    int mleft = mirror & MIRROR_LEFT;
-    int mright = mirror & MIRROR_RIGHT;
+    bool mtop = (mirror & MIRROR_TOP) != 0;
+    bool mbottom = (mirror & MIRROR_BOTTOM) != 0;
+    bool mleft = (mirror & MIRROR_LEFT) != 0;
+    bool mright = (mirror & MIRROR_RIGHT) != 0;
 
     //    select if rotation, zoom?
 
@@ -246,10 +246,10 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
     pitch /= sizeof(PixelType);
 
     // for mirror
-    int mtop = mirror & MIRROR_TOP;
-    int mbottom = mirror & MIRROR_BOTTOM;
-    int mleft = mirror & MIRROR_LEFT;
-    int mright = mirror & MIRROR_RIGHT;
+    bool mtop = (mirror & MIRROR_TOP) != 0;
+    bool mbottom = (mirror & MIRROR_BOTTOM) != 0;
+    bool mleft = (mirror & MIRROR_LEFT) != 0;
+    bool mright = (mirror & MIRROR_RIGHT) != 0;
 
     // 1D bilinear interpolation weights for a sub-pixel position in the integer
     // grid (sx = i/32):  cx0 = (1-sx), cx1 = sx (and likewise cy). Scaled by 32.
@@ -558,10 +558,10 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     pitch /= sizeof(PixelType);
 
     // for mirror
-    int mtop = mirror & MIRROR_TOP;
-    int mbottom = mirror & MIRROR_BOTTOM;
-    int mleft = mirror & MIRROR_LEFT;
-    int mright = mirror & MIRROR_RIGHT;
+    bool mtop = (mirror & MIRROR_TOP) != 0;
+    bool mbottom = (mirror & MIRROR_BOTTOM) != 0;
+    bool mleft = (mirror & MIRROR_LEFT) != 0;
+    bool mright = (mirror & MIRROR_RIGHT) != 0;
 
     // prepare interpolation coefficients tables
     // for position of xsrc in integer grid

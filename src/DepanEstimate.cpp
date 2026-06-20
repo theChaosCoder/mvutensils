@@ -123,7 +123,7 @@ static void mult_conj_data2d(const fftwf_complex * MVU_RESTRICT fftnext, const f
 }
 
 
-static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int winy, float trust_limit, int dxmax, int dymax, float stab, int fieldbased, int top_field, float pixaspect, MotionData &md, float *trust) {
+static void get_motion_vector(const float * MVU_RESTRICT correl, int winx, int winy, float trust_limit, int dxmax, int dymax, float stab, bool fieldbased, bool top_field, float pixaspect, MotionData &md, float *trust) {
     int winxpadded = (winx / 2 + 1) * 2;
 
     // find global max on real part of correlation surface
@@ -383,7 +383,7 @@ static const VSFrame *VS_CC depanEstimateStage2GetFrame(int n, int activationRea
             const VSMap *cur_props = vsapi->getFramePropertiesRO(cur);
             int err;
 
-            int top_field = 0;
+            bool top_field = false;
             if (d->fields)
                 top_field = GetTopField(cur, n, d->tff_exists, d->tff, true, vsapi);
 
@@ -554,12 +554,12 @@ static const VSFrame *VS_CC depanEstimateStage3GetFrame(int n, int activationRea
             m.dx = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateX, 0, &err[0]);
             m.dy = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateY, 0, &err[1]);
             m.zoom = vsapi->mapGetFloatSaturated(src_props[1], prop_DepanEstimateZoom, 0, &err[2]);
-            int64_t good = vsapi->mapGetInt(src_props[1], prop_DepanEstimateGood, 0, &err[3]);
+            bool good = vsapi->mapGetInt(src_props[1], prop_DepanEstimateGood, 0, &err[3]) != 0;
 
             if (err[0] || err[1] || err[2] || err[3])
                 throw std::runtime_error("some temporary property was not found in input frame. This should never happen");
 
-            m.badMotion = (good == 0);
+            m.badMotion = !good;
 
             // check scenechanges in range, as sharp decreasing of trust
             if (n - 1 >= 0 && n < d->vi->numFrames && trust[1] < d->trust_limit * 2.0f && trust[1] < 0.5f * trust[0])

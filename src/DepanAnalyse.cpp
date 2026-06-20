@@ -20,8 +20,8 @@ struct DepanAnalyseData {
     VSNode *clip = nullptr;
     VSNode *vectors = nullptr;
     VSNode *mask = nullptr;
-    int zoom = 0;
-    int rot = 0;
+    bool zoom = false;
+    bool rot = false;
     float pixaspect = 0.0f;
     float error = 0.0f;
     bool info = false;
@@ -51,7 +51,7 @@ struct DepanAnalyseData {
 };
 
 
-static void TrasformUpdate(transform *tr, const float *blockDx, const float *blockDy, const int *blockX, const int *blockY, const float *blockWeight, int nBlkX, int nBlkY, float safety, int ifZoom1, int ifRot1, float *error1, float pixaspect) {
+static void TrasformUpdate(transform *tr, const float *blockDx, const float *blockDy, const int *blockX, const int *blockY, const float *blockWeight, int nBlkX, int nBlkY, float safety, bool ifZoom1, bool ifRot1, float *error1, float pixaspect) {
     transform trderiv;
     int n = nBlkX * nBlkY;
     trderiv.dxc = 0;
@@ -215,8 +215,8 @@ static const VSFrame *VS_CC depanAnalyseGetFrame(int n, int activationReason, vo
 
                 // begin with translation only
                 float safety = 0.3f; // begin with small safety factor
-                int ifRot0 = 0;
-                int ifZoom0 = 0;
+                bool ifRot0 = false;
+                bool ifZoom0 = false;
                 float globalDif0 = 1000.0f;
                 int ignoredBorder = mask ? 0 : 4;
 
@@ -318,11 +318,11 @@ static void VS_CC depanAnalyseCreate(const VSMap *in, VSMap *out, void *userData
 
         d->zoom = !!vsapi->mapGetInt(in, "zoom", 0, &err);
         if (err)
-            d->zoom = 1;
+            d->zoom = true;
 
         d->rot = !!vsapi->mapGetInt(in, "rot", 0, &err);
         if (err)
-            d->rot = 1;
+            d->rot = true;
 
         d->pixaspect = vsapi->mapGetFloatSaturated(in, "pixaspect", 0, &err);
         if (err)
