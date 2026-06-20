@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -57,12 +58,45 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
     if (tr->dxy == 0.0f && tr->dyx == 0.0f && tr->dxx == 1.0f && tr->dyy == 1.0f) { // only translation - fast
 
+        const int inttr0 = (int)floorf(tr->dxc + 0.5f); // constant across the whole plane
+
+        // out-of-frame columns: mirror or border fill (matches the per-pixel chain it replaces)
+        auto edge_pixel = [&](ptrdiff_t w0, int row) {
+            int rowleft = inttr0 + row;
+            if (rowleft < 0 && mleft) {
+                if (blurmax > 0) {
+                    int blurlen = VSMIN(blurmax, -rowleft);
+                    int64_t smoothed = 0;
+                    for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                        smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
+                    dstp[row] = smoothed / blurlen;
+                } else { // no blur
+                    dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
+                }
+            } else if (rowleft >= row_size && mright) {
+                if (blurmax > 0) {
+                    int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                    int64_t smoothed = 0;
+                    for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                        smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
+                    dstp[row] = smoothed / blurlen;
+                } else { // no blur
+                    dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
+                }
+            } else if (border >= 0) { // if shifted point is out of frame, fill using border value
+                dstp[row] = border;
+            }
+        };
+
+        // central span where the source column is in-frame (0 <= inttr0+row < row_size):
+        // a straight shifted copy with no per-pixel bounds test.
+        const int goodstart = std::clamp(-inttr0, 0, row_size);
+        const int goodend = std::clamp(row_size - inttr0, 0, row_size);
+
         for (int h = 0; h < height; h++) {
 
             float ysrc = tr->dyc + h;
             int hlow = (int)floorf(ysrc + 0.5f);
-
-            int inttr0 = (int)floorf(tr->dxc + 0.5f);
 
             if (hlow < 0 && mtop)
                 hlow = -hlow; // mirror borders
@@ -71,41 +105,12 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
             ptrdiff_t w0 = hlow * pitch;
             if ((hlow >= 0) && (hlow < height)) { // middle lines
-
-
-                for (int row = 0; row < row_size; row++) {
-                    int rowleft = inttr0 + row;
-
-                    //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
-
-                    if ((rowleft >= 0) && (rowleft < row_size)) {
-                        dstp[row] = srcp[w0 + rowleft];
-                    } else if (rowleft < 0 && mleft) {
-                        if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, -rowleft);
-                            int64_t smoothed = 0;
-                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
-                        } else { // no blur
-                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
-                        }
-                    } else if (rowleft >= row_size && mright) {
-                        if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            int64_t smoothed = 0;
-                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
-                        } else { // no blur
-                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
-                        }
-                    } else if (border >= 0) { // if shifted point is out of frame, fill using border value
-                        dstp[row] = border;
-                    }
-
-
-                } // end for
+                for (int row = 0; row < goodstart; row++)
+                    edge_pixel(w0, row);
+                for (int row = goodstart; row < goodend; row++)
+                    dstp[row] = srcp[w0 + inttr0 + row];
+                for (int row = goodend; row < row_size; row++)
+                    edge_pixel(w0, row);
             } else if (border >= 0) { // out lines
                 for (int row = 0; row < row_size; row++) {
                     dstp[row] = border;
@@ -230,7 +235,7 @@ static void compensate_plane_nearest(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 //   t[0] = dxc, t[1] = dxx, t[2] = dxy, t[3] = dyc, t[4] = dyx, t[5] = dyy
 //
 template <typename PixelType>
-static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_t * MVU_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2row_size4356, int blurmax, int pixel_max) {
+static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_t * MVU_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2row_size, int blurmax, int pixel_max) {
     // work2row_size is work array, it must have size >= 2*row_size
 
     (void)pixel_max;
@@ -240,36 +245,50 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
     pitch /= sizeof(PixelType);
 
-    int intcoef[66];
-
     // for mirror
     int mtop = mirror & MIRROR_TOP;
     int mbottom = mirror & MIRROR_BOTTOM;
     int mleft = mirror & MIRROR_LEFT;
     int mright = mirror & MIRROR_RIGHT;
 
-    // prepare interpolation coefficients tables
-    // for position of xsrc in integer grid
-    //        sx = (xsrc-rowleft);
-    //        sy = (ysrc-hlow);
-    //
-    //            cx0 = (1-sx);
-    //            cx1 = sx;
-    //
-    //            cy0 = (1-sy);
-    //            cy1 = sy;
-    //
-    // now sx = i/32, sy = j/32  (discrete approximation)
-
-    // float coeff. are changed by integer coeff. scaled by 32
-    for (int i = 0; i <= 32; i += 1) {
-        intcoef[i * 2] = (32 - i);
-        intcoef[i * 2 + 1] = i;
-    }
+    // 1D bilinear interpolation weights for a sub-pixel position in the integer
+    // grid (sx = i/32):  cx0 = (1-sx), cx1 = sx (and likewise cy). Scaled by 32.
+    // Pure constant, so evaluate it at compile time (no runtime init, no guard).
+    static constexpr std::array<int, 66> intcoef = [] {
+        std::array<int, 66> t{};
+        for (int i = 0; i <= 32; i++) {
+            t[i * 2] = 32 - i;
+            t[i * 2 + 1] = i;
+        }
+        return t;
+    }();
 
     //    select if rotation, zoom?
 
     if (tr->dxy == 0.0f && tr->dyx == 0.0f && tr->dxx == 1.0f && tr->dyy == 1.0f) { // only translation - fast
+
+        // x-direction quantities and the good/bad row spans are constant across the
+        // whole plane (translation only), so compute them once.
+        const int inttr0 = (int)floorf(tr->dxc);
+        const int ix2 = 2 * ((int)floorf((tr->dxc - inttr0) * 32));
+
+        int rowgoodstart, rowgoodend, rowbadstart, rowbadend;
+        if (inttr0 >= 0) {
+            rowgoodstart = 0;
+            rowgoodend = VSMAX(0, row_size - 1 - inttr0); // clamp: empty good span for full-width pans
+            rowbadstart = rowgoodend;
+            rowbadend = row_size;
+        } else {
+            rowbadstart = 0;
+            rowbadend = VSMIN(row_size, -inttr0); // clamp: bad span cannot exceed the row
+            rowgoodstart = rowbadend;
+            rowgoodend = row_size;
+        }
+        //                int rowgoodendpaired = (rowgoodend/2)*2; //even - but it was a little not optimal
+        const int rowgoodendpaired = rowgoodstart + ((rowgoodend - rowgoodstart) / 2) * 2; //even length - small fix in v.1.8
+
+        int prev_iy2 = -1;
+        int intcoef2d[4];
 
         for (int h = 0; h < height; h++) {
 
@@ -277,14 +296,13 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
             int hlow = (int)floorf(ysrc);
             int iy2 = 2 * ((int)floorf((ysrc - hlow) * 32));
 
-            int inttr0 = (int)floorf(tr->dxc);
-            int ix2 = 2 * ((int)floorf((tr->dxc - inttr0) * 32));
-
-            int intcoef2d[4];
-            for (int j = 0; j < 2; j++) {
-                for (int i = 0; i < 2; i++) {
-                    intcoef2d[j * 2 + i] = (intcoef[j + iy2] * intcoef[i + ix2]); // 4 coeff. for bilinear 2D
+            if (iy2 != prev_iy2) { // sub-pixel y weight is constant in translation mode; rebuild only on change
+                for (int j = 0; j < 2; j++) {
+                    for (int i = 0; i < 2; i++) {
+                        intcoef2d[j * 2 + i] = (intcoef[j + iy2] * intcoef[i + ix2]); // 4 coeff. for bilinear 2D
+                    }
                 }
+                prev_iy2 = iy2;
             }
 
             if (hlow < 0 && mtop)
@@ -296,20 +314,6 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
             if ((hlow >= 0) && (hlow < height - 1)) { // middle lines
 
-                int rowgoodstart, rowgoodend, rowbadstart, rowbadend;
-                if (inttr0 >= 0) {
-                    rowgoodstart = 0;
-                    rowgoodend = VSMAX(0, row_size - 1 - inttr0); // clamp: empty good span for full-width pans
-                    rowbadstart = rowgoodend;
-                    rowbadend = row_size;
-                } else {
-                    rowbadstart = 0;
-                    rowbadend = VSMIN(row_size, -inttr0); // clamp: bad span cannot exceed the row
-                    rowgoodstart = rowbadend;
-                    rowgoodend = row_size;
-                }
-                //                int rowgoodendpaired = (rowgoodend/2)*2; //even - but it was a little not optimal
-                int rowgoodendpaired = rowgoodstart + ((rowgoodend - rowgoodstart) / 2) * 2; //even length - small fix in v.1.8
                 ptrdiff_t w = w0 + inttr0 + rowgoodstart;
                 for (int row = rowgoodstart; row < rowgoodendpaired; row += 2) { // paired unroll for speed
                     //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
@@ -376,10 +380,8 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
     //-----------------------------------------------------------------------------
     else if (tr->dxy == 0.0f && tr->dyx == 0.0f) { // no rotation, only zoom and translation  - fast
 
-        int *rowleftwork = work2row_size4356;
+        int *rowleftwork = work2row_size;
         int *ix2work = rowleftwork + row_size;
-        int *intcoef2dzoom0 = ix2work + row_size; //[66][66]; // 4356
-        int *intcoef2dzoom = intcoef2dzoom0;
 
         // prepare positions   (they are not dependent from h) for fast processing
         for (int row = 0; row < row_size; row++) {
@@ -389,13 +391,15 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
             ix2work[row] = 2 * ((int)floorf((xsrc - rowleft) * 32));
         }
 
-        for (int j = 0; j < 66; j++) {
-            for (int i = 0; i < 66; i++) {
-                intcoef2dzoom[i] = (intcoef[j] * intcoef[i]); //  coeff. for bilinear 2D
-            }
-            intcoef2dzoom += 66;
-        }
-        intcoef2dzoom -= 66 * 66; //restore
+        // 2D bilinear weight table (outer product of the 1D weights); a pure
+        // constant, so evaluate it at compile time (no runtime init, no guard).
+        static constexpr std::array<int, 66 * 66> intcoef2dzoom = [] {
+            std::array<int, 66 * 66> t{};
+            for (int j = 0; j < 66; j++)
+                for (int i = 0; i < 66; i++)
+                    t[j * 66 + i] = intcoef[j] * intcoef[i];
+            return t;
+        }();
 
         for (int h = 0; h < height; h++) {
 
@@ -413,8 +417,7 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 
             if ((hlow >= 0) && (hlow < height - 1)) { // incide
 
-                intcoef2dzoom = intcoef2dzoom0;
-                intcoef2dzoom += iy2 * 66;
+                const int *rowcoef = intcoef2dzoom.data() + iy2 * 66; // table row for this sub-pixel y
 
 
                 for (int row = 0; row < row_size; row++) {
@@ -428,8 +431,8 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
                         int ix2 = ix2work[row];
                         ptrdiff_t w = w0 + rowleft;
 
-                        int pixel = (intcoef2dzoom[ix2] * srcp[w] + intcoef2dzoom[ix2 + 1] * srcp[w + 1] +
-                                 intcoef2dzoom[ix2 + 66] * srcp[w + pitch] + intcoef2dzoom[ix2 + 67] * srcp[w + pitch + 1]) >>
+                        int pixel = (rowcoef[ix2] * srcp[w] + rowcoef[ix2 + 1] * srcp[w + 1] +
+                                 rowcoef[ix2 + 66] * srcp[w + pitch] + rowcoef[ix2 + 67] * srcp[w + pitch + 1]) >>
                                 10;
 
                         dstp[row] = pixel; // maxmin disabled in v1.6
@@ -547,14 +550,12 @@ static void compensate_plane_bilinear(uint8_t * MVU_RESTRICT dstp8, const uint8_
 //
 template <typename PixelType>
 static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t * MVU_RESTRICT srcp8, ptrdiff_t pitch, int row_size, int height, const transform *tr, int mirror, int border, int *work2width1030, int blurmax, int pixel_max) {
-    // work2width1030 is integer work array, it must have size >= 2*row_size+1030
+    // work2width1030 is integer work array, it must have size >= 2*row_size
 
     const PixelType *srcp = (const PixelType *)srcp8;
     PixelType *dstp = (PixelType *)dstp8;
 
     pitch /= sizeof(PixelType);
-
-    int *intcoef = work2width1030 + 2 * row_size;
 
     // for mirror
     int mtop = mirror & MIRROR_TOP;
@@ -580,32 +581,78 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
     // now sx = i/256, sy = j/256  (discrete approximation)
 
     // float coeff. are changed by integer coeff. scaled by 256*256*256/8192 = 2048
-    for (int i = 0; i <= 256; i += 1) { // 257 steps, 1028 numbers
-        intcoef[i * 4] = -((i * (256 - i) * (256 - i))) / 8192;
-        intcoef[i * 4 + 1] = (256 * 256 * 256 - 2 * 256 * i * i + i * i * i) / 8192;
-        intcoef[i * 4 + 2] = (i * (256 * 256 + 256 * i - i * i)) / 8192;
-        intcoef[i * 4 + 3] = -(i * i * (256 - i)) / 8192;
-    }
+    // Pure constant, so evaluate it at compile time (no runtime init, no guard).
+    static constexpr std::array<int, 1028> intcoef = [] {
+        std::array<int, 1028> t{};
+        for (int i = 0; i <= 256; i++) { // 257 steps, 1028 numbers
+            t[i * 4] = -((i * (256 - i) * (256 - i))) / 8192;
+            t[i * 4 + 1] = (256 * 256 * 256 - 2 * 256 * i * i + i * i * i) / 8192;
+            t[i * 4 + 2] = (i * (256 * 256 + 256 * i - i * i)) / 8192;
+            t[i * 4 + 3] = -(i * i * (256 - i)) / 8192;
+        }
+        return t;
+    }();
 
     //    select if rotation, zoom
 
     if (tr->dxy == 0.0f && tr->dyx == 0.0f && tr->dxx == 1.0f && tr->dyy == 1.0f) { // only translation - fast
 
+        // x-direction quantities are constant across the whole plane
+        const int inttr3 = (int)floorf(tr->dyc);
+        const int inttr0 = (int)floorf(tr->dxc);
+        const int ix4 = 4 * ((int)((tr->dxc - inttr0) * 256));
+
+        // edge/border columns for a middle line (everything the central 16-tap
+        // path cannot handle); identical to the per-pixel chain it replaces.
+        auto middle_edge = [&](ptrdiff_t w0, int row) {
+            int rowleft = inttr0 + row;
+            if (rowleft < 0 && mleft) {
+                if (blurmax > 0) {
+                    int blurlen = VSMIN(blurmax, -rowleft);
+                    int64_t smoothed = 0;
+                    for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
+                        smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
+                    dstp[row] = smoothed / blurlen;
+                } else { // no blur
+                    dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
+                }
+            } else if (rowleft >= row_size && mright) {
+                if (blurmax > 0) {
+                    int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
+                    int64_t smoothed = 0;
+                    for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
+                        smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
+                    dstp[row] = smoothed / blurlen;
+                } else { // no blur
+                    dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
+                }
+            } else if (rowleft == 0 || rowleft == row_size - 1 || rowleft == row_size - 2) { // edges
+                dstp[row] = srcp[w0 + rowleft];
+            } else if (border >= 0) { // if shifted point is out of frame, fill using border value
+                dstp[row] = border;
+            }
+        };
+
+        // central span where the 4x4 bicubic stencil is fully in-frame (1 <= inttr0+row < row_size-2)
+        const int fast_start = std::clamp(1 - inttr0, 0, row_size);
+        const int fast_end = std::clamp(row_size - 2 - inttr0, fast_start, row_size);
+
+        int prev_iy4 = -1;
+        int intcoef2d[16];
+
         for (int h = 0; h < height; h++) {
 
             float ysrc = tr->dyc + h;
-            int inttr3 = (int)floorf(tr->dyc);
             int hlow = (int)floorf(ysrc);
             int iy4 = 4 * ((int)((ysrc - hlow) * 256));
 
-            int inttr0 = (int)floorf(tr->dxc);
-            int ix4 = 4 * ((int)((tr->dxc - inttr0) * 256));
-
-            int intcoef2d[16];
-            for (int j = 0; j < 4; j++) {
-                for (int i = 0; i < 4; i++) {
-                    intcoef2d[j * 4 + i] = ((intcoef[j + iy4] * intcoef[i + ix4])) / 2048; // 16 coeff. for bicubic 2D, scaled by 2048
+            if (iy4 != prev_iy4) { // sub-pixel y weight is constant in translation mode; rebuild only on change
+                for (int j = 0; j < 4; j++) {
+                    for (int i = 0; i < 4; i++) {
+                        intcoef2d[j * 4 + i] = ((intcoef[j + iy4] * intcoef[i + ix4])) / 2048; // 16 coeff. for bicubic 2D, scaled by 2048
+                    }
                 }
+                prev_iy4 = iy4;
             }
 
             if (hlow < 0 && mtop)
@@ -617,50 +664,22 @@ static void compensate_plane_bicubic(uint8_t * MVU_RESTRICT dstp8, const uint8_t
 
             if ((hlow >= 1) && (hlow < height - 2)) { // middle lines
 
-                for (int row = 0; row < row_size; row++) {
+                for (int row = 0; row < fast_start; row++)
+                    middle_edge(w0, row);
+                for (int row = fast_start; row < fast_end; row++) {
+                    ptrdiff_t w = w0 + inttr0 + row;
 
-                    int rowleft = inttr0 + row;
+                    int pixel = (intcoef2d[0] * srcp[w - pitch - 1] + intcoef2d[1] * srcp[w - pitch] + intcoef2d[2] * srcp[w - pitch + 1] + intcoef2d[3] * srcp[w - pitch + 2] +
+                             intcoef2d[4] * srcp[w - 1] + intcoef2d[5] * srcp[w] + intcoef2d[6] * srcp[w + 1] + intcoef2d[7] * srcp[w + 2] +
+                             intcoef2d[8] * srcp[w + pitch - 1] + intcoef2d[9] * srcp[w + pitch] + intcoef2d[10] * srcp[w + pitch + 1] + intcoef2d[11] * srcp[w + pitch + 2] +
+                             intcoef2d[12] * srcp[w + pitch * 2 - 1] + intcoef2d[13] * srcp[w + pitch * 2] + intcoef2d[14] * srcp[w + pitch * 2 + 1] + intcoef2d[15] * srcp[w + pitch * 2 + 2] + 1024) >>
+                            11; // i.e. /2048
 
-                    //  x,y point is in square: (rowleft,hlow) to (rowleft+1,hlow+1)
+                    dstp[row] = VSMAX(VSMIN(pixel, pixel_max), 0);
+                }
+                for (int row = fast_end; row < row_size; row++)
+                    middle_edge(w0, row);
 
-                    if ((rowleft >= 1) && (rowleft < row_size - 2)) {
-                        ptrdiff_t w = w0 + rowleft;
-
-                        int pixel = (intcoef2d[0] * srcp[w - pitch - 1] + intcoef2d[1] * srcp[w - pitch] + intcoef2d[2] * srcp[w - pitch + 1] + intcoef2d[3] * srcp[w - pitch + 2] +
-                                 intcoef2d[4] * srcp[w - 1] + intcoef2d[5] * srcp[w] + intcoef2d[6] * srcp[w + 1] + intcoef2d[7] * srcp[w + 2] +
-                                 intcoef2d[8] * srcp[w + pitch - 1] + intcoef2d[9] * srcp[w + pitch] + intcoef2d[10] * srcp[w + pitch + 1] + intcoef2d[11] * srcp[w + pitch + 2] +
-                                 intcoef2d[12] * srcp[w + pitch * 2 - 1] + intcoef2d[13] * srcp[w + pitch * 2] + intcoef2d[14] * srcp[w + pitch * 2 + 1] + intcoef2d[15] * srcp[w + pitch * 2 + 2] + 1024) >>
-                                11; // i.e. /2048
-
-                        dstp[row] = VSMAX(VSMIN(pixel, pixel_max), 0);
-
-                    } else if (rowleft < 0 && mleft) {
-                        if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, -rowleft);
-                            int64_t smoothed = 0;
-                            for (int i = -rowleft - blurlen + 1; i <= -rowleft; i++)
-                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
-                        } else { // no blur
-                            dstp[row] = srcp[w0 + std::clamp(-rowleft, 0, row_size - 1)]; // not very precise - may be bicubic?
-                        }
-                    } else if (rowleft >= row_size && mright) {
-                        if (blurmax > 0) {
-                            int blurlen = VSMIN(blurmax, rowleft - row_size + 1);
-                            int64_t smoothed = 0;
-                            for (int i = row_size + row_size - rowleft - 2; i < row_size + row_size - rowleft - 2 + blurlen; i++)
-                                smoothed += srcp[w0 + std::clamp(i, 0, row_size - 1)];
-                            dstp[row] = smoothed / blurlen;
-                        } else { // no blur
-                            dstp[row] = srcp[w0 + std::clamp(row_size + row_size - rowleft - 2, 0, row_size - 1)]; // not very precise - may be bicubic?
-                        }
-                    } else if (rowleft == 0 || rowleft == row_size - 1 || rowleft == row_size - 2) { // edges
-                        dstp[row] = srcp[w0 + rowleft];
-                    } else if (border >= 0) { // if shifted point is out of frame, fill using border value
-                        dstp[row] = border;
-                    }
-
-                } // end for
             } else if (hlow == 0 || hlow == height - 2) { // near edge (top-1, bottom-1) lines
                 for (int row = 0; row < row_size; row++) {
                     int rowleft = inttr0 + row;
