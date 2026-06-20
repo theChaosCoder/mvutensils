@@ -295,9 +295,7 @@ void PyramidPlane::ReducePlane(const PyramidPlane &src, int xRatioUV, int yRatio
 
 template <typename PixelType>
 static void VerticalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
-    (void)bitsPerSample;
-
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, [[maybe_unused]] intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 
@@ -317,9 +315,7 @@ static void VerticalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RES
 
 template <typename PixelType>
 static void HorizontalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
-    (void)bitsPerSample;
-
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, [[maybe_unused]] intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 
@@ -338,9 +334,7 @@ static void HorizontalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_R
 
 template <typename PixelType>
 static void DiagonalBilinear(uint8_t *MVU_RESTRICT pDst8, const uint8_t *MVU_RESTRICT pSrc8,
-    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, intptr_t bitsPerSample) noexcept {
-    (void)bitsPerSample;
-
+    intptr_t nPitch, intptr_t nWidth, intptr_t nHeight, [[maybe_unused]] intptr_t bitsPerSample) noexcept {
     PixelType *pDst = (PixelType *)pDst8;
     PixelType *pSrc = (PixelType *)pSrc8;
 

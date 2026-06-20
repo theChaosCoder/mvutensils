@@ -40,9 +40,7 @@ template <unsigned width, unsigned height>
 struct SADWrapperU8 {
     static_assert(width >= 16, "");
 
-    static unsigned int sad_u8_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
-        (void)nSrcPitch;
-
+    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
         __m128i sum = zeroes;
 
         for (unsigned y = 0; y < height; y++) {
@@ -70,9 +68,7 @@ struct SADWrapperU8 {
 template <unsigned height>
 struct SADWrapperU8<4, height> {
 
-    static unsigned int sad_u8_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
-        (void)nSrcPitch;
-
+    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
         __m128i sum = zeroes;
 
         for (unsigned y = 0; y < height; y++) {
@@ -97,9 +93,7 @@ template <unsigned height>
 struct SADWrapperU8<8, height> {
     static_assert(height == 1 || height % 2 == 0, "");
 
-    static unsigned int sad_u8_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
-        (void)nSrcPitch;
-
+    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
         __m128i sum = zeroes;
 
         if (height == 1) {
