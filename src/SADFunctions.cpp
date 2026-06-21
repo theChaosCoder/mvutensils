@@ -9,11 +9,8 @@
 enum InstructionSets {
     Scalar,
     MMX,
-    MMX_CACHE64,
     SSE2,
-    SSE3,
     SSSE3,
-    SSSE3_CACHE64,
     SSE4,
     AVX,
     XOP,
@@ -40,7 +37,7 @@ template <unsigned width, unsigned height>
 struct SADWrapperU8 {
     static_assert(width >= 16, "");
 
-    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m128i sum = zeroes;
 
         for (unsigned y = 0; y < height; y++) {
@@ -66,9 +63,32 @@ struct SADWrapperU8 {
 
 
 template <unsigned height>
+struct SADWrapperU8<2, height> {
+    static_assert(height % 2 == 0, "");
+
+    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
+        __m128i sum = zeroes;
+
+        // 2-wide: src is contiguous, so two rows are 4 adjacent bytes. Load each ref row as a
+        // 2-byte value and interleave with unpacklo (same idea as SADWrapperU16<2, h>), then one
+        // _mm_sad_epu8 per row pair (the unused upper bytes are zero, contributing nothing).
+        for (unsigned y = 0; y < height; y += 2) {
+            __m128i m2 = _mm_cvtsi32_si128(*(const int *)(pSrc + y * 2));
+            __m128i r0 = _mm_cvtsi32_si128(*(const uint16_t *)(pRef + y * nRefPitch));
+            __m128i r1 = _mm_cvtsi32_si128(*(const uint16_t *)(pRef + (y + 1) * nRefPitch));
+
+            sum = _mm_add_epi64(sum, _mm_sad_epu8(m2, _mm_unpacklo_epi16(r0, r1)));
+        }
+
+        return (unsigned)_mm_cvtsi128_si32(sum);
+    }
+};
+
+
+template <unsigned height>
 struct SADWrapperU8<4, height> {
 
-    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m128i sum = zeroes;
 
         for (unsigned y = 0; y < height; y++) {
@@ -93,7 +113,7 @@ template <unsigned height>
 struct SADWrapperU8<8, height> {
     static_assert(height == 1 || height % 2 == 0, "");
 
-    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u8_sse2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m128i sum = zeroes;
 
         if (height == 1) {
@@ -140,7 +160,7 @@ static FORCE_INLINE __m128i hsum_epi32(const __m128i &a) {
 template <unsigned width, unsigned height>
 struct SADWrapperU16 {
 
-    static unsigned int sad_u16_sse2(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) {
+    static unsigned int sad_u16_sse2(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) noexcept {
         __m128i sum = zeroes;
 
         for (unsigned y = 0; y < height; y++) {
@@ -170,7 +190,7 @@ struct SADWrapperU16 {
 template <>
 struct SADWrapperU16<2, 2> {
 
-    static unsigned int sad_u16_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u16_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m128i m2 = _mm_cvtsi32_si128(*(const int *)(pSrc));
         __m128i m4 = _mm_cvtsi32_si128(*(const int *)(pSrc + nSrcPitch));
         m2 = _mm_unpacklo_epi16(m2, m4);
@@ -191,7 +211,7 @@ struct SADWrapperU16<2, 2> {
 template <>
 struct SADWrapperU16<2, 4> {
 
-    static unsigned int sad_u16_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u16_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m128i m2 = _mm_cvtsi32_si128(*(const int *)(pSrc));
         __m128i m4 = _mm_cvtsi32_si128(*(const int *)(pSrc + nSrcPitch));
         m2 = _mm_unpacklo_epi16(m2, m4);
@@ -223,7 +243,7 @@ struct SADWrapperU16<2, 4> {
 template <unsigned height>
 struct SADWrapperU16<4, height> {
 
-    static unsigned int sad_u16_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u16_sse2(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m128i sum = zeroes;
 
         for (unsigned y = 0; y < height; y++) {
@@ -250,34 +270,12 @@ struct SADWrapperU16<4, height> {
 
 #if defined(MVTOOLS_X86)
 
-#define MK_CFUNC(functionname) extern "C" unsigned int functionname(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch)
+#define MK_CFUNC(functionname) extern "C" unsigned int functionname(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept
 
-// From sad-a.asm - stolen from x264
-MK_CFUNC(mvtools_pixel_sad_4x4_mmx2);
-MK_CFUNC(mvtools_pixel_sad_4x8_mmx2);
-MK_CFUNC(mvtools_pixel_sad_8x4_mmx2);
-MK_CFUNC(mvtools_pixel_sad_8x8_mmx2);
-MK_CFUNC(mvtools_pixel_sad_8x16_mmx2);
-MK_CFUNC(mvtools_pixel_sad_16x8_mmx2);
-MK_CFUNC(mvtools_pixel_sad_16x16_mmx2);
-
-MK_CFUNC(mvtools_pixel_sad_8x4_cache64_mmx2);
-MK_CFUNC(mvtools_pixel_sad_8x8_cache64_mmx2);
-MK_CFUNC(mvtools_pixel_sad_8x16_cache64_mmx2);
-
-MK_CFUNC(mvtools_pixel_sad_8x16_sse2);
-MK_CFUNC(mvtools_pixel_sad_16x8_sse2);  //non optimized cache access, for AMD?
-MK_CFUNC(mvtools_pixel_sad_16x16_sse2); //non optimized cache access, for AMD?
-
-MK_CFUNC(mvtools_pixel_sad_16x8_sse3);  //LDDQU Pentium4E (Core1?), not for Core2!
-MK_CFUNC(mvtools_pixel_sad_16x16_sse3); //LDDQU Pentium4E (Core1?), not for Core2!
-
-MK_CFUNC(mvtools_pixel_sad_16x8_cache64_ssse3);  //core2 optimized
-MK_CFUNC(mvtools_pixel_sad_16x16_cache64_ssse3); //core2 optimized
 
 /* SATD: Sum of Absolute Transformed Differences, more sensitive to noise, frequency domain based - replacement to dct/SAD */
 
-// From sad-a.asm - stolen from x264
+// From pixel-a.asm - stolen from x264
 MK_CFUNC(mvtools_pixel_satd_4x4_mmx2);
 
 MK_CFUNC(mvtools_pixel_satd_8x4_sse2);
@@ -319,7 +317,7 @@ MK_CFUNC(mvtools_pixel_satd_16x16_avx2);
 
 
 template <unsigned width, unsigned height, typename PixelType>
-unsigned int sad_c(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) {
+unsigned int sad_c(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) noexcept {
     unsigned int sum = 0;
     for (unsigned y = 0; y < height; y++) {
         for (unsigned x = 0; x < width; x++) {
@@ -339,21 +337,6 @@ unsigned int sad_c(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef
 
 
 #if defined(MVTOOLS_X86)
-#define SAD_X264_U8_MMX(width, height) \
-    { KEY(width, height, 8, MMX), mvtools_pixel_sad_##width##x##height##_mmx2 },
-
-#define SAD_X264_U8_MMX_CACHE64(width, height) \
-    { KEY(width, height, 8, MMX_CACHE64), mvtools_pixel_sad_##width##x##height##_cache64_mmx2 },
-
-#define SAD_X264_U8_SSE2(width, height) \
-    { KEY(width, height, 8, SSE2), mvtools_pixel_sad_##width##x##height##_sse2 },
-
-#define SAD_X264_U8_SSE3(width, height) \
-    { KEY(width, height, 8, SSE3), mvtools_pixel_sad_##width##x##height##_sse3 },
-
-#define SAD_X264_U8_SSSE3_CACHE64(width, height) \
-    { KEY(width, height, 8, SSSE3_CACHE64), mvtools_pixel_sad_##width##x##height##_cache64_ssse3 },
-
 #define SAD_U8_SSE2(width, height) \
     { KEY(width, height, 8, SSE2), SADWrapperU8<width, height>::sad_u8_sse2 },
 
@@ -361,11 +344,6 @@ unsigned int sad_c(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef
     { KEY(width, height, 16, SSE2), SADWrapperU16<width, height>::sad_u16_sse2 },
 
 #else
-#define SAD_X264_U8_MMX(width, height)
-#define SAD_X264_U8_MMX_CACHE64(width, height)
-#define SAD_X264_U8_SSE2(width, height)
-#define SAD_X264_U8_SSE3(width, height)
-#define SAD_X264_U8_SSSE3_CACHE64(width, height)
 #define SAD_U8_SSE2(width, height)
 #define SAD_U16_SSE2(width, height)
 #endif
@@ -403,22 +381,21 @@ static const std::unordered_map<uint32_t, SADFunction> sad_functions = {
     SAD(128, 64)
     SAD(128, 128)
 #if defined(MVTOOLS_X86)
-    SAD_X264_U8_MMX(4, 4)
-    SAD_X264_U8_MMX(4, 8)
-    SAD_X264_U8_SSE2(16, 8)
-    SAD_X264_U8_SSE2(16, 16)
-    SAD_X264_U8_SSE3(16, 8)
-    SAD_X264_U8_SSE3(16, 16)
-    SAD_X264_U8_SSSE3_CACHE64(16, 8)
-    SAD_X264_U8_SSSE3_CACHE64(16, 16)
+    SAD_U8_SSE2(2, 2)
+    SAD_U8_SSE2(2, 4)
     SAD_U8_SSE2(4, 2)
+    SAD_U8_SSE2(4, 4)
+    SAD_U8_SSE2(4, 8)
     SAD_U8_SSE2(8, 1)
     SAD_U8_SSE2(8, 2)
     SAD_U8_SSE2(8, 4)
     SAD_U8_SSE2(8, 8)
+    SAD_U8_SSE2(8, 16)
     SAD_U8_SSE2(16, 1)
     SAD_U8_SSE2(16, 2)
     SAD_U8_SSE2(16, 4)
+    SAD_U8_SSE2(16, 8)
+    SAD_U8_SSE2(16, 16)
     SAD_U8_SSE2(16, 32)
     SAD_U8_SSE2(32, 8)
     SAD_U8_SSE2(32, 16)
@@ -465,35 +442,12 @@ SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits) {
     SADFunction sad = sad_functions.at(KEY(width, height, bits, Scalar));
 
 #if defined(MVTOOLS_X86)
-    int cpu = g_cpuinfo;
-
-    try {
-        sad = sad_functions.at(KEY(width, height, bits, MMX));
-    } catch (std::out_of_range &) { }
-
-    if (cpu & X264_CPU_CACHELINE_64) {
-        try {
-            sad = sad_functions.at(KEY(width, height, bits, MMX_CACHE64));
-        } catch (std::out_of_range &) { }
-    }
-
+    // SSE2 is baseline on x86-64; the intrinsic wrapper exists for every block size.
     try {
         sad = sad_functions.at(KEY(width, height, bits, SSE2));
     } catch (std::out_of_range &) { }
 
-    if (cpu & X264_CPU_SSE3) {
-        try {
-            sad = sad_functions.at(KEY(width, height, bits, SSE3));
-        } catch (std::out_of_range &) { }
-    }
-
-    if ((cpu & X264_CPU_SSSE3) && (cpu & X264_CPU_CACHELINE_64)) {
-        try {
-            sad = sad_functions.at(KEY(width, height, bits, SSSE3_CACHE64));
-        } catch (std::out_of_range &) { }
-    }
-
-    if (cpu & X264_CPU_AVX2) {
+    if (g_cpuinfo & X264_CPU_AVX2) {
         SADFunction tmp = selectSADFunctionAVX2(width, height, bits);
         if (tmp)
             sad = tmp;
@@ -503,11 +457,6 @@ SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits) {
     return sad;
 }
 
-#undef SAD_X264_U8_MMX
-#undef SAD_X264_U8_MMX_CACHE64
-#undef SAD_X264_U8_SSE2
-#undef SAD_X264_U8_SSE3
-#undef SAD_X264_U8_SSSE3_CACHE64
 #undef SAD_U8_SSE2
 #undef SAD_U16_SSE2
 #undef SAD
@@ -622,7 +571,7 @@ static FORCE_INLINE unsigned int Satd_8x4_C(const uint8_t *pSrc, intptr_t nSrcPi
 
 // Doesn't handle 16x2 blocks.
 template <int nBlkWidth, int nBlkHeight, typename PixelType>
-static unsigned int Satd_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+static unsigned int Satd_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
     if (nBlkWidth == 4 && nBlkHeight == 4)
         return Satd_4x4_C<PixelType>(pSrc, nSrcPitch, pRef, nRefPitch);
     else {
@@ -647,7 +596,7 @@ static unsigned int Satd_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_
 
 #if defined(MVTOOLS_X86)
 template <unsigned nBlkWidth, unsigned nBlkHeight, InstructionSets opt>
-static unsigned int Satd_SIMD(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+static unsigned int Satd_SIMD(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
     const unsigned partition_width = 16;
     const unsigned partition_height = 16;
 

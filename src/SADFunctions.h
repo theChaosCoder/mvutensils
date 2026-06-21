@@ -23,7 +23,7 @@
 
 
 typedef unsigned int (*SADFunction)(const uint8_t *pSrc, intptr_t nSrcPitch,
-                                    const uint8_t *pRef, intptr_t nRefPitch);
+                                    const uint8_t *pRef, intptr_t nRefPitch) noexcept;
 
 
 SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits);

@@ -10,7 +10,7 @@ template <unsigned width, unsigned height>
 struct SADWrapperU8_AVX2 {
     static_assert(width >= 32, "");
 
-    static unsigned int sad_u8_avx2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u8_avx2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m256i sum = _mm256_setzero_si256();
 
         for (unsigned y = 0; y < height; y++) {
@@ -38,7 +38,7 @@ template <unsigned height>
 struct SADWrapperU8_AVX2<16, height> {
     static_assert(height >= 2, "");
 
-    static unsigned int sad_u8_avx2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+    static unsigned int sad_u8_avx2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
         __m256i sum = _mm256_setzero_si256();
 
         for (int y = 0; (unsigned)y < height; y += 2) {
@@ -61,6 +61,8 @@ struct SADWrapperU8_AVX2<16, height> {
 #define KEY(width, height, bits, opt) (unsigned)(width) << 24 | (height) << 16 | (bits) << 8 | (opt)
 
 
+// The opt field is hardcoded 0: this AVX2 map is private to this TU and is only ever queried
+// here (via selectSADFunctionAVX2), never merged with the main InstructionSets-keyed map.
 #define SAD_U8_AVX2(width, height) \
     { KEY(width, height, 8, 0), SADWrapperU8_AVX2<width, height>::sad_u8_avx2 },
 

@@ -188,13 +188,6 @@
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </NASM>
-    <NASM Include="..\src\asm\sad-a.asm">
-      <FileType>Document</FileType>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
-      <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\src\asm\include;%(IncludePaths)</IncludePaths>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ARCH_X86_64=1;BIT_DEPTH=8;HIGH_BIT_DEPTH=0;PIC;private_prefix=mvtools;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </NASM>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

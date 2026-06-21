@@ -57,7 +57,6 @@ if host_machine.cpu_family() == 'x86_64'
             'src/asm/const-a.asm',
             'src/asm/cpu-a.asm',
             'src/asm/pixel-a.asm',
-            'src/asm/sad-a.asm',
         ),
         gnu_symbol_visibility: 'hidden',
         include_directories: include_directories('src/asm/include'),

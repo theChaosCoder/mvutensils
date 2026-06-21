@@ -483,17 +483,16 @@ void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma, int
         BLITCHROMA = selectCopyFunction(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bytesPerSample * 8);
     }
 
-    // 64 required for effective use of x264 sad on Core2
+    // 64-byte alignment for the block buffers (cache-line aligned for the SIMD SAD/SATD loads)
 #define ALIGN_PLANES 64
 
     nSrcPitch_temp[0] = nBlkSizeX * bytesPerSample;
     nSrcPitch_temp[1] = nBlkSizeX / xRatioUV * bytesPerSample;
     nSrcPitch_temp[2] = nSrcPitch_temp[1];
 
-    // Four extra bytes because pixel_sad_4x4_mmx2 reads four bytes more than it should (but doesn't use them in any way).
-    pSrc_temp[0] = mvu_aligned_malloc<uint8_t>(nBlkSizeY * nSrcPitch_temp[0] + 4, ALIGN_PLANES);
-    pSrc_temp[1] = mvu_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[1] + 4, ALIGN_PLANES);
-    pSrc_temp[2] = mvu_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[2] + 4, ALIGN_PLANES);
+    pSrc_temp[0] = mvu_aligned_malloc<uint8_t>(nBlkSizeY * nSrcPitch_temp[0], ALIGN_PLANES);
+    pSrc_temp[1] = mvu_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[1], ALIGN_PLANES);
+    pSrc_temp[2] = mvu_aligned_malloc<uint8_t>(nBlkSizeY / yRatioUV * nSrcPitch_temp[2], ALIGN_PLANES);
 
 #undef ALIGN_PLANES
 }
