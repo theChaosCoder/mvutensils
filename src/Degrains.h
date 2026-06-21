@@ -25,23 +25,56 @@ enum VectorOrder {
 };
 
 
-typedef void (*DenoiseFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, const uint8_t **_pRefs, const ptrdiff_t *nRefPitches, int WSrc, const int *WRefs);
+typedef void (*DenoiseFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, const uint8_t **_pRefs, const ptrdiff_t *nRefPitches, uint16_t WSrc, const uint16_t *WRefs) noexcept;
 
 
-// XXX Moves the pointers passed in pRefs. This is okay because they are not
-// used after this function is done with them.
-template <int radius, int blockWidth, int blockHeight, typename PixelType>
-static void Degrain_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs8, const ptrdiff_t * MVU_RESTRICT nRefPitches, int WSrc, const int * MVU_RESTRICT WRefs) {
+// XXX Both Degrain_C8/Degrain_C16 move the pointers passed in pRefs8. This is okay
+// because they are not used after the function is done with them.
+
+template <int radius, int blockWidth, int blockHeight>
+static void Degrain_C8(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs8, const ptrdiff_t * MVU_RESTRICT nRefPitches, uint16_t WSrc, const uint16_t * MVU_RESTRICT WRefs) noexcept {
+    const uint16_t wsrc = WSrc;
+    uint16_t wref[radius * 2];
+    for (int r = 0; r < radius * 2; r++)
+        wref[r] = WRefs[r];
+
+    for (int y = 0; y < blockHeight; y++) {
+        const uint8_t * MVU_RESTRICT pSrc = pSrc8;
+        uint8_t * MVU_RESTRICT pDst = pDst8;
+
+        for (int x = 0; x < blockWidth; x++) {
+            uint16_t sum = (uint16_t)(128u + (uint16_t)((uint16_t)pSrc[x] * wsrc));
+            for (int r = 0; r < radius * 2; r++) {
+                const uint8_t * MVU_RESTRICT pRef = pRefs8[r];
+                sum = (uint16_t)(sum + (uint16_t)((uint16_t)pRef[x] * wref[r]));
+            }
+            pDst[x] = (uint8_t)(sum >> 8);
+        }
+
+        pDst8 += nDstPitch;
+        pSrc8 += nSrcPitch;
+        for (int r = 0; r < radius * 2; r++)
+            pRefs8[r] += nRefPitches[r];
+    }
+}
+
+template <int radius, int blockWidth, int blockHeight>
+static void Degrain_C16(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs8, const ptrdiff_t * MVU_RESTRICT nRefPitches, uint16_t WSrc, const uint16_t * MVU_RESTRICT WRefs) noexcept {
+    const int wsrc = WSrc;
+    int wref[radius * 2];
+    for (int r = 0; r < radius * 2; r++)
+        wref[r] = WRefs[r];
+
     for (int y = 0; y < blockHeight; y++) {
         for (int x = 0; x < blockWidth; x++) {
-            const PixelType *pSrc = (const PixelType * __restrict)pSrc8;
-            PixelType *pDst = (PixelType * __restrict)pDst8;
+            const uint16_t *pSrc = (const uint16_t * __restrict)pSrc8;
+            uint16_t *pDst = (uint16_t * __restrict)pDst8;
 
-            int sum = 128 + pSrc[x] * WSrc;
+            int sum = 128 + pSrc[x] * wsrc;
 
             for (int r = 0; r < radius * 2; r++) {
-                const PixelType *pRef = (const PixelType * __restrict)pRefs8[r];
-                sum += pRef[x] * WRefs[r];
+                const uint16_t *pRef = (const uint16_t * __restrict)pRefs8[r];
+                sum += pRef[x] * wref[r];
             }
 
             pDst[x] = sum >> 8;
@@ -55,20 +88,12 @@ static void Degrain_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const u
 }
 
 
-#if defined(MVTOOLS_X86) || defined(MVTOOLS_ARM)
-
-#if defined(MVTOOLS_ARM)
-#include "sse2neon.h"
-#else
+#ifdef MVTOOLS_X86
 #include <emmintrin.h>
+DenoiseFunction selectDegrainFunctionAVX2(unsigned radius, unsigned width, unsigned height, unsigned bits) noexcept;
 
-DenoiseFunction selectDegrainFunctionAVX2(unsigned radius, unsigned width, unsigned height, unsigned bits);
-#endif
-
-// XXX Moves the pointers passed in pRefs. This is okay because they are not
-// used after this function is done with them.
 template <int radius, int blockWidth, int blockHeight>
-static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs, const ptrdiff_t * MVU_RESTRICT nRefPitches, int WSrc, const int * MVU_RESTRICT WRefs) {
+static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc, ptrdiff_t nSrcPitch, const uint8_t ** MVU_RESTRICT pRefs, const ptrdiff_t * MVU_RESTRICT nRefPitches, uint16_t WSrc, const uint16_t * MVU_RESTRICT WRefs) noexcept {
     static_assert(blockWidth >= 4, "");
 
     __m128i zero = _mm_setzero_si128();
@@ -86,11 +111,6 @@ static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
 
     for (int y = 0; y < blockHeight; y++) {
         for (int x = 0; x < blockWidth; x += 8) {
-            // pDst[x] = (pRefF[x]*WRefF + pSrc[x]*WSrc + pRefB[x]*WRefB + 
-            //            pRefF2[x]*WRefF2 + pRefB2[x]*WRefB2 + pRefF3[x]*WRefF3 + pRefB3[x]*WRefB3
-            //            pRefF4[x]*WRefF4 + pRefB4[x]*WRefB4 + pRefF5[x]*WRefF5 + pRefB5[x]*WRefB5
-            //            pRefF6[x]*WRefF6 + pRefB6[x]*WRefB6 + 128)>>8;
-
             if (blockWidth == 4) {
                 src = _mm_cvtsi32_si128(*(const int *)pSrc);
                 for(int i = 0; i < radius * 2; i += 2) {
@@ -141,7 +161,7 @@ static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
     }
 }
 
-static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) {
+static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) noexcept {
     __m128i bytes_limit = _mm_set1_epi8(nLimit);
 
     for (int y = 0; y < nHeight; y++) {
@@ -165,11 +185,11 @@ static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t 
 #endif // MVTOOLS_X86
 
 
-typedef void (*LimitFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit);
+typedef void (*LimitFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) noexcept;
 
 
 template <typename PixelType>
-static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) {
+static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) noexcept {
     for (int h = 0; h < nHeight; h++) {
         for (int i = 0; i < nWidth; i++) {
             const PixelType *pSrc = (const PixelType *)pSrc8;
@@ -182,16 +202,16 @@ static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, co
     }
 }
 
-static inline int DegrainWeight(int64_t thSAD, int64_t blockSAD) {
+static inline uint16_t DegrainWeight(int64_t thSAD, int64_t blockSAD) noexcept {
     if (blockSAD >= thSAD)
         return 0;
 
     const double r = (double)blockSAD / (double)thSAD; // r in [0, 1)
-    return int(256.0 * (1.0 - r * r) / (1.0 + r * r));
+    return static_cast<uint16_t>(256.0 * (1.0 - r * r) / (1.0 + r * r)); // in [0, 256]
 }
 
 template<typename PixelType>
-static inline void useBlock(const uint8_t *&p, ptrdiff_t &np, int &WRef, int isUsable, const std::optional<MotionBlockPyramid> &blocks, int i, const FramePyramidLevel *pPlane, const uint8_t **pSrcCur, int xx, const ptrdiff_t *nSrcPitch, int nLogPel, int plane, int xSubUV, int ySubUV, const int64_t *thSAD) {
+static inline void useBlock(const uint8_t *&p, ptrdiff_t &np, uint16_t &WRef, int isUsable, const std::optional<MotionBlockPyramid> &blocks, int i, const FramePyramidLevel *pPlane, const uint8_t **pSrcCur, int xx, const ptrdiff_t *nSrcPitch, int nLogPel, int plane, int xSubUV, int ySubUV, const int64_t *thSAD) noexcept {
     if (isUsable) {
         const BlockData block = blocks->GetBlock(i);
         int blx = (block.x << nLogPel) + block.vector.x;
@@ -209,17 +229,19 @@ static inline void useBlock(const uint8_t *&p, ptrdiff_t &np, int &WRef, int isU
 
 
 template <int radius>
-static inline void normaliseWeights(int &WSrc, int *WRefs) {
-    // normalise weights to 256
-    WSrc = 256;
-    int WSum = WSrc + 1;
+static inline void normaliseWeights(uint16_t &WSrc, uint16_t *WRefs) noexcept {
+    int wsrc = 256;
+    int WSum = wsrc + 1;
     for (int r = 0; r < radius * 2; r++)
         WSum += WRefs[r];
 
     double scale = 256.0 / WSum;
 
     for (int r = 0; r < radius * 2; r++) {
-        WRefs[r] = static_cast<int>(WRefs[r] * scale);
-        WSrc -= WRefs[r];
+        int w = static_cast<int>(WRefs[r] * scale);
+        WRefs[r] = static_cast<uint16_t>(w);
+        wsrc -= w;
     }
+
+    WSrc = static_cast<uint16_t>(wsrc < 0 ? 0 : wsrc);
 }

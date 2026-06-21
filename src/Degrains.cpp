@@ -227,7 +227,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                             const uint8_t *pointers[radius * 2];
                             ptrdiff_t strides[radius * 2];
-                            int WSrc, WRefs[radius * 2];
+                            uint16_t WSrc, WRefs[radius * 2];
 
                             for (int r = 0; r < radius * 2; r++)
                                 useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
@@ -294,7 +294,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
                             const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
                             ptrdiff_t strides[radius * 2];
 
-                            int WSrc, WRefs[radius * 2];
+                            uint16_t WSrc, WRefs[radius * 2];
 
                             for (int r = 0; r < radius * 2; r++)
                                 useBlock<PixelType>(pointers[r], strides[r], WRefs[r], isUsable[r], fgops[r], i, pPlanes[r], pSrcCur, xx, nSrcPitches, nLogPel, plane, xSubUV, ySubUV, thSAD);
@@ -392,8 +392,8 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 #endif
 
 #define DEGRAIN(radius, width, height) \
-    { KEY(width, height, 8, MVOPT_SCALAR), Degrain_C<radius, width, height, uint8_t> }, \
-    { KEY(width, height, 16, MVOPT_SCALAR), Degrain_C<radius, width, height, uint16_t> },
+    { KEY(width, height, 8, MVOPT_SCALAR), Degrain_C8<radius, width, height> }, \
+    { KEY(width, height, 16, MVOPT_SCALAR), Degrain_C16<radius, width, height> },
 
 #define DEGRAIN_LEVEL(radius)\
     {\
