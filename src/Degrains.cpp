@@ -49,8 +49,6 @@ struct DegrainData {
 
     OverlapsFunction OVERS[3];
     DenoiseFunction DEGRAIN[3];
-    LimitFunction LimitChanges;
-    ToPixelsFunction ToPixels;
 
     bool process[3];
 
@@ -318,7 +316,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
 
                         if (outputHeight > 0)
-                            d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp, dstTempPitch,
+                            ToPixels<PixelType>(pDstCur[plane], nDstPitches[plane], DstTemp, dstTempPitch,
                                 outputWidth, outputHeight, bitsPerSample);
 
                         pDstCur[plane] += nDstPitches[plane] * rowsToOutput;
@@ -332,7 +330,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 
                 int pixelMax = (1 << bitsPerSample) - 1;
                 if (nLimit[plane] < pixelMax)
-                    d->LimitChanges(pDst[plane], nDstPitches[plane],
+                    LimitChanges_C<PixelType>(pDst[plane], nDstPitches[plane],
                         pSrc[plane], nSrcPitches[plane],
                         vsapi->getFrameWidth(dst, plane), vsapi->getFrameHeight(dst, plane), nLimit[plane]);
             }
@@ -478,20 +476,6 @@ static void selectFunctions(DegrainData<radius> &d, const MotionBlockPyramid &ve
     const unsigned nBlkSizeX = vectors.nBlkSizeX;
     const unsigned nBlkSizeY = vectors.nBlkSizeY;
     const unsigned bits = d.vi->format.bytesPerSample * 8;
-
-    if (d.vi->format.bitsPerSample == 8) {
-        d.LimitChanges = LimitChanges_C<uint8_t>;
-
-        d.ToPixels = ToPixels<uint16_t, uint8_t>;
-
-#if defined(MVTOOLS_X86) || defined(MVTOOLS_ARM)
-        d.LimitChanges = LimitChanges_sse2;
-#endif
-    } else {
-        d.LimitChanges = LimitChanges_C<uint16_t>;
-
-        d.ToPixels = ToPixels<uint32_t, uint16_t>;
-    }
 
     d.OVERS[0] = selectOverlapsFunction(nBlkSizeX, nBlkSizeY, bits);
     d.DEGRAIN[0] = selectDegrainFunction(radius, nBlkSizeX, nBlkSizeY, bits);

@@ -56,7 +56,6 @@ struct CompensateData {
 
     OverlapsFunction OVERS[3];
     COPYFunction BLIT[3];
-    ToPixelsFunction ToPixels;
 
     std::string prefix;
 
@@ -264,7 +263,7 @@ static const VSFrame *VS_CC compensateGetFrame(int n, int activationReason, void
 
                             if (outputHeight > 0) {
                                 int outputWidth = std::min(vsapi->getFrameWidth(dst, plane), nWidth_B[plane]);
-                                d->ToPixels(pDstCur[plane], nDstPitches[plane], DstTemp[plane], dstTempPitch[plane], outputWidth, outputHeight, bitsPerSample);
+                                ToPixels<PixelType>(pDstCur[plane], nDstPitches[plane], DstTemp[plane], dstTempPitch[plane], outputWidth, outputHeight, bitsPerSample);
                             }
 
                             pDstCur[plane] += nDstPitches[plane] * (nBlkSizeY[plane] - nOverlapY[plane]);
@@ -374,12 +373,6 @@ static void VS_CC compensateCreate(const VSMap *in, VSMap *out, [[maybe_unused]]
         }
 
         const unsigned bits = d->vi->format.bytesPerSample * 8;
-
-        if (d->vi->format.bytesPerSample == 1) {
-            d->ToPixels = ToPixels<uint16_t, uint8_t>;
-        } else {
-            d->ToPixels = ToPixels<uint32_t, uint16_t>;
-        }
 
         d->OVERS[0] = selectOverlapsFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);
         d->BLIT[0] = selectCopyFunction(vectors.nBlkSizeX, vectors.nBlkSizeY, bits);

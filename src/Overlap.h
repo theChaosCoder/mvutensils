@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <type_traits>
 #include <vector>
 #include "Common.h"
 
@@ -46,29 +47,22 @@ typedef void (*OverlapsFunction)(uint8_t *pDst, ptrdiff_t nDstPitch,
                                  const int16_t *pWin, ptrdiff_t nWinPitch);
 
 
-typedef void (*ToPixelsFunction)(uint8_t *pDst, ptrdiff_t nDstPitch,
-                                 const uint8_t *pSrc, ptrdiff_t nSrcPitch,
-                                 int width, int height, int bitsPerSample);
-
-template<typename PixelType2, typename PixelType>
-void ToPixels(uint8_t *MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t *MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int bitsPerSample) {
-    int pixelMax = (1 << bitsPerSample) - 1;
+template <typename PixelType>
+static void ToPixels(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int bitsPerSample) {
+    using Acc = std::conditional_t<sizeof(PixelType) == 1, uint16_t, uint32_t>;
+    const Acc clampMax = sizeof(PixelType) == 1 ? (Acc)0xFF : (Acc)((1u << bitsPerSample) - 1);
 
     for (int h = 0; h < nHeight; h++) {
+        const Acc *pSrc = (const Acc *)pSrc8;
+        PixelType *pDst = (PixelType *)pDst8;
         for (int i = 0; i < nWidth; i++) {
-            const PixelType2 *pSrc = (const PixelType2 *)pSrc8;
-            PixelType *pDst = (PixelType *)pDst8;
-
-            int a = (pSrc[i] + 16) >> 5;
-            if (sizeof(PixelType) == 1)
-                pDst[i] = a | ((255 - a) >> (sizeof(int) * 8 - 1));
-            else
-                pDst[i] = std::min(pixelMax, a);
+            Acc a = (Acc)(pSrc[i] + 16) >> 5;
+            pDst[i] = (PixelType)(a < clampMax ? a : clampMax);
         }
         pDst8 += nDstPitch;
         pSrc8 += nSrcPitch;
     }
-}   
+}
 
 OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigned bits);
 

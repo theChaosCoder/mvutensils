@@ -161,41 +161,26 @@ static void Degrain_sse2(uint8_t * MVU_RESTRICT pDst, ptrdiff_t nDstPitch, const
     }
 }
 
-static void LimitChanges_sse2(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) noexcept {
-    __m128i bytes_limit = _mm_set1_epi8(nLimit);
-
-    for (int y = 0; y < nHeight; y++) {
-        for (int x = 0; x < nWidth; x += 16) {
-            __m128i m0 = _mm_loadu_si128((const __m128i *)&pSrc[x]);
-            __m128i m1 = _mm_loadu_si128((const __m128i *)&pDst[x]);
-
-            __m128i lower = _mm_subs_epu8(m0, bytes_limit);
-            __m128i upper = _mm_adds_epu8(m0, bytes_limit);
-
-            m0 = _mm_min_epu8(_mm_max_epu8(lower, m1), upper);
-
-            _mm_storeu_si128((__m128i *)&pDst[x], m0);
-        }
-
-        pSrc += nSrcPitch;
-        pDst += nDstPitch;
-    }
-}
-
 #endif // MVTOOLS_X86
 
 
-typedef void (*LimitFunction)(uint8_t *pDst, ptrdiff_t nDstPitch, const uint8_t *pSrc, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) noexcept;
-
-
+// LimitChanges clamps each output pixel to [pSrc - nLimit, pSrc + nLimit]. nLimit is
+// validated to [0, pixelMax]
+// The idiom used here is very friendly to compiler optimizers and helps them to not
+// widen the type used for calculations
 template <typename PixelType>
 static void LimitChanges_C(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, int nWidth, int nHeight, int nLimit) noexcept {
+    const PixelType lim = (PixelType)nLimit;
+    const PixelType maxValue = (PixelType)~(PixelType)0; // 255 or 65535
     for (int h = 0; h < nHeight; h++) {
+        const PixelType *pSrc = (const PixelType *)pSrc8;
+        PixelType *pDst = (PixelType *)pDst8;
         for (int i = 0; i < nWidth; i++) {
-            const PixelType *pSrc = (const PixelType *)pSrc8;
-            PixelType *pDst = (PixelType *)pDst8;
-
-            pDst[i] = (PixelType)std::min<int>(std::max<int>(pDst[i], (pSrc[i] - nLimit)), (pSrc[i] + nLimit));
+            PixelType s = pSrc[i], d = pDst[i];
+            PixelType lo = (PixelType)(s - lim); if (lo > s) lo = 0;        // max(s - lim, 0)
+            PixelType hi = (PixelType)(s + lim); if (hi < s) hi = maxValue; // min(s + lim, typeMax)
+            PixelType r = d < lo ? lo : d;                                  // max(d, lo)
+            pDst[i] = r > hi ? hi : r;                                      // min(., hi)
         }
         pDst8 += nDstPitch;
         pSrc8 += nSrcPitch;
