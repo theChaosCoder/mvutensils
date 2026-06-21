@@ -8,13 +8,7 @@
 
 enum InstructionSets {
     Scalar,
-    MMX,
     SSE2,
-    SSSE3,
-    SSE4,
-    AVX,
-    XOP,
-    AVX2,
 };
 
 
@@ -266,54 +260,6 @@ struct SADWrapperU16<4, height> {
 
 #undef zeroes
 #endif
-
-
-#if defined(MVTOOLS_X86)
-
-#define MK_CFUNC(functionname) extern "C" unsigned int functionname(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept
-
-
-/* SATD: Sum of Absolute Transformed Differences, more sensitive to noise, frequency domain based - replacement to dct/SAD */
-
-// From pixel-a.asm - stolen from x264
-MK_CFUNC(mvtools_pixel_satd_4x4_mmx2);
-
-MK_CFUNC(mvtools_pixel_satd_8x4_sse2);
-MK_CFUNC(mvtools_pixel_satd_8x8_sse2);
-MK_CFUNC(mvtools_pixel_satd_16x8_sse2);
-MK_CFUNC(mvtools_pixel_satd_16x16_sse2);
-
-MK_CFUNC(mvtools_pixel_satd_4x4_ssse3);
-MK_CFUNC(mvtools_pixel_satd_8x4_ssse3);
-MK_CFUNC(mvtools_pixel_satd_8x8_ssse3);
-MK_CFUNC(mvtools_pixel_satd_16x8_ssse3);
-MK_CFUNC(mvtools_pixel_satd_16x16_ssse3);
-
-MK_CFUNC(mvtools_pixel_satd_4x4_sse4);
-MK_CFUNC(mvtools_pixel_satd_8x4_sse4);
-MK_CFUNC(mvtools_pixel_satd_8x8_sse4);
-MK_CFUNC(mvtools_pixel_satd_16x8_sse4);
-MK_CFUNC(mvtools_pixel_satd_16x16_sse4);
-
-MK_CFUNC(mvtools_pixel_satd_4x4_avx);
-MK_CFUNC(mvtools_pixel_satd_8x4_avx);
-MK_CFUNC(mvtools_pixel_satd_8x8_avx);
-MK_CFUNC(mvtools_pixel_satd_16x8_avx);
-MK_CFUNC(mvtools_pixel_satd_16x16_avx);
-
-MK_CFUNC(mvtools_pixel_satd_4x4_xop);
-MK_CFUNC(mvtools_pixel_satd_8x4_xop);
-MK_CFUNC(mvtools_pixel_satd_8x8_xop);
-MK_CFUNC(mvtools_pixel_satd_16x8_xop);
-MK_CFUNC(mvtools_pixel_satd_16x16_xop);
-
-MK_CFUNC(mvtools_pixel_satd_8x8_avx2);
-MK_CFUNC(mvtools_pixel_satd_16x8_avx2);
-MK_CFUNC(mvtools_pixel_satd_16x16_avx2);
-
-#undef MK_CFUNC
-
-#endif // MVTOOLS_X86 / ARM
 
 
 template <unsigned width, unsigned height, typename PixelType>
@@ -595,88 +541,124 @@ static unsigned int Satd_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_
 }
 
 #if defined(MVTOOLS_X86)
-template <unsigned nBlkWidth, unsigned nBlkHeight, InstructionSets opt>
-static unsigned int Satd_SIMD(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
-    const unsigned partition_width = 16;
-    const unsigned partition_height = 16;
-
-    uint64_t sum = 0;
-
-    for (unsigned y = 0; y < nBlkHeight; y += partition_height) {
-        for (unsigned x = 0; x < nBlkWidth; x += partition_width) {
-            if (opt == SSE2)
-                sum += mvtools_pixel_satd_16x16_sse2(pSrc + x, nSrcPitch, pRef + x, nRefPitch);
-            else if (opt == SSSE3)
-                sum += mvtools_pixel_satd_16x16_ssse3(pSrc + x, nSrcPitch, pRef + x, nRefPitch);
-            else if (opt == SSE4)
-                sum += mvtools_pixel_satd_16x16_sse4(pSrc + x, nSrcPitch, pRef + x, nRefPitch);
-            else if (opt == AVX)
-                sum += mvtools_pixel_satd_16x16_avx(pSrc + x, nSrcPitch, pRef + x, nRefPitch);
-            else if (opt == XOP)
-                sum += mvtools_pixel_satd_16x16_xop(pSrc + x, nSrcPitch, pRef + x, nRefPitch);
-            else if (opt == AVX2)
-                sum += mvtools_pixel_satd_16x16_avx2(pSrc + x, nSrcPitch, pRef + x, nRefPitch);
-        }
-
-        pSrc += nSrcPitch * partition_height;
-        pRef += nRefPitch * partition_height;
+// Intrinsic SATD (Hadamard), replacing the x264 asm. SATD tiles into 4x4 units; each unit's
+// score is (sum of |coeff| of the separable 4x4 Hadamard of src-ref) >> 1. That abs-sum is
+// always even (sum of all coeffs == 16*DC), so the block SATD = (total abs-sum over all 4x4
+// sub-blocks) >> 1, matching the scalar Satd_C bit-for-bit. Core: diff -> vertical Hadamard
+// -> 4x4 transpose -> Hadamard -> abs -> sum; abs-sum is order/sign invariant so any valid
+// 4-point butterfly works. 8-bit packs two 4x4 in the 128-bit lanes (8x4 core); 16-bit uses
+// int32 lanes (4x4 core) with int64 accumulation.
+static FORCE_INLINE __m128i satd_abs_epi16(__m128i x) noexcept {
+    __m128i s = _mm_srai_epi16(x, 15);
+    return _mm_sub_epi16(_mm_xor_si128(x, s), s);
+}
+static FORCE_INLINE __m128i satd_abs_epi32(__m128i x) noexcept {
+    __m128i s = _mm_srai_epi32(x, 31);
+    return _mm_sub_epi32(_mm_xor_si128(x, s), s);
+}
+static FORCE_INLINE unsigned satd_hsum_epi32(__m128i a) noexcept {
+    a = _mm_add_epi32(a, _mm_srli_si128(a, 8));
+    a = _mm_add_epi32(a, _mm_srli_si128(a, 4));
+    return (unsigned)_mm_cvtsi128_si32(a);
+}
+static FORCE_INLINE uint64_t satd_hsum2_epi64(__m128i a) noexcept {
+    return (uint64_t)_mm_cvtsi128_si64(a) + (uint64_t)_mm_cvtsi128_si64(_mm_unpackhi_epi64(a, a));
+}
+static FORCE_INLINE __m128i satd_4x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+    const __m128i z = _mm_setzero_si128();
+    __m128i d0 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(s + 0 * sp)), z), _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(r + 0 * rp)), z));
+    __m128i d1 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(s + 1 * sp)), z), _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(r + 1 * rp)), z));
+    __m128i d2 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(s + 2 * sp)), z), _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(r + 2 * rp)), z));
+    __m128i d3 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(s + 3 * sp)), z), _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(r + 3 * rp)), z));
+    __m128i t0 = _mm_add_epi16(d0, d1), t1 = _mm_sub_epi16(d0, d1), t2 = _mm_add_epi16(d2, d3), t3 = _mm_sub_epi16(d2, d3);
+    __m128i h0 = _mm_add_epi16(t0, t2), h1 = _mm_add_epi16(t1, t3), h2 = _mm_sub_epi16(t0, t2), h3 = _mm_sub_epi16(t1, t3);
+    __m128i p0 = _mm_unpacklo_epi16(h0, h1), p1 = _mm_unpacklo_epi16(h2, h3);
+    __m128i lo = _mm_unpacklo_epi32(p0, p1), hi = _mm_unpackhi_epi32(p0, p1);
+    __m128i T0 = _mm_move_epi64(lo), T1 = _mm_srli_si128(lo, 8), T2 = _mm_move_epi64(hi), T3 = _mm_srli_si128(hi, 8);
+    __m128i u0 = _mm_add_epi16(T0, T1), u1 = _mm_sub_epi16(T0, T1), u2 = _mm_add_epi16(T2, T3), u3 = _mm_sub_epi16(T2, T3);
+    __m128i v0 = _mm_add_epi16(u0, u2), v1 = _mm_add_epi16(u1, u3), v2 = _mm_sub_epi16(u0, u2), v3 = _mm_sub_epi16(u1, u3);
+    __m128i a = _mm_add_epi16(_mm_add_epi16(satd_abs_epi16(v0), satd_abs_epi16(v1)), _mm_add_epi16(satd_abs_epi16(v2), satd_abs_epi16(v3)));
+    return _mm_madd_epi16(a, _mm_set1_epi16(1));
+}
+static FORCE_INLINE __m128i satd_8x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+    const __m128i z = _mm_setzero_si128();
+    __m128i d0 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(s + 0 * sp)), z), _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(r + 0 * rp)), z));
+    __m128i d1 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(s + 1 * sp)), z), _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(r + 1 * rp)), z));
+    __m128i d2 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(s + 2 * sp)), z), _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(r + 2 * rp)), z));
+    __m128i d3 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(s + 3 * sp)), z), _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(r + 3 * rp)), z));
+    __m128i t0 = _mm_add_epi16(d0, d1), t1 = _mm_sub_epi16(d0, d1), t2 = _mm_add_epi16(d2, d3), t3 = _mm_sub_epi16(d2, d3);
+    __m128i h0 = _mm_add_epi16(t0, t2), h1 = _mm_add_epi16(t1, t3), h2 = _mm_sub_epi16(t0, t2), h3 = _mm_sub_epi16(t1, t3);
+    __m128i lo01 = _mm_unpacklo_epi16(h0, h1), hi01 = _mm_unpackhi_epi16(h0, h1);
+    __m128i lo23 = _mm_unpacklo_epi16(h2, h3), hi23 = _mm_unpackhi_epi16(h2, h3);
+    __m128i loA = _mm_unpacklo_epi32(lo01, lo23), hiA = _mm_unpackhi_epi32(lo01, lo23);
+    __m128i loB = _mm_unpacklo_epi32(hi01, hi23), hiB = _mm_unpackhi_epi32(hi01, hi23);
+    __m128i r0 = _mm_unpacklo_epi64(loA, loB), r1 = _mm_unpackhi_epi64(loA, loB);
+    __m128i r2 = _mm_unpacklo_epi64(hiA, hiB), r3 = _mm_unpackhi_epi64(hiA, hiB);
+    __m128i u0 = _mm_add_epi16(r0, r1), u1 = _mm_sub_epi16(r0, r1), u2 = _mm_add_epi16(r2, r3), u3 = _mm_sub_epi16(r2, r3);
+    __m128i v0 = _mm_add_epi16(u0, u2), v1 = _mm_add_epi16(u1, u3), v2 = _mm_sub_epi16(u0, u2), v3 = _mm_sub_epi16(u1, u3);
+    __m128i a = _mm_add_epi16(_mm_add_epi16(satd_abs_epi16(v0), satd_abs_epi16(v1)), _mm_add_epi16(satd_abs_epi16(v2), satd_abs_epi16(v3)));
+    return _mm_madd_epi16(a, _mm_set1_epi16(1));
+}
+static FORCE_INLINE __m128i satd_4x4_u16(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+    const __m128i z = _mm_setzero_si128();
+    __m128i d0 = _mm_sub_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(s + 0 * sp)), z), _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(r + 0 * rp)), z));
+    __m128i d1 = _mm_sub_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(s + 1 * sp)), z), _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(r + 1 * rp)), z));
+    __m128i d2 = _mm_sub_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(s + 2 * sp)), z), _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(r + 2 * rp)), z));
+    __m128i d3 = _mm_sub_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(s + 3 * sp)), z), _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(r + 3 * rp)), z));
+    __m128i t0 = _mm_add_epi32(d0, d1), t1 = _mm_sub_epi32(d0, d1), t2 = _mm_add_epi32(d2, d3), t3 = _mm_sub_epi32(d2, d3);
+    __m128i h0 = _mm_add_epi32(t0, t2), h1 = _mm_add_epi32(t1, t3), h2 = _mm_sub_epi32(t0, t2), h3 = _mm_sub_epi32(t1, t3);
+    __m128i p0 = _mm_unpacklo_epi32(h0, h1), p1 = _mm_unpacklo_epi32(h2, h3);
+    __m128i p2 = _mm_unpackhi_epi32(h0, h1), p3 = _mm_unpackhi_epi32(h2, h3);
+    __m128i T0 = _mm_unpacklo_epi64(p0, p1), T1 = _mm_unpackhi_epi64(p0, p1), T2 = _mm_unpacklo_epi64(p2, p3), T3 = _mm_unpackhi_epi64(p2, p3);
+    __m128i u0 = _mm_add_epi32(T0, T1), u1 = _mm_sub_epi32(T0, T1), u2 = _mm_add_epi32(T2, T3), u3 = _mm_sub_epi32(T2, T3);
+    __m128i v0 = _mm_add_epi32(u0, u2), v1 = _mm_add_epi32(u1, u3), v2 = _mm_sub_epi32(u0, u2), v3 = _mm_sub_epi32(u1, u3);
+    return _mm_add_epi32(_mm_add_epi32(satd_abs_epi32(v0), satd_abs_epi32(v1)), _mm_add_epi32(satd_abs_epi32(v2), satd_abs_epi32(v3)));
+}
+template <unsigned W, unsigned H>
+static unsigned int satd_u8_sse2(const uint8_t *src, intptr_t sp, const uint8_t *ref, intptr_t rp) noexcept {
+    __m128i acc = _mm_setzero_si128();
+    if (W == 4) {
+        for (unsigned y = 0; y < H; y += 4)
+            acc = _mm_add_epi32(acc, satd_4x4_u8(src + y * sp, sp, ref + y * rp, rp));
+    } else {
+        for (unsigned y = 0; y < H; y += 4)
+            for (unsigned x = 0; x < W; x += 8)
+                acc = _mm_add_epi32(acc, satd_8x4_u8(src + y * sp + x, sp, ref + y * rp + x, rp));
     }
-
-    return static_cast<unsigned int>(sum > 0xFFFFFFFFu ? 0xFFFFFFFFu : sum);
+    uint64_t sum = (uint64_t)satd_hsum_epi32(acc) >> 1;
+    return (unsigned)(sum > 0xFFFFFFFFu ? 0xFFFFFFFFu : sum);
+}
+template <unsigned W, unsigned H>
+static unsigned int satd_u16_sse2(const uint8_t *src, intptr_t sp, const uint8_t *ref, intptr_t rp) noexcept {
+    const __m128i z = _mm_setzero_si128();
+    __m128i acc = _mm_setzero_si128(); // 2 int64
+    for (unsigned y = 0; y < H; y += 4)
+        for (unsigned x = 0; x < W; x += 4) {
+            __m128i a = satd_4x4_u16(src + y * sp + (intptr_t)x * 2, sp, ref + y * rp + (intptr_t)x * 2, rp);
+            acc = _mm_add_epi64(acc, _mm_add_epi64(_mm_unpacklo_epi32(a, z), _mm_unpackhi_epi32(a, z)));
+        }
+    uint64_t sum = satd_hsum2_epi64(acc) >> 1;
+    return (unsigned)(sum > 0xFFFFFFFFu ? 0xFFFFFFFFu : sum);
 }
 #endif
 
 #if defined(MVTOOLS_X86)
-#define SATD_X264_U8_MMX(width, height) \
-    { KEY(width, height, 8, MMX), mvtools_pixel_satd_##width##x##height##_mmx2 },
-
-#define SATD_X264_U8_SSE2(width, height) \
-    { KEY(width, height, 8, SSE2), mvtools_pixel_satd_##width##x##height##_sse2 },
-
-#define SATD_X264_U8_SSSE3(width, height) \
-    { KEY(width, height, 8, SSSE3), mvtools_pixel_satd_##width##x##height##_ssse3 },
-
-#define SATD_X264_U8_SSE4(width, height) \
-    { KEY(width, height, 8, SSE4), mvtools_pixel_satd_##width##x##height##_sse4 },
-
-#define SATD_X264_U8_AVX(width, height) \
-    { KEY(width, height, 8, AVX), mvtools_pixel_satd_##width##x##height##_avx },
-
-#define SATD_X264_U8_XOP(width, height) \
-    { KEY(width, height, 8, XOP), mvtools_pixel_satd_##width##x##height##_xop },
-
-#define SATD_X264_U8_AVX2(width, height) \
-    { KEY(width, height, 8, AVX2), mvtools_pixel_satd_##width##x##height##_avx2 },
+#define SATD_U8_SSE2(width, height) \
+    { KEY(width, height, 8, SSE2), satd_u8_sse2<width, height> },
+#define SATD_U16_SSE2(width, height) \
+    { KEY(width, height, 16, SSE2), satd_u16_sse2<width, height> },
 #else
-#define SATD_X264_U8_MMX(width, height)
-#define SATD_X264_U8_SSE2(width, height)
-#define SATD_X264_U8_SSSE3(width, height)
-#define SATD_X264_U8_SSE4(width, height)
-#define SATD_X264_U8_AVX(width, height)
-#define SATD_X264_U8_XOP(width, height)
-#define SATD_X264_U8_AVX2(width, height)
+#define SATD_U8_SSE2(width, height)
+#define SATD_U16_SSE2(width, height)
 #endif
 
 #define SATD(width, height) \
     { KEY(width, height, 8, Scalar), Satd_C<width, height, uint8_t> }, \
     { KEY(width, height, 16, Scalar), Satd_C<width, height, uint16_t> },
 
-
-#if defined(MVTOOLS_X86)
-#define SATD_X264_U8(width, height) \
-    SATD_X264_U8_SSSE3(width, height) \
-    SATD_X264_U8_SSE4(width, height) \
-    SATD_X264_U8_AVX(width, height) \
-    SATD_X264_U8_XOP(width, height)
-
-#define SATD_U8_SIMD(width, height) \
-    { KEY(width, height, 8, SSE2), Satd_SIMD<width, height, SSE2> }, \
-    { KEY(width, height, 8, SSSE3), Satd_SIMD<width, height, SSSE3> }, \
-    { KEY(width, height, 8, SSE4), Satd_SIMD<width, height, SSE4> }, \
-    { KEY(width, height, 8, AVX), Satd_SIMD<width, height, AVX> }, \
-    { KEY(width, height, 8, XOP), Satd_SIMD<width, height, XOP> }, \
-    { KEY(width, height, 8, AVX2), Satd_SIMD<width, height, AVX2> },
-#endif
+#define SATD_SSE2(width, height) \
+    SATD_U8_SSE2(width, height) \
+    SATD_U16_SSE2(width, height)
 
 static const std::unordered_map<uint32_t, SADFunction> satd_functions = {
     SATD(4, 4)
@@ -691,20 +673,17 @@ static const std::unordered_map<uint32_t, SADFunction> satd_functions = {
     SATD(128, 64)
     SATD(128, 128)
 #if defined(MVTOOLS_X86)
-    SATD_X264_U8_MMX(4, 4)
-    SATD_X264_U8_SSE2(8, 4)
-    SATD_X264_U8_SSE2(8, 8)
-    SATD_X264_U8_SSE2(16, 8)
-    SATD_X264_U8_SSE2(16, 16)
-    SATD_X264_U8_AVX2(8, 8)
-    SATD_X264_U8_AVX2(16, 8)
-    SATD_X264_U8_AVX2(16, 16)
-    SATD_U8_SIMD(32, 16)
-    SATD_U8_SIMD(32, 32)
-    SATD_U8_SIMD(64, 32)
-    SATD_U8_SIMD(64, 64)
-    SATD_U8_SIMD(128, 64)
-    SATD_U8_SIMD(128, 128)
+    SATD_SSE2(4, 4)
+    SATD_SSE2(8, 4)
+    SATD_SSE2(8, 8)
+    SATD_SSE2(16, 8)
+    SATD_SSE2(16, 16)
+    SATD_SSE2(32, 16)
+    SATD_SSE2(32, 32)
+    SATD_SSE2(64, 32)
+    SATD_SSE2(64, 64)
+    SATD_SSE2(128, 64)
+    SATD_SSE2(128, 128)
 #endif
 };
 
@@ -712,57 +691,23 @@ SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits) {
     SADFunction satd = satd_functions.at(KEY(width, height, bits, Scalar));
 
 #if defined(MVTOOLS_X86)
-    int cpu = g_cpuinfo;
-
-    try {
-        satd = satd_functions.at(KEY(width, height, bits, MMX));
-    } catch (std::out_of_range &) { }
-
     try {
         satd = satd_functions.at(KEY(width, height, bits, SSE2));
     } catch (std::out_of_range &) { }
 
-    if (cpu & X264_CPU_SSSE3) {
-        try {
-            satd = satd_functions.at(KEY(width, height, bits, SSSE3));
-        } catch (std::out_of_range &) { }
-    }
-
-    if (cpu & X264_CPU_SSE4) {
-        try {
-            satd = satd_functions.at(KEY(width, height, bits, SSE4));
-        } catch (std::out_of_range &) { }
-    }
-
-    if (cpu & X264_CPU_AVX) {
-        try {
-            satd = satd_functions.at(KEY(width, height, bits, AVX));
-        } catch (std::out_of_range &) { }
-    }
-
-    if (cpu & X264_CPU_XOP) {
-        try {
-            satd = satd_functions.at(KEY(width, height, bits, XOP));
-        } catch (std::out_of_range &) { }
-    }
-
-    if (cpu & X264_CPU_AVX2) {
-        try {
-            satd = satd_functions.at(KEY(width, height, bits, AVX2));
-        } catch (std::out_of_range &) { }
+    if (g_cpuinfo & X264_CPU_AVX2) {
+        SADFunction tmp = selectSATDFunctionAVX2(width, height, bits);
+        if (tmp)
+            satd = tmp;
     }
 #endif
 
     return satd;
 }
 
-#undef SATD_X264_U8_MMX
-#undef SATD_X264_U8_SSE2
-#undef SATD_X264_U8_SSSE3
-#undef SATD_X264_U8_SSE4
-#undef SATD_X264_U8_AVX
-#undef SATD_X264_U8_XOP
-#undef SATD_X264_U8_AVX2
+#undef SATD_U8_SSE2
+#undef SATD_U16_SSE2
+#undef SATD_SSE2
 #undef SATD
 
 #undef KEY

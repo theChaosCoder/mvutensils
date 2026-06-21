@@ -33,4 +33,5 @@ SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits);
 
 #if defined(MVTOOLS_X86)
 SADFunction selectSADFunctionAVX2(unsigned width, unsigned height, unsigned bits);
+SADFunction selectSATDFunctionAVX2(unsigned width, unsigned height, unsigned bits);
 #endif

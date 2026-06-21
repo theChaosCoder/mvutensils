@@ -139,16 +139,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <NASM Include="..\src\asm\const-a.asm">
-      <Filter>Source Files\x86</Filter>
-    </NASM>
     <NASM Include="..\src\asm\cpu-a.asm">
-      <Filter>Source Files\x86</Filter>
-    </NASM>
-    <NASM Include="..\src\asm\sad-a.asm">
-      <Filter>Source Files\x86</Filter>
-    </NASM>
-    <NASM Include="..\src\asm\pixel-a.asm">
       <Filter>Source Files\x86</Filter>
     </NASM>
   </ItemGroup>
