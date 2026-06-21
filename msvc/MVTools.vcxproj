@@ -105,7 +105,6 @@
     <ClInclude Include="..\src\Degrains.h" />
     <ClInclude Include="..\src\Overlap.h" />
     <ClInclude Include="..\src\SADFunctions.h" />
-    <ClInclude Include="..\src\sse2neon.h" />
     <ClInclude Include="..\src\SuperPyramid.h" />
   </ItemGroup>
   <ItemGroup>
