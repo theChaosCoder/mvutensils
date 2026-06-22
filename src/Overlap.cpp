@@ -193,6 +193,54 @@ struct OverlapsWrapper<4, blockHeight> {
 
 };
 
+template <unsigned blockWidth, unsigned blockHeight>
+struct OverlapsWrapper16 {
+    static_assert(blockWidth >= 8, "");
+
+    static void overlaps_sse2(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const int16_t * MVU_RESTRICT pWin, ptrdiff_t nWinPitch) {
+        for (unsigned y = 0; y < blockHeight; y++) {
+            uint32_t *pDst = (uint32_t *)pDst8;
+            const uint16_t *pSrc = (const uint16_t *)pSrc8;
+            for (unsigned x = 0; x < blockWidth; x += 8) {
+                __m128i src = _mm_loadu_si128((const __m128i *)&pSrc[x]);
+                __m128i win = _mm_loadu_si128((const __m128i *)&pWin[x]);
+                __m128i lo = _mm_mullo_epi16(src, win);
+                __m128i hi = _mm_mulhi_epu16(src, win);
+                __m128i p0 = _mm_srli_epi32(_mm_unpacklo_epi16(lo, hi), 6);
+                __m128i p1 = _mm_srli_epi32(_mm_unpackhi_epi16(lo, hi), 6);
+                _mm_storeu_si128((__m128i *)&pDst[x], _mm_add_epi32(_mm_loadu_si128((const __m128i *)&pDst[x]), p0));
+                _mm_storeu_si128((__m128i *)&pDst[x + 4], _mm_add_epi32(_mm_loadu_si128((const __m128i *)&pDst[x + 4]), p1));
+            }
+            pDst8 += nDstPitch;
+            pSrc8 += nSrcPitch;
+            pWin += nWinPitch;
+        }
+    }
+};
+
+
+template <unsigned blockHeight>
+struct OverlapsWrapper16<4, blockHeight> {
+
+    static void overlaps_sse2(uint8_t * MVU_RESTRICT pDst8, ptrdiff_t nDstPitch, const uint8_t * MVU_RESTRICT pSrc8, ptrdiff_t nSrcPitch, const int16_t * MVU_RESTRICT pWin, ptrdiff_t nWinPitch) {
+        for (unsigned y = 0; y < blockHeight; y++) {
+            uint32_t *pDst = (uint32_t *)pDst8;
+            const uint16_t *pSrc = (const uint16_t *)pSrc8;
+
+            __m128i src = _mm_loadl_epi64((const __m128i *)pSrc);
+            __m128i win = _mm_loadl_epi64((const __m128i *)pWin);
+            __m128i lo = _mm_mullo_epi16(src, win);
+            __m128i hi = _mm_mulhi_epu16(src, win);
+            __m128i p0 = _mm_srli_epi32(_mm_unpacklo_epi16(lo, hi), 6);
+            _mm_storeu_si128((__m128i *)pDst, _mm_add_epi32(_mm_loadu_si128((const __m128i *)pDst), p0));
+
+            pDst8 += nDstPitch;
+            pSrc8 += nSrcPitch;
+            pWin += nWinPitch;
+        }
+    }
+};
+
 
 #endif
 
@@ -203,8 +251,11 @@ struct OverlapsWrapper<4, blockHeight> {
 #if defined(MVTOOLS_X86)
 #define OVERS_SSE2(width, height) \
     { KEY(width, height, 8, MVOPT_SSE2), OverlapsWrapper<width, height>::overlaps_sse2 },
+#define OVERS_SSE2_16(width, height) \
+    { KEY(width, height, 16, MVOPT_SSE2), OverlapsWrapper16<width, height>::overlaps_sse2 },
 #else
 #define OVERS_SSE2(width, height)
+#define OVERS_SSE2_16(width, height)
 #endif
 
 #define OVERS(width, height) \
@@ -264,6 +315,31 @@ static const std::unordered_map<uint32_t, OverlapsFunction> overlaps_functions =
     OVERS_SSE2(128, 32)
     OVERS_SSE2(128, 64)
     OVERS_SSE2(128, 128)
+    OVERS_SSE2_16(4, 2)
+    OVERS_SSE2_16(4, 4)
+    OVERS_SSE2_16(4, 8)
+    OVERS_SSE2_16(8, 1)
+    OVERS_SSE2_16(8, 2)
+    OVERS_SSE2_16(8, 4)
+    OVERS_SSE2_16(8, 8)
+    OVERS_SSE2_16(8, 16)
+    OVERS_SSE2_16(16, 1)
+    OVERS_SSE2_16(16, 2)
+    OVERS_SSE2_16(16, 4)
+    OVERS_SSE2_16(16, 8)
+    OVERS_SSE2_16(16, 16)
+    OVERS_SSE2_16(16, 32)
+    OVERS_SSE2_16(32, 8)
+    OVERS_SSE2_16(32, 16)
+    OVERS_SSE2_16(32, 32)
+    OVERS_SSE2_16(32, 64)
+    OVERS_SSE2_16(64, 16)
+    OVERS_SSE2_16(64, 32)
+    OVERS_SSE2_16(64, 64)
+    OVERS_SSE2_16(64, 128)
+    OVERS_SSE2_16(128, 32)
+    OVERS_SSE2_16(128, 64)
+    OVERS_SSE2_16(128, 128)
 };
 
 OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigned bits) {
@@ -285,4 +361,5 @@ OverlapsFunction selectOverlapsFunction(unsigned width, unsigned height, unsigne
 
 #undef OVERS
 #undef OVERS_SSE2
+#undef OVERS_SSE2_16
 #undef KEY

@@ -33,6 +33,25 @@ static void overlaps_avx2(uint8_t *pDst8, ptrdiff_t nDstPitch, const uint8_t *pS
     }
 }
 
+template <int blockWidth, int blockHeight>
+static void overlaps_avx2_u16(uint8_t *pDst8, ptrdiff_t nDstPitch, const uint8_t *pSrc8, ptrdiff_t nSrcPitch, const int16_t *pWin, ptrdiff_t nWinPitch) {
+    static_assert(blockWidth >= 8, "");
+
+    for (unsigned y = 0; y < (unsigned)blockHeight; y++) {
+        uint32_t *pDst = (uint32_t *)pDst8;
+        const uint16_t *pSrc = (const uint16_t *)pSrc8;
+        for (unsigned x = 0; x < (unsigned)blockWidth; x += 8) {
+            __m256i src = _mm256_cvtepu16_epi32(_mm_loadu_si128((const __m128i *)&pSrc[x]));
+            __m256i win = _mm256_cvtepu16_epi32(_mm_loadu_si128((const __m128i *)&pWin[x]));
+            __m256i p = _mm256_srli_epi32(_mm256_mullo_epi32(src, win), 6);
+            _mm256_storeu_si256((__m256i *)&pDst[x], _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)&pDst[x]), p));
+        }
+        pDst8 += nDstPitch;
+        pSrc8 += nSrcPitch;
+        pWin += nWinPitch;
+    }
+}
+
 #endif
 
 
@@ -49,12 +68,16 @@ enum InstructionSets {
 #if defined(MVTOOLS_X86)
 #define OVERS_AVX2(width, height) \
     { KEY(width, height, 8, AVX2), overlaps_avx2<width, height> },
+#define OVERS_AVX2_16(width, height) \
+    { KEY(width, height, 16, AVX2), overlaps_avx2_u16<width, height> },
 #else
 #define OVERS_AVX2(width, height)
+#define OVERS_AVX2_16(width, height)
 #endif
 
 static const std::unordered_map<uint32_t, OverlapsFunction> overlaps_functions = {
-    // width 8 intentionally omitted: the SSE2 intrinsic is faster there (see overlaps_avx2 note)
+    // 8-bit: width 8 intentionally omitted -- the SSE2 intrinsic is faster there (see overlaps_avx2 note).
+    // 16-bit: width 8 IS included -- a ymm holds 8 uint32 = one full width-8 row, so no row stitching.
     OVERS_AVX2(16, 1)
     OVERS_AVX2(16, 2)
     OVERS_AVX2(16, 4)
@@ -72,6 +95,28 @@ static const std::unordered_map<uint32_t, OverlapsFunction> overlaps_functions =
     OVERS_AVX2(128, 32)
     OVERS_AVX2(128, 64)
     OVERS_AVX2(128, 128)
+    OVERS_AVX2_16(8, 1)
+    OVERS_AVX2_16(8, 2)
+    OVERS_AVX2_16(8, 4)
+    OVERS_AVX2_16(8, 8)
+    OVERS_AVX2_16(8, 16)
+    OVERS_AVX2_16(16, 1)
+    OVERS_AVX2_16(16, 2)
+    OVERS_AVX2_16(16, 4)
+    OVERS_AVX2_16(16, 8)
+    OVERS_AVX2_16(16, 16)
+    OVERS_AVX2_16(16, 32)
+    OVERS_AVX2_16(32, 8)
+    OVERS_AVX2_16(32, 16)
+    OVERS_AVX2_16(32, 32)
+    OVERS_AVX2_16(32, 64)
+    OVERS_AVX2_16(64, 16)
+    OVERS_AVX2_16(64, 32)
+    OVERS_AVX2_16(64, 64)
+    OVERS_AVX2_16(64, 128)
+    OVERS_AVX2_16(128, 32)
+    OVERS_AVX2_16(128, 64)
+    OVERS_AVX2_16(128, 128)
 };
 
 
