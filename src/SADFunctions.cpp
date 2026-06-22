@@ -576,9 +576,10 @@ static FORCE_INLINE __m128i satd_4x4_u8(const uint8_t *s, intptr_t sp, const uin
     __m128i lo = _mm_unpacklo_epi32(p0, p1), hi = _mm_unpackhi_epi32(p0, p1);
     __m128i T0 = _mm_move_epi64(lo), T1 = _mm_srli_si128(lo, 8), T2 = _mm_move_epi64(hi), T3 = _mm_srli_si128(hi, 8);
     __m128i u0 = _mm_add_epi16(T0, T1), u1 = _mm_sub_epi16(T0, T1), u2 = _mm_add_epi16(T2, T3), u3 = _mm_sub_epi16(T2, T3);
-    __m128i v0 = _mm_add_epi16(u0, u2), v1 = _mm_add_epi16(u1, u3), v2 = _mm_sub_epi16(u0, u2), v3 = _mm_sub_epi16(u1, u3);
-    __m128i a = _mm_add_epi16(_mm_add_epi16(satd_abs_epi16(v0), satd_abs_epi16(v1)), _mm_add_epi16(satd_abs_epi16(v2), satd_abs_epi16(v3)));
-    return _mm_madd_epi16(a, _mm_set1_epi16(1));
+    // |x+y|+|x-y| == 2*max(|x|,|y|): fold last butterfly + abs + satd >>1 into one max (pmaxsw is SSE2).
+    __m128i m0 = _mm_max_epi16(satd_abs_epi16(u0), satd_abs_epi16(u2));
+    __m128i m1 = _mm_max_epi16(satd_abs_epi16(u1), satd_abs_epi16(u3));
+    return _mm_madd_epi16(_mm_add_epi16(m0, m1), _mm_set1_epi16(1)); // already halved; caller must NOT >>1
 }
 static FORCE_INLINE __m128i satd_8x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     const __m128i z = _mm_setzero_si128();
@@ -595,9 +596,10 @@ static FORCE_INLINE __m128i satd_8x4_u8(const uint8_t *s, intptr_t sp, const uin
     __m128i r0 = _mm_unpacklo_epi64(loA, loB), r1 = _mm_unpackhi_epi64(loA, loB);
     __m128i r2 = _mm_unpacklo_epi64(hiA, hiB), r3 = _mm_unpackhi_epi64(hiA, hiB);
     __m128i u0 = _mm_add_epi16(r0, r1), u1 = _mm_sub_epi16(r0, r1), u2 = _mm_add_epi16(r2, r3), u3 = _mm_sub_epi16(r2, r3);
-    __m128i v0 = _mm_add_epi16(u0, u2), v1 = _mm_add_epi16(u1, u3), v2 = _mm_sub_epi16(u0, u2), v3 = _mm_sub_epi16(u1, u3);
-    __m128i a = _mm_add_epi16(_mm_add_epi16(satd_abs_epi16(v0), satd_abs_epi16(v1)), _mm_add_epi16(satd_abs_epi16(v2), satd_abs_epi16(v3)));
-    return _mm_madd_epi16(a, _mm_set1_epi16(1));
+    // |x+y|+|x-y| == 2*max(|x|,|y|): fold last butterfly + abs + satd >>1 into one max (pmaxsw is SSE2).
+    __m128i m0 = _mm_max_epi16(satd_abs_epi16(u0), satd_abs_epi16(u2));
+    __m128i m1 = _mm_max_epi16(satd_abs_epi16(u1), satd_abs_epi16(u3));
+    return _mm_madd_epi16(_mm_add_epi16(m0, m1), _mm_set1_epi16(1)); // already halved; caller must NOT >>1
 }
 static FORCE_INLINE __m128i satd_4x4_u16(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     const __m128i z = _mm_setzero_si128();
@@ -625,7 +627,7 @@ static unsigned int satd_u8_sse2(const uint8_t *src, intptr_t sp, const uint8_t 
             for (unsigned x = 0; x < W; x += 8)
                 acc = _mm_add_epi32(acc, satd_8x4_u8(src + y * sp + x, sp, ref + y * rp + x, rp));
     }
-    uint64_t sum = (uint64_t)satd_hsum_epi32(acc) >> 1;
+    uint64_t sum = satd_hsum_epi32(acc); // cores already halved (amax)
     return (unsigned)(sum > 0xFFFFFFFFu ? 0xFFFFFFFFu : sum);
 }
 template <unsigned W, unsigned H>

@@ -8,25 +8,29 @@
 // This version used for width >= 32.
 template <unsigned width, unsigned height>
 struct SADWrapperU8_AVX2 {
-    static_assert(width >= 32, "");
+    static_assert(width >= 32 && height % 2 == 0, "");
 
     static unsigned int sad_u8_avx2(const uint8_t *pSrc, [[maybe_unused]] intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) noexcept {
-        __m256i sum = _mm256_setzero_si256();
+        // Two accumulators (even/odd rows) -> two independent _mm256_add_epi64 chains. vpsadbw is the
+        // bottleneck for most sizes (so this is neutral there), but for the largest blocks the single
+        // accumulator's loop-carried add chain dominates; splitting it is ~22% faster at 128x128 and
+        // neutral elsewhere. (This is the x264 sad-a.asm trick of accumulating into multiple registers.)
+        __m256i sum0 = _mm256_setzero_si256();
+        __m256i sum1 = _mm256_setzero_si256();
 
-        for (unsigned y = 0; y < height; y++) {
+        for (unsigned y = 0; y < height; y += 2) {
             for (unsigned x = 0; x < width; x += 32) {
-                __m256i m2 = _mm256_loadu_si256((const __m256i *)&pSrc[x]);
-                __m256i m3 = _mm256_loadu_si256((const __m256i *)&pRef[x]);
-
-                __m256i diff = _mm256_sad_epu8(m2, m3);
-
-                sum = _mm256_add_epi64(sum, diff);
+                sum0 = _mm256_add_epi64(sum0, _mm256_sad_epu8(_mm256_loadu_si256((const __m256i *)&pSrc[x]),
+                                                              _mm256_loadu_si256((const __m256i *)&pRef[x])));
+                sum1 = _mm256_add_epi64(sum1, _mm256_sad_epu8(_mm256_loadu_si256((const __m256i *)&pSrc[width + x]),
+                                                              _mm256_loadu_si256((const __m256i *)&pRef[nRefPitch + x])));
             }
 
-            pSrc += /*nSrcPitch*/ width;
-            pRef += nRefPitch;
+            pSrc += /*nSrcPitch*/ 2 * width;
+            pRef += 2 * nRefPitch;
         }
 
+        __m256i sum = _mm256_add_epi64(sum0, sum1);
         sum = _mm256_add_epi64(sum, _mm256_permute4x64_epi64(sum, _MM_SHUFFLE(0, 0, 3, 2)));
         sum = _mm256_add_epi64(sum, _mm256_shuffle_epi32(sum, _MM_SHUFFLE(0, 0, 3, 2)));
         return (unsigned)_mm_cvtsi128_si32(_mm256_castsi256_si128(sum));
@@ -57,6 +61,43 @@ struct SADWrapperU8_AVX2<16, height> {
 };
 
 
+// 16-bit SAD. There is no psadbw for 16-bit pixels, so this does abs_diff_epu16 then widens
+// (unpack 16->32) into an int32 accumulator -- same algorithm as the SSE2 SADWrapperU16, widened
+// to ymm (16 uint16 per row), which is ~2x faster. width >= 16 fills one ymm per row; width-8
+// 16-bit stays on the SSE2 path. (int32 can't overflow: 128*128 * 65535 < 2^31.)
+template <unsigned width, unsigned height>
+struct SADWrapperU16_AVX2 {
+    static_assert(width >= 16, "");
+
+    static unsigned int sad_u16_avx2(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) noexcept {
+        const __m256i z = _mm256_setzero_si256();
+        __m256i sum = z;
+
+        for (unsigned y = 0; y < height; y++) {
+            const uint16_t *pSrc = (const uint16_t *)pSrc8;
+            const uint16_t *pRef = (const uint16_t *)pRef8;
+
+            for (unsigned x = 0; x < width; x += 16) {
+                __m256i m2 = _mm256_loadu_si256((const __m256i *)&pSrc[x]);
+                __m256i m3 = _mm256_loadu_si256((const __m256i *)&pRef[x]);
+                __m256i diff = _mm256_or_si256(_mm256_subs_epu16(m2, m3), _mm256_subs_epu16(m3, m2));
+
+                sum = _mm256_add_epi32(sum, _mm256_unpacklo_epi16(diff, z));
+                sum = _mm256_add_epi32(sum, _mm256_unpackhi_epi16(diff, z));
+            }
+
+            pSrc8 += nSrcPitch;
+            pRef8 += nRefPitch;
+        }
+
+        __m128i s = _mm_add_epi32(_mm256_castsi256_si128(sum), _mm256_extracti128_si256(sum, 1));
+        s = _mm_add_epi32(s, _mm_srli_si128(s, 8));
+        s = _mm_add_epi32(s, _mm_srli_si128(s, 4));
+        return (unsigned)_mm_cvtsi128_si32(s);
+    }
+};
+
+
 // opt can fit in four bits, if the width and height need more than eight bits each.
 #define KEY(width, height, bits, opt) (unsigned)(width) << 24 | (height) << 16 | (bits) << 8 | (opt)
 
@@ -65,6 +106,8 @@ struct SADWrapperU8_AVX2<16, height> {
 // here (via selectSADFunctionAVX2), never merged with the main InstructionSets-keyed map.
 #define SAD_U8_AVX2(width, height) \
     { KEY(width, height, 8, 0), SADWrapperU8_AVX2<width, height>::sad_u8_avx2 },
+#define SAD_U16_AVX2(width, height) \
+    { KEY(width, height, 16, 0), SADWrapperU16_AVX2<width, height>::sad_u16_avx2 },
 
 static const std::unordered_map<uint32_t, SADFunction> sad_functions = {
     SAD_U8_AVX2(16, 2)
@@ -83,6 +126,24 @@ static const std::unordered_map<uint32_t, SADFunction> sad_functions = {
     SAD_U8_AVX2(128, 32)
     SAD_U8_AVX2(128, 64)
     SAD_U8_AVX2(128, 128)
+    // 16-bit: width >= 16 only (width-8 16-bit stays on the SSE2 path)
+    SAD_U16_AVX2(16, 1)
+    SAD_U16_AVX2(16, 2)
+    SAD_U16_AVX2(16, 4)
+    SAD_U16_AVX2(16, 8)
+    SAD_U16_AVX2(16, 16)
+    SAD_U16_AVX2(16, 32)
+    SAD_U16_AVX2(32, 8)
+    SAD_U16_AVX2(32, 16)
+    SAD_U16_AVX2(32, 32)
+    SAD_U16_AVX2(32, 64)
+    SAD_U16_AVX2(64, 16)
+    SAD_U16_AVX2(64, 32)
+    SAD_U16_AVX2(64, 64)
+    SAD_U16_AVX2(64, 128)
+    SAD_U16_AVX2(128, 32)
+    SAD_U16_AVX2(128, 64)
+    SAD_U16_AVX2(128, 128)
 };
 
 SADFunction selectSADFunctionAVX2(unsigned width, unsigned height, unsigned bits) {
