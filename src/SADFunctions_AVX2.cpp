@@ -1,8 +1,12 @@
 #include <cstdint>
 #include <stdexcept>
 #include <unordered_map>
-#include <immintrin.h>
+
 #include "SADFunctions.h"
+
+#if defined(MVTOOLS_X86)
+
+#include <immintrin.h>
 
 
 // This version used for width >= 32.
@@ -293,3 +297,5 @@ SADFunction selectSATDFunctionAVX2(unsigned width, unsigned height, unsigned bit
         return nullptr;
     }
 }
+
+#endif // MVTOOLS_X86

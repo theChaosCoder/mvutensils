@@ -352,7 +352,7 @@ static const VSFrame *VS_CC degrainGetFrame(int n, int activationReason, void *i
 // opt can fit in four bits, if the width and height need more than eight bits each.
 #define KEY(width, height, bits, opt) (unsigned)(width) << 24 | (height) << 16 | (bits) << 8 | (opt)
 
-#if defined(MVTOOLS_X86) || defined(MVTOOLS_ARM)
+#if defined(MVTOOLS_X86)
 #define DEGRAIN_SSE2(radius, width, height) \
     { KEY(width, height, 8, MVOPT_SSE2), Degrain_sse2<radius, width, height> },
 
@@ -433,6 +433,7 @@ static const std::unordered_map<uint32_t, DenoiseFunction> degrain_functions[6] 
     DEGRAIN_LEVEL(6),
 };
 
+#if defined(MVTOOLS_X86)
 static const std::unordered_map<uint32_t, DenoiseFunction> degrain_functions_sse2[6] = {
     DEGRAIN_LEVEL_SSE2(1),
     DEGRAIN_LEVEL_SSE2(2),
@@ -441,11 +442,12 @@ static const std::unordered_map<uint32_t, DenoiseFunction> degrain_functions_sse
     DEGRAIN_LEVEL_SSE2(5),
     DEGRAIN_LEVEL_SSE2(6),
 };
+#endif
 
 static DenoiseFunction selectDegrainFunction(unsigned radius, unsigned width, unsigned height, unsigned bits) {
     DenoiseFunction degrain = degrain_functions[radius - 1].at(KEY(width, height, bits, MVOPT_SCALAR));
 
-#if defined(MVTOOLS_X86) || defined(MVTOOLS_ARM)
+#if defined(MVTOOLS_X86)
     try {
         degrain = degrain_functions_sse2[radius - 1].at(KEY(width, height, bits, MVOPT_SSE2));
     } catch (std::out_of_range &) { }
