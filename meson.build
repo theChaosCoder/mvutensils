@@ -24,22 +24,7 @@ libs = []
 add_project_arguments('-DPACKAGE_VERSION="@0@"'.format(meson.project_version()), language: ['cpp'])
 
 if host_machine.cpu_family() == 'x86_64'
-    add_languages('nasm', native: false)
-
     add_project_arguments('-DMVTOOLS_X86', language: ['cpp'])
-
-    add_project_arguments(
-        '-DARCH_X86_64=1',
-        '-DBIT_DEPTH=8',
-        '-DHIGH_BIT_DEPTH=0',
-        '-DPIC',
-        '-Dprivate_prefix=mvtools',
-        language: 'nasm',
-    )
-
-    if host_machine.system() == 'darwin'
-        add_project_arguments('-DPREFIX', language: ['cpp', 'nasm'])
-    endif
 
     libs += static_library('avx2',
         files(
@@ -59,14 +44,6 @@ if host_machine.cpu_family() == 'x86_64'
         cpp_args: '-march=x86-64-v4 -mprefer-vector-width=512',
         gnu_symbol_visibility: 'hidden',
         include_directories: incdir,
-    )
-
-    libs += static_library('asm',
-        files(
-            'src/asm/cpu-a.asm',
-        ),
-        gnu_symbol_visibility: 'hidden',
-        include_directories: include_directories('src/asm/include'),
     )
 elif host_machine.cpu_family() == 'aarch64'
     add_project_arguments('-DMVTOOLS_ARM', language: ['cpp'])

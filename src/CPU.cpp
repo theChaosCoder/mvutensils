@@ -45,7 +45,7 @@ unsigned long long do_xgetbv(unsigned ecx) {
 } // namespace
 
 
-uint32_t cpu_detect(void) {
+uint32_t cpu_detect() {
     uint32_t cpu = 0;
     int regs[4] = { 0 };
 
@@ -87,9 +87,9 @@ uint32_t cpu_detect(void) {
     return cpu;
 }
 
-#else // not MVTOOLS_X86 (e.g. aarch64) -- no x86 SIMD features
+#else // not MVTOOLS_X86
 
-uint32_t cpu_detect(void) {
+uint32_t cpu_detect() {
     return 0;
 }
 
