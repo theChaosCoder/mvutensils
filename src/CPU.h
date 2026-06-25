@@ -22,7 +22,7 @@ enum {
     MVU_CPU_AVX512BF16         = 1u << 10,
 };
 
-uint32_t cpu_detect(void);
+uint32_t cpu_detect();
 
 enum {
     MVOPT_SCALAR = 0,
