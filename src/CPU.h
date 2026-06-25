@@ -3,58 +3,32 @@
 #include <cstdint>
 
 
-#if defined(MVTOOLS_X86)
-
-#define X264_CPU_CMOV            0x0000001
-#define X264_CPU_MMX             0x0000002
-#define X264_CPU_MMX2            0x0000004  /* MMX2 aka MMXEXT aka ISSE */
-#define X264_CPU_MMXEXT          X264_CPU_MMX2
-#define X264_CPU_SSE             0x0000008
-#define X264_CPU_SSE2            0x0000010
-#define X264_CPU_SSE3            0x0000020
-#define X264_CPU_SSSE3           0x0000040
-#define X264_CPU_SSE4            0x0000080  /* SSE4.1 */
-#define X264_CPU_SSE42           0x0000100  /* SSE4.2 */
-#define X264_CPU_LZCNT           0x0000200  /* Phenom support for "leading zero count" instruction. */
-#define X264_CPU_AVX             0x0000400  /* AVX support: requires OS support even if YMM registers aren't used. */
-#define X264_CPU_XOP             0x0000800  /* AMD XOP */
-#define X264_CPU_FMA4            0x0001000  /* AMD FMA4 */
-#define X264_CPU_FMA3            0x0002000  /* FMA3 */
-#define X264_CPU_AVX2            0x0004000  /* AVX2 */
-#define X264_CPU_BMI1            0x0008000  /* BMI1 */
-#define X264_CPU_BMI2            0x0010000  /* BMI2 */
-/* x86 modifiers */
-#define X264_CPU_CACHELINE_32    0x0020000  /* avoid memory loads that span the border between two cachelines */
-#define X264_CPU_CACHELINE_64    0x0040000  /* 32/64 is the size of a cacheline in bytes */
-#define X264_CPU_SSE2_IS_SLOW    0x0080000  /* avoid most SSE2 functions on Athlon64 */
-#define X264_CPU_SSE2_IS_FAST    0x0100000  /* a few functions are only faster on Core2 and Phenom */
-#define X264_CPU_SLOW_SHUFFLE    0x0200000  /* The Conroe has a slow shuffle unit (relative to overall SSE performance) */
-#define X264_CPU_STACK_MOD4      0x0400000  /* if stack is only mod4 and not mod16 */
-#define X264_CPU_SLOW_CTZ        0x0800000  /* BSR/BSF x86 instructions are really slow on some CPUs */
-#define X264_CPU_SLOW_ATOM       0x1000000  /* The Atom is terrible: slow SSE unaligned loads, slow
-                                             * SIMD multiplies, slow SIMD variable shifts, slow pshufb,
-                                             * cacheline split penalties -- gather everything here that
-                                             * isn't shared by other CPUs to avoid making half a dozen
-                                             * new SLOW flags. */
-#define X264_CPU_SLOW_PSHUFB     0x2000000  /* such as on the Intel Atom */
-#define X264_CPU_SLOW_PALIGNR    0x4000000  /* such as on the AMD Bobcat */
-#define X264_CPU_AVX512          0x8000000  /* AVX-512 {F,CD,BW,DQ,VL} (x86-64-v4) */
-
-extern "C" void mvtools_cpu_cpuid(uint32_t op, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
-extern "C" uint64_t mvtools_cpu_xgetbv(int xcr);
-
-#endif // MVTOOLS_X86
+// CPU feature flags. We only care about AVX2 and the AVX-512 feature levels here; the detection
+// (CPU.cpp) uses the CPUID/XGETBV compiler intrinsics, no external asm. Each AVX-512 bit also implies
+// the OS saves the ZMM/opmask state. MVU_CPU_AVX512_BASE is the x86-64-v4 baseline (F+CD+BW+DQ+VL --
+// what /arch:AVX512 and -march=x86-64-v4 target) collapsed into one flag; the rest are the optional
+// extensions on top of that baseline.
+enum {
+    MVU_CPU_AVX2               = 1u << 0,
+    MVU_CPU_AVX512_BASE        = 1u << 1,   // F + CD + BW + DQ + VL (x86-64-v4)
+    MVU_CPU_AVX512IFMA         = 1u << 2,
+    MVU_CPU_AVX512VBMI         = 1u << 3,
+    MVU_CPU_AVX512VBMI2        = 1u << 4,
+    MVU_CPU_AVX512VNNI         = 1u << 5,
+    MVU_CPU_AVX512BITALG       = 1u << 6,
+    MVU_CPU_AVX512VPOPCNTDQ    = 1u << 7,
+    MVU_CPU_AVX512VP2INTERSECT = 1u << 8,
+    MVU_CPU_AVX512FP16         = 1u << 9,
+    MVU_CPU_AVX512BF16         = 1u << 10,
+};
 
 uint32_t cpu_detect(void);
 
 enum {
     MVOPT_SCALAR = 0,
 #ifdef MVTOOLS_X86
-    MVOPT_SSE2 = 1,
-    MVOPT_AVX2 = 2,
-#elif MVTOOLS_ARM
-    MVOPT_NEON = 1,
-    MVOPT_SSE2 = 1, // SSE2 is converted to Neon
+    MVOPT_SSE2   = 1,
+    MVOPT_AVX2   = 2
 #endif // MVTOOLS_X86
 };
 

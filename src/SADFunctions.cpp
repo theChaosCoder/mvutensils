@@ -386,12 +386,12 @@ SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits) {
         sad = sad_functions.at(KEY(width, height, bits, SSE2));
     } catch (std::out_of_range &) { }
 
-    if (g_cpuinfo & X264_CPU_AVX2) {
+    if (g_cpuinfo & MVU_CPU_AVX2) {
         SADFunction tmp = selectSADFunctionAVX2(width, height, bits);
         if (tmp)
             sad = tmp;
     }
-    if (g_cpuinfo & X264_CPU_AVX512) {
+    if (g_cpuinfo & MVU_CPU_AVX512_BASE) {
         SADFunction tmp = selectSADFunctionAVX512(width, height, bits);
         if (tmp)
             sad = tmp;
@@ -695,12 +695,12 @@ SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits) {
         satd = satd_functions.at(KEY(width, height, bits, SSE2));
     } catch (std::out_of_range &) { }
 
-    if (g_cpuinfo & X264_CPU_AVX2) {
+    if (g_cpuinfo & MVU_CPU_AVX2) {
         SADFunction tmp = selectSATDFunctionAVX2(width, height, bits);
         if (tmp)
             satd = tmp;
     }
-    if (g_cpuinfo & X264_CPU_AVX512) {
+    if (g_cpuinfo & MVU_CPU_AVX512_BASE) {
         SADFunction tmp = selectSATDFunctionAVX512(width, height, bits);
         if (tmp)
             satd = tmp;
