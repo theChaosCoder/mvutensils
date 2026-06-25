@@ -398,6 +398,11 @@ SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits) {
         if (tmp)
             sad = tmp;
     }
+    if (g_cpuinfo & X264_CPU_AVX512) {
+        SADFunction tmp = selectSADFunctionAVX512(width, height, bits);
+        if (tmp)
+            sad = tmp;
+    }
 #endif
 
     return sad;
@@ -699,6 +704,11 @@ SADFunction selectSATDFunction(unsigned width, unsigned height, unsigned bits) {
 
     if (g_cpuinfo & X264_CPU_AVX2) {
         SADFunction tmp = selectSATDFunctionAVX2(width, height, bits);
+        if (tmp)
+            satd = tmp;
+    }
+    if (g_cpuinfo & X264_CPU_AVX512) {
+        SADFunction tmp = selectSATDFunctionAVX512(width, height, bits);
         if (tmp)
             satd = tmp;
     }

@@ -80,6 +80,9 @@
     <ClCompile Include="..\src\SADFunctions_AVX2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\SADFunctions_AVX512.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\SADFunctions.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

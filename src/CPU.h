@@ -38,6 +38,7 @@
                                              * new SLOW flags. */
 #define X264_CPU_SLOW_PSHUFB     0x2000000  /* such as on the Intel Atom */
 #define X264_CPU_SLOW_PALIGNR    0x4000000  /* such as on the AMD Bobcat */
+#define X264_CPU_AVX512          0x8000000  /* AVX-512 {F,CD,BW,DQ,VL} (x86-64-v4) */
 
 extern "C" void mvtools_cpu_cpuid(uint32_t op, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 extern "C" uint64_t mvtools_cpu_xgetbv(int xcr);

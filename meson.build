@@ -52,6 +52,15 @@ if host_machine.cpu_family() == 'x86_64'
         include_directories: incdir,
     )
 
+    libs += static_library('avx512',
+        files(
+            'src/SADFunctions_AVX512.cpp',
+        ),
+        cpp_args: '-march=x86-64-v4 -mprefer-vector-width=512',
+        gnu_symbol_visibility: 'hidden',
+        include_directories: incdir,
+    )
+
     libs += static_library('asm',
         files(
             'src/asm/cpu-a.asm',

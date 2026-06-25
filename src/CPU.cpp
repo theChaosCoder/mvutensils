@@ -81,6 +81,8 @@ uint32_t cpu_detect(void) {
                     cpu |= X264_CPU_BMI1;
                 if (ebx & 0x00000100)
                     cpu |= X264_CPU_BMI2;
+                if ((xcr0 & 0xE0) == 0xE0 && (ebx & 0xD0030000) == 0xD0030000)
+                    cpu |= X264_CPU_AVX512;
             }
         }
     }
