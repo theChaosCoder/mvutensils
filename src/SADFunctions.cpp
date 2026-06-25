@@ -4,19 +4,12 @@
 
 #include "CPU.h"
 #include "SADFunctions.h"
-
+#include "Common.h"
 
 enum InstructionSets {
     Scalar,
     SSE2,
 };
-
-
-#ifdef _WIN32
-#define FORCE_INLINE __forceinline
-#else
-#define FORCE_INLINE inline __attribute__((always_inline))
-#endif
 
 extern uint32_t g_cpuinfo;
 
@@ -133,13 +126,13 @@ struct SADWrapperU8<8, height> {
 };
 
 
-static FORCE_INLINE __m128i abs_diff_epu16(const __m128i &a, const __m128i &b) {
+static MVU_FORCE_INLINE __m128i abs_diff_epu16(const __m128i &a, const __m128i &b) {
     return _mm_or_si128(_mm_subs_epu16(a, b),
                         _mm_subs_epu16(b, a));
 }
 
 
-static FORCE_INLINE __m128i hsum_epi32(const __m128i &a) {
+static MVU_FORCE_INLINE __m128i hsum_epi32(const __m128i &a) {
     __m128i sum = a;
     __m128i m0 = _mm_srli_si128(sum, 8);
     sum = _mm_add_epi32(sum, m0);
@@ -430,7 +423,7 @@ SADFunction selectSADFunction(unsigned width, unsigned height, unsigned bits) {
 // in: a pseudo-simd number of the form x+(y<<16)
 // return: abs(x)+(abs(y)<<16)
 template <typename SumType, typename SumType2>
-static FORCE_INLINE SumType2 abs2(SumType2 a) {
+static MVU_FORCE_INLINE SumType2 abs2(SumType2 a) {
     int bitsPerSum = 8 * sizeof(SumType);
 
     SumType2 s = ((a >> (bitsPerSum - 1)) & (((SumType2)1 << bitsPerSum) + 1)) * ((SumType)-1);
@@ -439,7 +432,7 @@ static FORCE_INLINE SumType2 abs2(SumType2 a) {
 
 
 template <typename PixelType, typename SumType, typename SumType2>
-static FORCE_INLINE unsigned int Real_Satd_4x4_C(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) {
+static MVU_FORCE_INLINE unsigned int Real_Satd_4x4_C(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) {
     int bitsPerSum = 8 * sizeof(SumType);
 
     SumType2 tmp[4][2];
@@ -474,7 +467,7 @@ static FORCE_INLINE unsigned int Real_Satd_4x4_C(const uint8_t *pSrc8, intptr_t 
 
 
 template <typename PixelType>
-static FORCE_INLINE unsigned int Satd_4x4_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+static MVU_FORCE_INLINE unsigned int Satd_4x4_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
     if (sizeof(PixelType) == 1)
         return Real_Satd_4x4_C<PixelType, uint16_t, uint32_t>(pSrc, nSrcPitch, pRef, nRefPitch);
     else
@@ -483,7 +476,7 @@ static FORCE_INLINE unsigned int Satd_4x4_C(const uint8_t *pSrc, intptr_t nSrcPi
 
 
 template <typename PixelType, typename SumType, typename SumType2>
-static FORCE_INLINE unsigned int Real_Satd_8x4_C(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) {
+static MVU_FORCE_INLINE unsigned int Real_Satd_8x4_C(const uint8_t *pSrc8, intptr_t nSrcPitch, const uint8_t *pRef8, intptr_t nRefPitch) {
     int bitsPerSum = 8 * sizeof(SumType);
 
     SumType2 tmp[4][4];
@@ -512,7 +505,7 @@ static FORCE_INLINE unsigned int Real_Satd_8x4_C(const uint8_t *pSrc8, intptr_t 
 }
 
 template <typename PixelType>
-static FORCE_INLINE unsigned int Satd_8x4_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
+static MVU_FORCE_INLINE unsigned int Satd_8x4_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_t *pRef, intptr_t nRefPitch) {
     if (sizeof(PixelType) == 1)
         return Real_Satd_8x4_C<PixelType, uint16_t, uint32_t>(pSrc, nSrcPitch, pRef, nRefPitch);
     else
@@ -553,23 +546,23 @@ static unsigned int Satd_C(const uint8_t *pSrc, intptr_t nSrcPitch, const uint8_
 // -> 4x4 transpose -> Hadamard -> abs -> sum; abs-sum is order/sign invariant so any valid
 // 4-point butterfly works. 8-bit packs two 4x4 in the 128-bit lanes (8x4 core); 16-bit uses
 // int32 lanes (4x4 core) with int64 accumulation.
-static FORCE_INLINE __m128i satd_abs_epi16(__m128i x) noexcept {
+static MVU_FORCE_INLINE __m128i satd_abs_epi16(__m128i x) noexcept {
     __m128i s = _mm_srai_epi16(x, 15);
     return _mm_sub_epi16(_mm_xor_si128(x, s), s);
 }
-static FORCE_INLINE __m128i satd_abs_epi32(__m128i x) noexcept {
+static MVU_FORCE_INLINE __m128i satd_abs_epi32(__m128i x) noexcept {
     __m128i s = _mm_srai_epi32(x, 31);
     return _mm_sub_epi32(_mm_xor_si128(x, s), s);
 }
-static FORCE_INLINE unsigned satd_hsum_epi32(__m128i a) noexcept {
+static MVU_FORCE_INLINE unsigned satd_hsum_epi32(__m128i a) noexcept {
     a = _mm_add_epi32(a, _mm_srli_si128(a, 8));
     a = _mm_add_epi32(a, _mm_srli_si128(a, 4));
     return (unsigned)_mm_cvtsi128_si32(a);
 }
-static FORCE_INLINE uint64_t satd_hsum2_epi64(__m128i a) noexcept {
+static MVU_FORCE_INLINE uint64_t satd_hsum2_epi64(__m128i a) noexcept {
     return (uint64_t)_mm_cvtsi128_si64(a) + (uint64_t)_mm_cvtsi128_si64(_mm_unpackhi_epi64(a, a));
 }
-static FORCE_INLINE __m128i satd_4x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m128i satd_4x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     const __m128i z = _mm_setzero_si128();
     __m128i d0 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(s + 0 * sp)), z), _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(r + 0 * rp)), z));
     __m128i d1 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(s + 1 * sp)), z), _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(const int *)(r + 1 * rp)), z));
@@ -586,7 +579,7 @@ static FORCE_INLINE __m128i satd_4x4_u8(const uint8_t *s, intptr_t sp, const uin
     __m128i m1 = _mm_max_epi16(satd_abs_epi16(u1), satd_abs_epi16(u3));
     return _mm_madd_epi16(_mm_add_epi16(m0, m1), _mm_set1_epi16(1)); // already halved; caller must NOT >>1
 }
-static FORCE_INLINE __m128i satd_8x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m128i satd_8x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     const __m128i z = _mm_setzero_si128();
     __m128i d0 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(s + 0 * sp)), z), _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(r + 0 * rp)), z));
     __m128i d1 = _mm_sub_epi16(_mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(s + 1 * sp)), z), _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i *)(r + 1 * rp)), z));
@@ -606,7 +599,7 @@ static FORCE_INLINE __m128i satd_8x4_u8(const uint8_t *s, intptr_t sp, const uin
     __m128i m1 = _mm_max_epi16(satd_abs_epi16(u1), satd_abs_epi16(u3));
     return _mm_madd_epi16(_mm_add_epi16(m0, m1), _mm_set1_epi16(1)); // already halved; caller must NOT >>1
 }
-static FORCE_INLINE __m128i satd_4x4_u16(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m128i satd_4x4_u16(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     const __m128i z = _mm_setzero_si128();
     __m128i d0 = _mm_sub_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(s + 0 * sp)), z), _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(r + 0 * rp)), z));
     __m128i d1 = _mm_sub_epi32(_mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(s + 1 * sp)), z), _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)(r + 1 * rp)), z));

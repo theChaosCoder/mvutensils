@@ -3,6 +3,7 @@
 #include <unordered_map>
 
 #include "SADFunctions.h"
+#include "Common.h"
 
 #if defined(MVTOOLS_X86)
 
@@ -166,24 +167,19 @@ SADFunction selectSADFunctionAVX2(unsigned width, unsigned height, unsigned bits
 // stage uses the amax identity |x+y|+|x-y| == 2*max(|x|,|y|), which also absorbs the satd >>1.
 // Only sizes where AVX2 beats the SSE2 intrinsic are registered (8-bit width >= 16 plus 8x8,
 // 16-bit width >= 8); selectSATDFunction falls back to the SSE2 intrinsic for the rest.
-#ifdef _WIN32
-#define FORCE_INLINE __forceinline
-#else
-#define FORCE_INLINE inline __attribute__((always_inline))
-#endif
 
-static FORCE_INLINE unsigned satd_hsum_epi32(__m256i a) noexcept {
+static MVU_FORCE_INLINE unsigned satd_hsum_epi32(__m256i a) noexcept {
     __m128i s = _mm_add_epi32(_mm256_castsi256_si128(a), _mm256_extracti128_si256(a, 1));
     s = _mm_add_epi32(s, _mm_srli_si128(s, 8));
     s = _mm_add_epi32(s, _mm_srli_si128(s, 4));
     return (unsigned)_mm_cvtsi128_si32(s);
 }
-static FORCE_INLINE uint64_t satd_hsum4_epi64(__m256i a) noexcept {
+static MVU_FORCE_INLINE uint64_t satd_hsum4_epi64(__m256i a) noexcept {
     __m128i s = _mm_add_epi64(_mm256_castsi256_si128(a), _mm256_extracti128_si256(a, 1));
     return (uint64_t)_mm_cvtsi128_si64(s) + (uint64_t)_mm_cvtsi128_si64(_mm_unpackhi_epi64(s, s));
 }
 // Shared 8-bit body: 4 diff-rows, each ymm 128-lane an independent 8x4 (two 4x4). -> 8 int32.
-static FORCE_INLINE __m256i satd_pair8x4_body_u8(__m256i d0, __m256i d1, __m256i d2, __m256i d3) noexcept {
+static MVU_FORCE_INLINE __m256i satd_pair8x4_body_u8(__m256i d0, __m256i d1, __m256i d2, __m256i d3) noexcept {
     __m256i t0 = _mm256_add_epi16(d0, d1), t1 = _mm256_sub_epi16(d0, d1), t2 = _mm256_add_epi16(d2, d3), t3 = _mm256_sub_epi16(d2, d3);
     __m256i h0 = _mm256_add_epi16(t0, t2), h1 = _mm256_add_epi16(t1, t3), h2 = _mm256_sub_epi16(t0, t2), h3 = _mm256_sub_epi16(t1, t3);
     __m256i lo01 = _mm256_unpacklo_epi16(h0, h1), hi01 = _mm256_unpackhi_epi16(h0, h1);
@@ -203,7 +199,7 @@ static FORCE_INLINE __m256i satd_pair8x4_body_u8(__m256i d0, __m256i d1, __m256i
 // hmul (lane0 = +1x16 -> pair sums, lane1 = +1,-1 x8 -> pair diffs) yields [s0..s7 | d0..d7] of
 // the row's diffs. Vertical Hadamard across the 4 rows, then the horizontal stage-2 collapses to an
 // adjacent-pair amax (|x+y|+|x-y| == 2*max(|x|,|y|)) -- a vpshufb swap + vpmaxsw, no transpose.
-static FORCE_INLINE __m256i satd_16x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m256i satd_16x4_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     const __m256i hmul = _mm256_setr_epi8(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1);
     auto row = [&](int y) {
         __m256i sv = _mm256_broadcastsi128_si256(_mm_loadu_si128((const __m128i *)(s + y * sp)));
@@ -221,7 +217,7 @@ static FORCE_INLINE __m256i satd_16x4_u8(const uint8_t *s, intptr_t sp, const ui
     return _mm256_madd_epi16(m, evenmask);
 }
 // 8x8: lane0 = top 8x4 (rows 0-3), lane1 = bottom 8x4 (rows 4-7) -- two 8-byte loads/row.
-static FORCE_INLINE __m256i satd_8x8_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m256i satd_8x8_u8(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     auto dr = [&](int y) {
         __m128i st = _mm_loadl_epi64((const __m128i *)(s + y * sp)), sb = _mm_loadl_epi64((const __m128i *)(s + (y + 4) * sp));
         __m128i rt = _mm_loadl_epi64((const __m128i *)(r + y * rp)), rb = _mm_loadl_epi64((const __m128i *)(r + (y + 4) * rp));
@@ -229,7 +225,7 @@ static FORCE_INLINE __m256i satd_8x8_u8(const uint8_t *s, intptr_t sp, const uin
     };
     return satd_pair8x4_body_u8(dr(0), dr(1), dr(2), dr(3));
 }
-static FORCE_INLINE __m256i satd_8x4_u16(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m256i satd_8x4_u16(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     auto dr = [&](int y) {
         __m256i a = _mm256_cvtepu16_epi32(_mm_loadu_si128((const __m128i *)(s + y * sp)));
         __m256i b = _mm256_cvtepu16_epi32(_mm_loadu_si128((const __m128i *)(r + y * rp)));

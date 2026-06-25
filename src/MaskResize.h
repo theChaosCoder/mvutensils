@@ -43,7 +43,7 @@ public:
     }
 
     static constexpr ptrdiff_t GetTileBufferStride() {
-        return RoundUpTo64(TileSize * sizeof(uint16_t));
+        return RoundUpToAlignment(TileSize * sizeof(uint16_t));
     }
 
     template <size_t N>
@@ -52,12 +52,12 @@ public:
     }
 
     static std::unique_ptr<void, decltype(&mvu_aligned_free)> GetTmpBuffer(size_t size) {
-        return std::unique_ptr<void, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<void>(size, 64), mvu_aligned_free };
+        return std::unique_ptr<void, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<void>(size, MVU_MEMORY_ALIGN), mvu_aligned_free };
     }
 
 private:
     static std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)> GetTileBuffer() {
-        return std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<uint16_t>(GetTileBufferStride() *TileSize, 64), mvu_aligned_free };
+        return std::unique_ptr<uint16_t, decltype(&mvu_aligned_free)>{ mvu_aligned_malloc<uint16_t>(GetTileBufferStride() *TileSize, MVU_MEMORY_ALIGN), mvu_aligned_free };
     }
 
     template <size_t... Is>

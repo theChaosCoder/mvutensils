@@ -34,8 +34,8 @@ struct BlockMask {
     ptrdiff_t stride;
 
     BlockMask(int nBlkX, int nBlkY) {
-        stride = RoundUpTo64(nBlkX * sizeof(PixelType));
-        mask = mvu_aligned_malloc<PixelType>(stride * nBlkY, 64);
+        stride = RoundUpToAlignment(nBlkX * sizeof(PixelType));
+        mask = mvu_aligned_malloc<PixelType>(stride * nBlkY, MVU_MEMORY_ALIGN);
     }
 
     ~BlockMask() {

@@ -3,16 +3,11 @@
 #include <unordered_map>
 
 #include "SADFunctions.h"
+#include "Common.h"
 
 #if defined(MVTOOLS_X86)
 
 #include <immintrin.h>
-
-#ifdef _WIN32
-#define FORCE_INLINE __forceinline
-#else
-#define FORCE_INLINE inline __attribute__((always_inline))
-#endif
 
 // AVX-512 (x86-64-v4 / zen4) SAD + SATD. Only the block sizes where 512-bit beats the AVX2 (EVEX-256)
 // kernel are registered (see bench_degrain/sad_avx512_bench.cpp, satd_avx512_bench.cpp):
@@ -76,7 +71,7 @@ struct SADWrapperU16_AVX512 {
 // ===================== SATD (Hadamard) =====================
 // 16x4 tile of 16-bit pixels = four 4x4 sub-blocks (one per zmm 128-lane); direct widening of the AVX2
 // 8x4 core (the unpack-based 4x4 transpose is per-128-lane, so the ymm logic replicates to all 4 lanes).
-static FORCE_INLINE __m512i satd_16x4_u16_z(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m512i satd_16x4_u16_z(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     auto dr = [&](int y) {
         __m512i a = _mm512_cvtepu16_epi32(_mm256_loadu_si256((const __m256i *)(s + y * sp)));
         __m512i b = _mm512_cvtepu16_epi32(_mm256_loadu_si256((const __m256i *)(r + y * rp)));
@@ -109,7 +104,7 @@ static unsigned int satd_u16_avx512(const uint8_t *src, intptr_t sp, const uint8
 
 // 32x4 tile of 8-bit = two 16x4 (cols 0-15 -> zmm lanes 0,1; cols 16-31 -> lanes 2,3). The x264
 // maddubsw/hmul technique with the ymm hmul/swap/evenmask patterns broadcast to both 256-halves.
-static FORCE_INLINE __m512i satd_32x4_u8_z(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
+static MVU_FORCE_INLINE __m512i satd_32x4_u8_z(const uint8_t *s, intptr_t sp, const uint8_t *r, intptr_t rp) noexcept {
     const __m256i hmul256 = _mm256_setr_epi8(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1);
     const __m512i hmul = _mm512_broadcast_i64x4(hmul256);
     auto arrange = [&](const uint8_t *p) {

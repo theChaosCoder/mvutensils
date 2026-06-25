@@ -12,6 +12,14 @@
 
 #define MVU_RESTRICT __restrict
 
+#ifdef _MSC_VER
+#define MVU_FORCE_INLINE __forceinline
+#else
+#define MVU_FORCE_INLINE inline __attribute__((always_inline))
+#endif
+
+static constexpr size_t MVU_MEMORY_ALIGN = 64;
+
 class MVUtensilsError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -26,8 +34,8 @@ static void VS_CC filterFree(void *instanceData, [[maybe_unused]] VSCore *core, 
     delete reinterpret_cast<T *>(instanceData);
 }
 
-constexpr int RoundUpTo64(int value) {
-    return ((value + 63) / 64) * 64;
+constexpr int RoundUpToAlignment(int value, int alignment = MVU_MEMORY_ALIGN) {
+    return ((value + alignment - 1) / alignment) * alignment;
 }
 
 constexpr int ERROR_SIZE = 1024;

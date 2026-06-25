@@ -480,7 +480,7 @@ void MotionBlockLevel::InitMotionEstimationFields(bool useSatd, bool chroma, int
     }
 
     // 64-byte alignment for the block buffers (cache-line aligned for the SIMD SAD/SATD loads)
-#define ALIGN_PLANES 64
+    static constexpr size_t ALIGN_PLANES = 64;
 
     nSrcPitch_temp[0] = nBlkSizeX * bytesPerSample;
     nSrcPitch_temp[1] = nBlkSizeX / xRatioUV * bytesPerSample;
@@ -1935,9 +1935,9 @@ void SmallVectorMasks::AdjustSmallVectorMaskSubSampling(int nBlkX, int nBlkY, in
 }
 
 SmallVectorMasks::SmallVectorMasks(int nBlkX, int nBlkY) {
-    pitchVSmallY = RoundUpTo64(nBlkX * sizeof(uint16_t));
-    VXSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
-    VYSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, 64);
+    pitchVSmallY = RoundUpToAlignment(nBlkX * sizeof(uint16_t));
+    VXSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, MVU_MEMORY_ALIGN);
+    VYSmallY = mvu_aligned_malloc<uint16_t>(pitchVSmallY * nBlkY, MVU_MEMORY_ALIGN);
 }
 
 SmallVectorMasks::~SmallVectorMasks() {
